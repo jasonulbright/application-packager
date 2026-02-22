@@ -94,7 +94,7 @@ function Connect-CMSite {
     }
 }
 
-function Ensure-Folder {
+function Initialize-Folder {
     param([Parameter(Mandatory)][string]$Path)
 
     $origLocation = Get-Location
@@ -293,6 +293,7 @@ function New-MECM7ZipMsiApplication {
             -Publisher $Publisher `
             -SoftwareVersion $SoftwareVersion `
             -Description $Comment `
+            -AutoInstall $true `
             -ErrorAction Stop
 
         Write-Host "Application CI_ID            : $($cmApp.CI_ID)"
@@ -364,9 +365,9 @@ function Get-7ZipNetworkAppRoot {
     $vendorPath = Join-Path $appsRoot $VendorFolder
     $appPath    = Join-Path $vendorPath $AppFolder
 
-    Ensure-Folder -Path $appsRoot
-    Ensure-Folder -Path $vendorPath
-    Ensure-Folder -Path $appPath
+    Initialize-Folder -Path $appsRoot
+    Initialize-Folder -Path $vendorPath
+    Initialize-Folder -Path $appPath
 
     return $appPath
 }
@@ -375,7 +376,7 @@ function Get-7ZipNetworkAppRoot {
 if ($GetLatestVersionOnly) {
     try {
         $ProgressPreference = 'SilentlyContinue'
-        Ensure-Folder -Path $BaseDownloadRoot
+        Initialize-Folder -Path $BaseDownloadRoot
 
         $msiUrl = Resolve-7ZipX64MsiUrl -Quiet
         if (-not $msiUrl) { exit 1 }
@@ -419,7 +420,7 @@ try {
         exit 1
     }
 
-    Ensure-Folder -Path $BaseDownloadRoot
+    Initialize-Folder -Path $BaseDownloadRoot
 
     if (-not (Test-NetworkShareAccess -Path $FileServerPath)) {
         throw "Network root path not accessible: $FileServerPath"
@@ -463,7 +464,7 @@ try {
 
     # Content folder uses display version
     $contentPath = Join-Path $networkAppRoot $productVersionDisplay
-    Ensure-Folder -Path $contentPath
+    Initialize-Folder -Path $contentPath
 
     $msiFileName = "7zip-x64.msi"
     $netMsi      = Join-Path $contentPath $msiFileName

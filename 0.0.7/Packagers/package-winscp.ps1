@@ -1,87 +1,89 @@
 <#
 Vendor: Martin Prikryl
-App: WinSCP
+App: WinSCP (x64)
 CMName: WinSCP
 
 .SYNOPSIS
-    Automates downloading the latest WinSCP installer (x64) and creating an MECM application.
+    Packages WinSCP (x64) for MECM.
 
 .DESCRIPTION
-    Downloads WinSCP from winscp.net, stores content on a network share, creates install/uninstall batch files,
-    temporarily installs locally to extract uninstall registry metadata, and creates an MECM application with
-    registry value detection (DisplayVersion). Configures deployment type content settings:
-      - Allow clients to use fallback source location for content
-      - Download content from distribution point and run locally
+    Downloads the latest WinSCP installer from winscp.net, stages content to a
+    versioned network location, temporarily installs locally to extract registry
+    metadata (DisplayName, Publisher, uninstall key), creates an MECM Application
+    with registry-based detection (DisplayVersion), then uninstalls from the
+    packaging machine.
 
-.NOTES
-    - Run with admin privileges for registry access and local install/uninstall.
-    - Requires the Configuration Manager console and PowerShell module.
+.PARAMETER SiteCode
+    ConfigMgr site code PSDrive name (e.g., "MCM").
+    The PSDrive is assumed to already exist in the session.
+
+.PARAMETER Comment
+    Free-form change/WO text stored on the CM Application Description field.
+
+.PARAMETER FileServerPath
+    UNC root that contains your Applications folder (example: \\fileserver\sccm$).
+    Content is staged under: <FileServerPath>\Applications\WinSCP\WinSCP\<Version>
+
+.PARAMETER GetLatestVersionOnly
+    Outputs only the latest available WinSCP version string and exits.
+
+.REQUIREMENTS
+    - PowerShell 5.1
+    - ConfigMgr Admin Console installed (ConfigurationManager PowerShell module available)
+    - RBAC permissions to create Applications and Deployment Types
+    - Local administrator
+    - Write access to FileServerPath
 #>
 
 param(
-    [string]$SiteCode       = "MCM",
-    [string]$Comment        = "WO#00000001234567",
+    [string]$SiteCode = "MCM",
+    [string]$Comment = "WO#00000001234567",
     [string]$FileServerPath = "\\fileserver\sccm$",
     [switch]$GetLatestVersionOnly
 )
 
-
-# -----------------------
-# Configuration
-# -----------------------
-
-$BaseDownloadRoot = Join-Path $env:USERPROFILE "Downloads\_AutoPackager"
-$NetworkRootPath  = Join-Path $FileServerPath "Applications\WinSCP"
-
-$PublisherOverride = $null
-$ForcedVersion     = $null
-
-$EnableTrace = $false
-
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-# -----------------------
-# Logging helpers
-# -----------------------
-function Write-Section {
-    param([string]$Text)
-    Write-Host ""
-    Write-Host "============================================================"
-    Write-Host $Text
-    Write-Host "============================================================"
-}
+# --- Configuration ---
+$VendorFolder = "WinSCP"
+$AppFolder    = "WinSCP"
 
-function Write-KV {
-    param([string]$K, [string]$V)
-    Write-Host ("{0,-28}: {1}" -f $K, $V)
-}
+$BaseDownloadRoot = Join-Path $env:USERPROFILE "Downloads\_AutoPackager\WinSCP"
 
-function Assert-Ok {
-    param([bool]$Condition, [string]$Message)
-    if (-not $Condition) { throw $Message }
-}
+$EstimatedRuntimeMins = 10
+$MaximumRuntimeMins   = 20
 
-# -----------------------
-# Admin check
-# -----------------------
+# --- Functions ---
 function Test-IsAdmin {
     try {
-        $currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
-        $principal = New-Object Security.Principal.WindowsPrincipal($currentIdentity)
+        $identity  = [Security.Principal.WindowsIdentity]::GetCurrent()
+        $principal = New-Object Security.Principal.WindowsPrincipal($identity)
         return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     }
     catch {
-        Write-Warning "Failed to check admin privileges: $($_.Exception.Message)"
+        Write-Warning "Admin check failed: $($_.Exception.Message)"
         return $false
     }
 }
 
-# -----------------------
-# CM site connection (mirrors your Tableau script pattern)
-# -----------------------
 function Connect-CMSite {
     param([Parameter(Mandatory)][string]$SiteCode)
+
     try {
+        if (-not (Get-Module -Name ConfigurationManager -ErrorAction SilentlyContinue)) {
+            $cmModulePath = Join-Path $env:SMS_ADMIN_UI_PATH "..\ConfigurationManager.psd1"
+            if (Test-Path -LiteralPath $cmModulePath) {
+                Import-Module $cmModulePath -ErrorAction Stop
+            }
+            else {
+                Import-Module ConfigurationManager -ErrorAction Stop
+            }
+        }
+
+        if (-not (Get-PSDrive -Name $SiteCode -ErrorAction SilentlyContinue)) {
+            throw "Configuration Manager PSDrive '$SiteCode' is not available."
+        }
+
         Set-Location "${SiteCode}:" -ErrorAction Stop
         Write-Host "Connected to CM site: $SiteCode"
         return $true
@@ -92,56 +94,114 @@ function Connect-CMSite {
     }
 }
 
+function Initialize-Folder {
+    param([Parameter(Mandatory)][string]$Path)
 
-# -----------------------
-# WinSCP version + download (CDN secure link)
-# -----------------------
-function Get-LatestWinSCPVersion {
-    param([switch]$Quiet)
-    $url = "https://winscp.net/eng/downloads.php"
-    if (-not $Quiet) { Write-Host "Fetching WinSCP version from: $url" }
-
-    $html = (curl.exe -L --max-redirs 10 --fail --silent --show-error $url) -join "`n"
-    if ($LASTEXITCODE -ne 0) { throw "Failed to fetch WinSCP downloads page: $url" }
-
-    if ($html -match 'Download\s+WinSCP\s+([0-9]+\.[0-9]+\.[0-9]+)') {
-        return $matches[1]
+    $origLocation = Get-Location
+    try {
+        Set-Location C: -ErrorAction Stop
+        if (-not (Test-Path -LiteralPath $Path)) {
+            New-Item -ItemType Directory -Path $Path -Force | Out-Null
+        }
     }
-    if ($html -match 'WinSCP-([0-9]+\.[0-9]+\.[0-9]+)-Setup\.exe') {
-        return $matches[1]
+    finally {
+        Set-Location $origLocation -ErrorAction SilentlyContinue
     }
-
-    throw "Could not parse latest WinSCP version from downloads page."
 }
 
-function Get-WinSCPDirectDownloadUrl {
+function Test-NetworkShareAccess {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $origLocation = Get-Location
+    try {
+        Set-Location C: -ErrorAction Stop
+
+        if (-not (Test-Path -LiteralPath $Path -ErrorAction SilentlyContinue)) {
+            Write-Error "Network path does not exist or is inaccessible: $Path"
+            return $false
+        }
+
+        try {
+            $tmp = Join-Path $Path ("_write_test_{0}.txt" -f (Get-Random))
+            Set-Content -LiteralPath $tmp -Value "test" -Encoding ASCII -ErrorAction Stop
+            Remove-Item -LiteralPath $tmp -ErrorAction Stop
+            return $true
+        }
+        catch {
+            Write-Error "Network share is not writable: $Path ($($_.Exception.Message))"
+            return $false
+        }
+    }
+    finally {
+        Set-Location $origLocation -ErrorAction SilentlyContinue
+    }
+}
+
+function Get-LatestWinSCPVersion {
+    param([switch]$Quiet)
+
+    $url = "https://winscp.net/eng/downloads.php"
+    if (-not $Quiet) {
+        Write-Host "WinSCP downloads page        : $url"
+    }
+
+    try {
+        $html = (curl.exe -L --max-redirs 10 --fail --silent --show-error $url) -join "`n"
+        if ($LASTEXITCODE -ne 0) { throw "Failed to fetch WinSCP downloads page: $url" }
+
+        $version = $null
+        if ($html -match 'Download\s+WinSCP\s+([0-9]+\.[0-9]+\.[0-9]+)') {
+            $version = $matches[1]
+        }
+        elseif ($html -match 'WinSCP-([0-9]+\.[0-9]+\.[0-9]+)-Setup\.exe') {
+            $version = $matches[1]
+        }
+
+        if (-not $version) {
+            throw "Could not parse latest WinSCP version from downloads page."
+        }
+
+        if (-not $Quiet) {
+            Write-Host "Latest WinSCP version        : $version"
+        }
+        return $version
+    }
+    catch {
+        Write-Error "Failed to get WinSCP version: $($_.Exception.Message)"
+        return $null
+    }
+}
+
+function Resolve-WinSCPDownloadUrl {
     param([Parameter(Mandatory)][string]$Version)
 
     $pageUrl = "https://winscp.net/download/WinSCP-$Version-Setup.exe/download"
     Write-Host "WinSCP per-file download page: $pageUrl"
 
-    $html = (curl.exe -L --max-redirs 10 --fail --silent --show-error $pageUrl) -join "`n"
-    if ($LASTEXITCODE -ne 0) { throw "Failed to fetch WinSCP download page: $pageUrl" }
+    try {
+        $html = (curl.exe -L --max-redirs 10 --fail --silent --show-error $pageUrl) -join "`n"
+        if ($LASTEXITCODE -ne 0) { throw "Failed to fetch WinSCP download page: $pageUrl" }
 
-    $cdn = $null
-    if ($html -match '(https?://cdn\.winscp\.net/files/WinSCP-[0-9]+\.[0-9]+\.[0-9]+-Setup\.exe\?secure=[^"]+)') {
-        $cdn = $matches[1]
-    }
+        if ($html -match '(https?://cdn\.winscp\.net/files/WinSCP-[0-9]+\.[0-9]+\.[0-9]+-Setup\.exe\?secure=[^"]+)') {
+            $cdnUrl = $matches[1]
+            Write-Host "Resolved CDN URL             : $cdnUrl"
+            return $cdnUrl
+        }
 
-    if (-not $cdn) {
         throw "Could not locate CDN direct download link on page: $pageUrl"
     }
-
-    Write-Host "Resolved CDN direct download URL: $cdn"
-    return $cdn
+    catch {
+        Write-Error "Failed to resolve WinSCP download URL: $($_.Exception.Message)"
+        return $null
+    }
 }
 
 function Test-DownloadedInstaller {
     param([Parameter(Mandatory)][string]$Path)
 
-    if (-not (Test-Path $Path)) { return $false }
+    if (-not (Test-Path -LiteralPath $Path)) { return $false }
 
-    $len = (Get-Item $Path).Length
+    $len = (Get-Item -LiteralPath $Path).Length
     if ($len -lt 1MB) { return $false }
 
     $fs = [System.IO.File]::OpenRead($Path)
@@ -156,20 +216,14 @@ function Test-DownloadedInstaller {
     return $true
 }
 
-# -----------------------
-# Local install + uninstall key discovery
-# -----------------------
 function Install-WinSCPForDiscovery {
     param([Parameter(Mandatory)][string]$InstallerPath)
 
-    $args = "/VERYSILENT /NORESTART /ALLUSERS"
+    Write-Host "Installing WinSCP locally for registry discovery..."
+    Write-Host "Installer                    : $InstallerPath"
 
-    Write-Host "Installing WinSCP locally for discovery:"
-    Write-KV "Installer" $InstallerPath
-    Write-KV "Args" $args
-
-    $p = Start-Process -FilePath $InstallerPath -ArgumentList $args -Wait -PassThru -ErrorAction Stop
-    Write-KV "ExitCode" $p.ExitCode
+    $p = Start-Process -FilePath $InstallerPath -ArgumentList "/VERYSILENT /NORESTART /ALLUSERS" -Wait -PassThru -ErrorAction Stop
+    Write-Host "Install exit code            : $($p.ExitCode)"
 
     if ($p.ExitCode -ne 0) {
         throw "Installer returned non-zero exit code: $($p.ExitCode)"
@@ -185,35 +239,25 @@ function Find-WinSCPUninstallEntry {
     )
 
     $candidates = @()
-
     foreach ($p in $paths) {
-        Write-Host "Scanning uninstall keys: $p"
         $items = Get-ItemProperty -Path $p -ErrorAction SilentlyContinue
         foreach ($it in $items) {
             $dn = $it.DisplayName
-            $dv = $it.DisplayVersion
             if ([string]::IsNullOrWhiteSpace($dn)) { continue }
             if ($dn -match '^WinSCP') {
-                $obj = [pscustomobject]@{
+                $candidates += [pscustomobject]@{
                     KeyName              = ($it.PSPath -replace '^Microsoft\.PowerShell\.Core\\Registry::HKEY_LOCAL_MACHINE\\', 'HKLM:\')
                     DisplayName          = $dn
-                    DisplayVersion       = $dv
+                    DisplayVersion       = $it.DisplayVersion
                     Publisher            = $it.Publisher
-                    InstallLocation      = $it.InstallLocation
                     UninstallString      = $it.UninstallString
                     QuietUninstallString = $it.QuietUninstallString
                 }
-                $candidates += $obj
             }
         }
     }
 
-    Write-Host ""
-    Write-Host "WinSCP uninstall candidates found: $($candidates.Count)"
-    $candidates | ForEach-Object {
-        Write-Host "  - $($_.DisplayName) | Version=$($_.DisplayVersion) | Publisher=$($_.Publisher)"
-        Write-Host "    Key=$($_.KeyName)"
-    }
+    Write-Host "WinSCP uninstall candidates  : $($candidates.Count)"
 
     $match = $candidates | Where-Object { $_.DisplayVersion -eq $ExpectedVersion } | Select-Object -First 1
     if ($match) { return $match }
@@ -223,8 +267,8 @@ function Find-WinSCPUninstallEntry {
 
 function Uninstall-WinSCPFromDiscovery {
     param(
-        [Parameter()][string]$QuietUninstallString,
-        [Parameter()][string]$UninstallString
+        [string]$QuietUninstallString,
+        [string]$UninstallString
     )
 
     $cmd = $QuietUninstallString
@@ -235,31 +279,87 @@ function Uninstall-WinSCPFromDiscovery {
         return
     }
 
-    Write-Host "Attempting to uninstall WinSCP used for discovery:"
-    Write-KV "Command" $cmd
+    Write-Host "Uninstalling discovery install..."
+    Write-Host "Uninstall command            : $cmd"
 
     $p = Start-Process -FilePath "cmd.exe" -ArgumentList "/c $cmd" -Wait -PassThru -ErrorAction Stop
-    Write-KV "Uninstall ExitCode" $p.ExitCode
+    Write-Host "Uninstall exit code          : $($p.ExitCode)"
 }
 
-# -----------------------
-# Batch wrappers
-# -----------------------
-function Create-BatchFiles {
+function Remove-CMApplicationRevisionHistoryByCIId {
     param(
-        [Parameter(Mandatory)][string]$ContentFolder,
-        [Parameter(Mandatory)][string]$InstallerFileName
+        [Parameter(Mandatory)][UInt32]$CI_ID,
+        [UInt32]$KeepLatest = 1
     )
 
-    $installBat = @"
+    $history = Get-CMApplicationRevisionHistory -Id $CI_ID -ErrorAction SilentlyContinue
+    if (-not $history) { return }
+
+    $revs = @()
+    foreach ($h in @($history)) {
+        if ($h.PSObject.Properties.Name -contains 'Revision') { $revs += [UInt32]$h.Revision; continue }
+        if ($h.PSObject.Properties.Name -contains 'CIVersion') { $revs += [UInt32]$h.CIVersion; continue }
+    }
+
+    $revs = $revs | Sort-Object -Unique -Descending
+    if ($revs.Count -le $KeepLatest) { return }
+
+    foreach ($rev in ($revs | Select-Object -Skip $KeepLatest)) {
+        Remove-CMApplicationRevisionHistory -Id $CI_ID -Revision $rev -Force -ErrorAction Stop
+    }
+}
+
+function New-MECMWinSCPApplication {
+    param(
+        [Parameter(Mandatory)][string]$AppName,
+        [Parameter(Mandatory)][string]$SoftwareVersion,
+        [Parameter(Mandatory)][string]$ContentPath,
+        [Parameter(Mandatory)][string]$InstallerFileName,
+        [Parameter(Mandatory)][string]$Publisher,
+        [Parameter(Mandatory)][string]$UninstallRegKeyRelative
+    )
+
+    $orig = Get-Location
+
+    try {
+        if (-not (Test-IsAdmin)) { throw "Run PowerShell as Administrator." }
+
+        if (-not (Connect-CMSite -SiteCode $SiteCode)) { throw "CM site connection failed." }
+
+        $existing = Get-CMApplication -Name $AppName -ErrorAction SilentlyContinue
+        if ($existing) {
+            Write-Warning "Application already exists: $AppName"
+            return
+        }
+
+        Write-Host "Creating CM Application      : $AppName"
+        $cmApp = New-CMApplication `
+            -Name $AppName `
+            -Publisher $Publisher `
+            -SoftwareVersion $SoftwareVersion `
+            -Description $Comment `
+            -AutoInstall $true `
+            -ErrorAction Stop
+
+        Write-Host "Application CI_ID            : $($cmApp.CI_ID)"
+
+        Set-Location C: -ErrorAction Stop
+
+        $installBatPath   = Join-Path $ContentPath "install.bat"
+        $uninstallBatPath = Join-Path $ContentPath "uninstall.bat"
+
+        if (-not (Test-Path -LiteralPath $installBatPath)) {
+            $installBat = @"
 @echo off
 setlocal
-echo Installing WinSCP...
 start /wait "" "%~dp0$InstallerFileName" /VERYSILENT /NORESTART /ALLUSERS
-exit /b %ERRORLEVEL%
+exit /b 0
 "@
+            Set-Content -LiteralPath $installBatPath -Value $installBat -Encoding ASCII -ErrorAction Stop
+        }
 
-    $uninstallBat = @"
+        if (-not (Test-Path -LiteralPath $uninstallBatPath)) {
+            $uninstallBat = @"
 @echo off
 setlocal
 
@@ -268,275 +368,222 @@ set "U2=%ProgramFiles(x86)%\WinSCP\unins000.exe"
 
 if exist "%U1%" (
   start /wait "" "%U1%" /VERYSILENT /NORESTART
-  exit /b %ERRORLEVEL%
+  exit /b 0
 )
 
 if exist "%U2%" (
   start /wait "" "%U2%" /VERYSILENT /NORESTART
-  exit /b %ERRORLEVEL%
+  exit /b 0
 )
 
 echo WinSCP uninstall executable not found.
 exit /b 0
 "@
-
-    Set-Content -Path (Join-Path $ContentFolder "install.bat")   -Value $installBat   -Encoding ASCII
-    Set-Content -Path (Join-Path $ContentFolder "uninstall.bat") -Value $uninstallBat -Encoding ASCII
-
-    Write-Host "Created batch wrappers:"
-    Write-KV "install.bat"   (Join-Path $ContentFolder "install.bat")
-    Write-KV "uninstall.bat" (Join-Path $ContentFolder "uninstall.bat")
-}
-
-# -----------------------
-# MECM creation
-# -----------------------
-function Remove-CMApplicationRevisionHistoryByCIId {
-    param(
-        [Parameter(Mandatory)][UInt32]$CI_ID,
-        [UInt32]$KeepLatest = 1
-    )
-    $history = Get-CMApplicationRevisionHistory -Id $CI_ID -ErrorAction SilentlyContinue
-    if (-not $history) { return }
-    $revs = @()
-    foreach ($h in @($history)) {
-        if ($h.PSObject.Properties.Name -contains 'Revision')  { $revs += [UInt32]$h.Revision;   continue }
-        if ($h.PSObject.Properties.Name -contains 'CIVersion') { $revs += [UInt32]$h.CIVersion; continue }
-    }
-    $revs = $revs | Sort-Object -Unique -Descending
-    if ($revs.Count -le $KeepLatest) { return }
-    foreach ($rev in ($revs | Select-Object -Skip $KeepLatest)) {
-        Remove-CMApplicationRevisionHistory -Id $CI_ID -Revision $rev -Force -ErrorAction Stop
-    }
-}
-
-function New-WinSCPMecmApp {
-    param(
-        [Parameter(Mandatory)][string]$AppName,
-        [Parameter(Mandatory)][string]$Version,
-        [Parameter(Mandatory)][string]$Publisher,
-        [Parameter(Mandatory)][string]$ContentLocationUNC,
-        [Parameter(Mandatory)][string]$UninstallRegKeyRelative,
-        [Parameter(Mandatory)][string]$DeploymentTypeName
-    )
-
-    Write-Section "MECM: Creating Application + Deployment Type"
-
-    $originalLocation = Get-Location
-    Write-Host "Current location before MECM work: ${originalLocation}"
-
-    try {
-
-        Connect-CMSite -SiteCode $SiteCode | Out-Null
-
-        $existing = Get-CMApplication -Name $AppName -ErrorAction SilentlyContinue
-        if ($existing) {
-            Write-Warning "Application already exists: $AppName"
-            return
+            Set-Content -LiteralPath $uninstallBatPath -Value $uninstallBat -Encoding ASCII -ErrorAction Stop
         }
 
-        Write-Host "Creating CM Application..."
-        $cmApp = New-CMApplication -Name $AppName -Publisher $Publisher -SoftwareVersion $Version -Description $Comment -ErrorAction Stop
+        if (-not (Connect-CMSite -SiteCode $SiteCode)) { throw "CM site connection failed." }
 
-        $detectionClause = New-CMDetectionClauseRegistryKeyValue `
+        $dtName = $AppName
+
+        $clause = New-CMDetectionClauseRegistryKeyValue `
             -Hive LocalMachine `
             -KeyName $UninstallRegKeyRelative `
             -ValueName "DisplayVersion" `
             -PropertyType String `
             -Value `
-            -ExpectedValue $Version `
+            -ExpectedValue $SoftwareVersion `
             -ExpressionOperator IsEquals `
             -Is64Bit
 
-        Write-Host "Detection clause details:"
-        Write-KV "Registry Key"   $UninstallRegKeyRelative
-        Write-KV "ValueName"      "DisplayVersion"
-        Write-KV "ExpectedValue"  $Version
+        Write-Host "Adding Script Deployment Type: $dtName"
+        Add-CMScriptDeploymentType `
+            -ApplicationName $AppName `
+            -DeploymentTypeName $dtName `
+            -ContentLocation $ContentPath `
+            -InstallCommand "install.bat" `
+            -UninstallCommand "uninstall.bat" `
+            -InstallationBehaviorType InstallForSystem `
+            -LogonRequirementType WhetherOrNotUserLoggedOn `
+            -EstimatedRuntimeMins $EstimatedRuntimeMins `
+            -MaximumRuntimeMins $MaximumRuntimeMins `
+            -AddDetectionClause @($clause) `
+            -ContentFallback `
+            -SlowNetworkDeploymentMode Download `
+            -ErrorAction Stop | Out-Null
 
-        $params = @{
-            ApplicationName          = $AppName
-            DeploymentTypeName       = $DeploymentTypeName
-            InstallCommand           = "install.bat"
-            ContentLocation          = $ContentLocationUNC
-            UninstallCommand         = "uninstall.bat"
-            InstallationBehaviorType = "InstallForSystem"
-            LogonRequirementType     = "WhetherOrNotUserLoggedOn"
-            MaximumRuntimeMins       = 20
-            EstimatedRuntimeMins     = 10
-            AddDetectionClause       = @($detectionClause)
-            ContentFallback          = $true
-            ErrorAction              = "Stop"
-        }
-
-        Write-Host "Adding Script Deployment Type..."
-        Add-CMScriptDeploymentType @params
         Remove-CMApplicationRevisionHistoryByCIId -CI_ID ([UInt32]$cmApp.CI_ID) -KeepLatest 1
 
-        Write-Host "Configuring deployment type content options..."
-        Set-CMScriptDeploymentType -ApplicationName $AppName -DeploymentTypeName $DeploymentTypeName -ContentFallback $true -SlowNetworkDeploymentMode Download -ErrorAction Stop
-
-        Write-Host "Created MECM application: ${AppName}"
-    }
-    catch {
-        Write-Error "Failed to create MECM application: $($_.Exception.Message)"
-        throw
+        Write-Host "Created MECM application     : $AppName"
     }
     finally {
-        Set-Location $originalLocation -ErrorAction SilentlyContinue
-        Write-Host "Restored location to: ${originalLocation}"
+        Set-Location $orig -ErrorAction SilentlyContinue
     }
 }
 
-# -----------------------
-# Main
-# -----------------------
-try {
-    Write-Section "WinSCP Auto-Packager starting"
+function Get-WinSCPNetworkAppRoot {
+    param([Parameter(Mandatory)][string]$FileServerPath)
 
-    $originalLocation = Get-Location
-    Write-Host "Current location at script start: ${originalLocation}"
+    $appsRoot   = Join-Path $FileServerPath "Applications"
+    $vendorPath = Join-Path $appsRoot $VendorFolder
+    $appPath    = Join-Path $vendorPath $AppFolder
 
-    if ($GetLatestVersionOnly) {
-        $v = $ForcedVersion
-        if ([string]::IsNullOrWhiteSpace($v)) {
-            $v = Get-LatestWinSCPVersion -Quiet
-        }
+    Initialize-Folder -Path $appsRoot
+    Initialize-Folder -Path $vendorPath
+    Initialize-Folder -Path $appPath
+
+    return $appPath
+}
+
+# --- Latest-only mode ---
+if ($GetLatestVersionOnly) {
+    try {
+        $ProgressPreference = 'SilentlyContinue'
+        $v = Get-LatestWinSCPVersion -Quiet
+        if (-not $v) { exit 1 }
         Write-Output $v
-        return
+        exit 0
     }
+    catch {
+        exit 1
+    }
+}
 
+# --- Main ---
+try {
+    $startLocation = Get-Location
+
+    Write-Host ""
+    Write-Host ("=" * 60)
+    Write-Host "WinSCP (x64) Auto-Packager starting"
+    Write-Host ("=" * 60)
+    Write-Host ""
+    Write-Host ("RunAsUser                    : {0}\{1}" -f $env:USERDOMAIN,$env:USERNAME)
+    Write-Host ("Machine                      : {0}" -f $env:COMPUTERNAME)
+    Write-Host "Start location               : $startLocation"
+    Write-Host "SiteCode                     : $SiteCode"
+    Write-Host "FileServerPath               : $FileServerPath"
+    Write-Host "BaseDownloadRoot             : $BaseDownloadRoot"
+    Write-Host ""
 
     if (-not (Test-IsAdmin)) {
-        Write-Error "This script must be run with admin privileges. Please run PowerShell as Administrator."
+        Write-Error "Run PowerShell as Administrator."
         exit 1
     }
 
-    Set-Location $PSScriptRoot -ErrorAction Stop
-    Write-Host "Set initial location to script directory: ${PSScriptRoot}"
+    Initialize-Folder -Path $BaseDownloadRoot
 
-    Write-KV "RunAsUser"        $env:USERNAME
-    Write-KV "Machine"          $env:COMPUTERNAME
-    Write-KV "SiteCode"         $SiteCode
-    Write-KV "NetworkRootPath"  $NetworkRootPath
-    Write-KV "BaseDownloadRoot" $BaseDownloadRoot
-
-    $version = $ForcedVersion
-    if ([string]::IsNullOrWhiteSpace($version)) {
-        $version = Get-LatestWinSCPVersion
+    if (-not (Test-NetworkShareAccess -Path $FileServerPath)) {
+        throw "Network root path not accessible: $FileServerPath"
     }
-    Assert-Ok ($version -match '^\d+\.\d+\.\d+$') "Parsed version '$version' does not look like x.y.z"
 
-    Write-Section "Resolved version"
-    Write-KV "WinSCP Version" $version
+    $networkAppRoot = Get-WinSCPNetworkAppRoot -FileServerPath $FileServerPath
 
-    $installerFileName  = "WinSCP-$version-Setup.exe"
-    $localVersionFolder = Join-Path $BaseDownloadRoot "WinSCP\$version"
-    $localInstallerPath = Join-Path $localVersionFolder $installerFileName
+    $version = Get-LatestWinSCPVersion
+    if (-not $version) {
+        throw "Could not resolve WinSCP version."
+    }
 
-    $networkVersionFolder = Join-Path $NetworkRootPath $version
-    $networkInstallerPath = Join-Path $networkVersionFolder $installerFileName
+    if ($version -notmatch '^\d+\.\d+\.\d+$') {
+        throw "Parsed version '$version' does not look like x.y.z"
+    }
 
-    Write-Section "Prepare folders"
-    Write-KV "LocalVersionFolder"   $localVersionFolder
-    Write-KV "NetworkVersionFolder" $networkVersionFolder
+    $installerFileName = "WinSCP-$version-Setup.exe"
+    $localExe          = Join-Path $BaseDownloadRoot $installerFileName
+    $contentPath       = Join-Path $networkAppRoot $version
 
-    if (-not (Test-Path $localVersionFolder))   { New-Item -ItemType Directory -Path $localVersionFolder -Force | Out-Null }
-    if (-not (Test-Path $networkVersionFolder)) { New-Item -ItemType Directory -Path $networkVersionFolder -Force | Out-Null }
+    Initialize-Folder -Path $contentPath
 
-    Write-Section "Download installer"
-    if (-not (Test-Path $localInstallerPath)) {
-        $cdnUrl = Get-WinSCPDirectDownloadUrl -Version $version
+    $netExe = Join-Path $contentPath $installerFileName
 
-        Write-Host "Downloading WinSCP..."
-        Write-KV "From" $cdnUrl
-        Write-KV "To"   $localInstallerPath
+    Write-Host "Version                      : $version"
+    Write-Host "Installer filename           : $installerFileName"
+    Write-Host "Local installer              : $localExe"
+    Write-Host "ContentPath                  : $contentPath"
+    Write-Host "Network installer            : $netExe"
+    Write-Host ""
 
-        curl.exe --max-redirs 10 --fail --silent --show-error -o $localInstallerPath $cdnUrl
-        if ($LASTEXITCODE -ne 0) { throw "Download failed: $cdnUrl" }
-
-        if (-not (Test-DownloadedInstaller -Path $localInstallerPath)) {
-            try { Remove-Item -Path $localInstallerPath -Force -ErrorAction SilentlyContinue } catch {}
-            throw "Downloaded file did not validate as installer (too small/HTML)."
+    # Download (two-step: resolve CDN URL, then download)
+    if (-not (Test-Path -LiteralPath $localExe)) {
+        $cdnUrl = Resolve-WinSCPDownloadUrl -Version $version
+        if (-not $cdnUrl) {
+            throw "Could not resolve WinSCP CDN download URL."
         }
 
-        Write-Host "Download validated."
-        Write-KV "Local bytes" ((Get-Item $localInstallerPath).Length.ToString())
+        Write-Host "Downloading installer..."
+        curl.exe --max-redirs 10 --fail --silent --show-error -o $localExe $cdnUrl
+        if ($LASTEXITCODE -ne 0) { throw "Download failed: $cdnUrl" }
+
+        if (-not (Test-DownloadedInstaller -Path $localExe)) {
+            try { Remove-Item -LiteralPath $localExe -Force -ErrorAction SilentlyContinue } catch {}
+            throw "Downloaded file did not validate as installer (too small or HTML content)."
+        }
+
+        Write-Host "Download validated             ($((Get-Item -LiteralPath $localExe).Length) bytes)"
     }
     else {
-        Write-Host "Local installer already exists: $localInstallerPath"
-        Write-KV "Local bytes" ((Get-Item $localInstallerPath).Length.ToString())
+        Write-Host "Local installer exists. Skipping download."
     }
 
-    Write-Section "Copy installer to network"
-    if ((Get-Location).Provider.Name -ne "FileSystem") {
-        Set-Location -LiteralPath $PSScriptRoot -ErrorAction Stop
-        Write-Host "Set location to script directory for file operations: ${PSScriptRoot}"
-    }
-
-    if (-not (Test-Path $networkInstallerPath)) {
-        Copy-Item -Path $localInstallerPath -Destination $networkInstallerPath -Force -ErrorAction Stop
-        Write-Host "Copied installer to network: $networkInstallerPath"
+    if (-not (Test-Path -LiteralPath $netExe)) {
+        Write-Host "Copying installer to network..."
+        Copy-Item -LiteralPath $localExe -Destination $netExe -Force -ErrorAction Stop
     }
     else {
-        Write-Host "Network installer already exists: $networkInstallerPath"
-        Write-KV "Network bytes" ((Get-Item $networkInstallerPath).Length.ToString())
+        Write-Host "Network installer exists. Skipping copy."
     }
 
-    Write-Section "Create batch files"
-    Create-BatchFiles -ContentFolder $networkVersionFolder -InstallerFileName $installerFileName
-
-    Write-Section "Local discovery install + registry crawl"
-    Install-WinSCPForDiscovery -InstallerPath $localInstallerPath
+    # Local install for registry discovery
+    Write-Host ""
+    Install-WinSCPForDiscovery -InstallerPath $localExe
 
     $uninstallEntry = Find-WinSCPUninstallEntry -ExpectedVersion $version
-    Assert-Ok ($null -ne $uninstallEntry) "Could not find any WinSCP uninstall entry after install."
+    if ($null -eq $uninstallEntry) {
+        throw "Could not find any WinSCP uninstall entry after install."
+    }
 
-    Write-Host ""
-    Write-Host "Selected uninstall entry:"
-    Write-KV "DisplayName"          $uninstallEntry.DisplayName
-    Write-KV "DisplayVersion"       $uninstallEntry.DisplayVersion
-    Write-KV "Publisher"            $uninstallEntry.Publisher
-    Write-KV "InstallLocation"      $uninstallEntry.InstallLocation
-    Write-KV "UninstallString"      $uninstallEntry.UninstallString
-    Write-KV "QuietUninstallString" $uninstallEntry.QuietUninstallString
-    Write-KV "RegistryKey"          $uninstallEntry.KeyName
+    Write-Host "Registry DisplayName         : $($uninstallEntry.DisplayName)"
+    Write-Host "Registry DisplayVersion      : $($uninstallEntry.DisplayVersion)"
+    Write-Host "Registry Publisher           : $($uninstallEntry.Publisher)"
+    Write-Host "Registry Key                 : $($uninstallEntry.KeyName)"
 
     $regRelative = ($uninstallEntry.KeyName -replace '^HKLM:\\', '')
-    Assert-Ok (-not [string]::IsNullOrWhiteSpace($regRelative)) "Failed to compute registry relative key path."
+    if ([string]::IsNullOrWhiteSpace($regRelative)) {
+        throw "Failed to compute registry relative key path."
+    }
 
-    $publisher = if ($PublisherOverride) { $PublisherOverride } else { $uninstallEntry.Publisher }
-    if ([string]::IsNullOrWhiteSpace($publisher)) { $publisher = "WinSCP" }
+    $publisher = $uninstallEntry.Publisher
+    if ([string]::IsNullOrWhiteSpace($publisher)) { $publisher = "Martin Prikryl" }
 
     $appName = $uninstallEntry.DisplayName
-    $dtName  = $uninstallEntry.DisplayName
 
-    Write-Section "MECM naming"
-    Write-KV "ApplicationName"      $appName
-    Write-KV "DeploymentTypeName"   $dtName
-    Write-KV "Publisher"            $publisher
-    Write-KV "ContentLocation"      $networkVersionFolder
-    Write-KV "DetectionRegKey"      $regRelative
+    Write-Host ""
+    Write-Host "CM Application Name          : $appName"
+    Write-Host "CM SoftwareVersion           : $version"
+    Write-Host "Detection RegKey             : $regRelative"
+    Write-Host ""
 
-    New-WinSCPMecmApp `
+    New-MECMWinSCPApplication `
         -AppName $appName `
-        -Version $version `
+        -SoftwareVersion $version `
+        -ContentPath $contentPath `
+        -InstallerFileName $installerFileName `
         -Publisher $publisher `
-        -ContentLocationUNC $networkVersionFolder `
-        -UninstallRegKeyRelative $regRelative `
-        -DeploymentTypeName $dtName
+        -UninstallRegKeyRelative $regRelative
 
-    Write-Section "Cleanup: uninstall discovery install"
-    Uninstall-WinSCPFromDiscovery -QuietUninstallString $uninstallEntry.QuietUninstallString -UninstallString $uninstallEntry.UninstallString
+    # Cleanup: uninstall the discovery install
+    Write-Host ""
+    Uninstall-WinSCPFromDiscovery `
+        -QuietUninstallString $uninstallEntry.QuietUninstallString `
+        -UninstallString $uninstallEntry.UninstallString
 
-    Write-Section "DONE"
+    Write-Host ""
+    Write-Host "Script execution complete."
 }
 catch {
     Write-Error "SCRIPT FAILED: $($_.Exception.Message)"
-    throw
+    exit 1
 }
 finally {
-    try {
-        Set-Location $originalLocation -ErrorAction SilentlyContinue
-        Write-Host "Restored location to: ${originalLocation}"
-    } catch {}
+    Set-Location $startLocation -ErrorAction SilentlyContinue
 }

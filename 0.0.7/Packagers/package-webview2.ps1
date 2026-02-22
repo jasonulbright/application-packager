@@ -1,67 +1,93 @@
 <#
-Vendor: Microsoft
+Vendor: Microsoft Corporation
 App: Microsoft Edge WebView2 Runtime (x64)
 CMName: Microsoft Edge WebView2 Runtime
 
 .SYNOPSIS
     Packages Microsoft Edge WebView2 Runtime (x64) for MECM.
+
 .DESCRIPTION
-    Downloads the latest Microsoft Edge WebView2 Runtime x64 EXE, stages content to a versioned network folder,
-    and creates an MECM Application with a Script Deployment Type.
-    Detection: msedgewebview2.exe file version >= packaged version.
+    Downloads the latest WebView2 Runtime x64 standalone installer from the
+    official Microsoft link, stages content to a versioned network location,
+    and creates an MECM Application with file-based version detection.
+    Detection uses msedgewebview2.exe version in the version-specific
+    EdgeWebView\Application path.
+
 .PARAMETER SiteCode
-    ConfigMgr site code for the CM PSDrive (e.g., "MCM"). The PSDrive is assumed to already exist.
+    ConfigMgr site code PSDrive name (e.g., "MCM").
+    The PSDrive is assumed to already exist in the session.
+
 .PARAMETER Comment
-    Work order or comment string applied to the MECM application description.
+    Free-form change/WO text stored on the CM Application Description field.
+
 .PARAMETER FileServerPath
-    UNC root of the SCCM content share (e.g., "\\fileserver\sccm$").
+    UNC root that contains your Applications folder (example: \\fileserver\sccm$).
+    Content is staged under: <FileServerPath>\Applications\Microsoft\WebView2\<Version>
+
 .PARAMETER GetLatestVersionOnly
-    Outputs only the latest version string and exits.
+    Outputs only the latest available WebView2 version string and exits.
+
+.REQUIREMENTS
+    - PowerShell 5.1
+    - ConfigMgr Admin Console installed (ConfigurationManager PowerShell module available)
+    - RBAC permissions to create Applications and Deployment Types
+    - Local administrator
+    - Write access to FileServerPath
 #>
 
 param(
-    [string]$SiteCode       = "MCM",
-    [string]$Comment        = "WO#00000001234567",
+    [string]$SiteCode = "MCM",
+    [string]$Comment = "WO#00000001234567",
     [string]$FileServerPath = "\\fileserver\sccm$",
     [switch]$GetLatestVersionOnly
 )
 
-
-# --- Configuration Variables ---
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-$BaseDownloadRoot = Join-Path $env:USERPROFILE "Downloads"
-$WebView2NetworkShareRoot = Join-Path $FileServerPath "Applications\Microsoft\WebView2"
-$WebView2ExeUrl = "https://go.microsoft.com/fwlink/?linkid=2124701"
-$EdgeVersionUrl = "https://edgeupdates.microsoft.com/api/products?view=enterprise"
-$Product = @{
-    Name = "Microsoft Edge WebView2 Runtime - {0}"
-    FileName = "MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
-    InstallBatContent = 'start /wait "" "%~dp0MicrosoftEdgeWebView2RuntimeInstallerX64.exe" /silent /install'
-    UninstallBatContent = 'start /wait "" "%~dp0MicrosoftEdgeWebView2RuntimeInstallerX64.exe" /silent /uninstall'
-    InstallPs1Content = 'Start-Process "$PSScriptRoot\MicrosoftEdgeWebView2RuntimeInstallerX64.exe" -ArgumentList "/silent /install" -Wait'
-    UninstallPs1Content = 'Start-Process "$PSScriptRoot\MicrosoftEdgeWebView2RuntimeInstallerX64.exe" -ArgumentList "/silent /uninstall" -Wait'
-    DetectionFile = "msedgewebview2.exe"
-    DetectionPath = "$env:ProgramFiles\Microsoft\EdgeWebView\Application\{0}"
-    Publisher = "Microsoft Corporation"
-}
 
+# --- Configuration ---
+$WebView2ExeUrl  = "https://go.microsoft.com/fwlink/?linkid=2124701"
+$EdgeVersionUrl  = "https://edgeupdates.microsoft.com/api/products?view=enterprise"
+
+$VendorFolder = "Microsoft"
+$AppFolder    = "WebView2"
+$ExeFileName  = "MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
+
+$BaseDownloadRoot = Join-Path $env:USERPROFILE "Downloads\_AutoPackager\WebView2"
+
+$EstimatedRuntimeMins = 10
+$MaximumRuntimeMins   = 20
 
 # --- Functions ---
 function Test-IsAdmin {
     try {
-        $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+        $identity  = [Security.Principal.WindowsIdentity]::GetCurrent()
         $principal = New-Object Security.Principal.WindowsPrincipal($identity)
         return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     }
     catch {
-        Write-Warning "Failed to check admin privileges: $($_.Exception.Message)"
+        Write-Warning "Admin check failed: $($_.Exception.Message)"
         return $false
     }
 }
 
 function Connect-CMSite {
     param([Parameter(Mandatory)][string]$SiteCode)
+
     try {
+        if (-not (Get-Module -Name ConfigurationManager -ErrorAction SilentlyContinue)) {
+            $cmModulePath = Join-Path $env:SMS_ADMIN_UI_PATH "..\ConfigurationManager.psd1"
+            if (Test-Path -LiteralPath $cmModulePath) {
+                Import-Module $cmModulePath -ErrorAction Stop
+            }
+            else {
+                Import-Module ConfigurationManager -ErrorAction Stop
+            }
+        }
+
+        if (-not (Get-PSDrive -Name $SiteCode -ErrorAction SilentlyContinue)) {
+            throw "Configuration Manager PSDrive '$SiteCode' is not available."
+        }
+
         Set-Location "${SiteCode}:" -ErrorAction Stop
         Write-Host "Connected to CM site: $SiteCode"
         return $true
@@ -72,89 +98,79 @@ function Connect-CMSite {
     }
 }
 
-function Get-LatestEdgeVersion {
-    param([switch]$Quiet)
-    if (-not $Quiet) { Write-Host "Fetching Microsoft Edge version from: ${EdgeVersionUrl}" }
+function Initialize-Folder {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $origLocation = Get-Location
     try {
-        $response = Invoke-RestMethod -Uri $EdgeVersionUrl -ErrorAction Stop
-        $stableChannel = $response | Where-Object { $_.Product -eq "Stable" }
-        $latestVersion = $stableChannel.Releases | Where-Object { $_.Platform -eq "Windows" -and $_.Architecture -eq "x64" } | 
-            Sort-Object { [version]$_.ProductVersion } -Descending | Select-Object -First 1 -ExpandProperty ProductVersion
-        if (-not $latestVersion) {
-            throw "Could not determine latest Microsoft Edge Stable version."
+        Set-Location C: -ErrorAction Stop
+        if (-not (Test-Path -LiteralPath $Path)) {
+            New-Item -ItemType Directory -Path $Path -Force | Out-Null
         }
-    if (-not $Quiet) { Write-Host "Found latest Microsoft Edge Stable version: ${latestVersion}" }
-        return $latestVersion
     }
-    catch {
-        if (-not $Quiet) { Write-Error "Failed to fetch Edge version: $($_.Exception.Message)" }
-        return "140.0.3485.66"
+    finally {
+        Set-Location $origLocation -ErrorAction SilentlyContinue
     }
 }
 
 function Test-NetworkShareAccess {
-    param ([string]$Path)
-    $originalLocation = Get-Location
-    Write-Host "Current location before network share validation: ${originalLocation}"
+    param([Parameter(Mandatory)][string]$Path)
+
+    $origLocation = Get-Location
     try {
         Set-Location C: -ErrorAction Stop
-        Write-Host "Set location to C: for network share validation"
-        if (-not $Path) { Write-Error "Network path is null or empty."; return $false }
-        if (-not (Test-Path $Path -ErrorAction Stop)) { Write-Error "Network path '${Path}' does not exist or is inaccessible."; return $false }
-        $testFile = Join-Path $Path "test_$(Get-Random).txt"
-        Set-Content -Path $testFile -Value "Test" -ErrorAction Stop
-        Remove-Item -Path $testFile -ErrorAction Stop
-        Write-Host "Network share '${Path}' is accessible and writable."
-        return $true
-    }
-    catch {
-        Write-Error "Failed to access network share '${Path}': $($_.Exception.Message)"
-        return $false
+
+        if (-not (Test-Path -LiteralPath $Path -ErrorAction SilentlyContinue)) {
+            Write-Error "Network path does not exist or is inaccessible: $Path"
+            return $false
+        }
+
+        try {
+            $tmp = Join-Path $Path ("_write_test_{0}.txt" -f (Get-Random))
+            Set-Content -LiteralPath $tmp -Value "test" -Encoding ASCII -ErrorAction Stop
+            Remove-Item -LiteralPath $tmp -ErrorAction Stop
+            return $true
+        }
+        catch {
+            Write-Error "Network share is not writable: $Path ($($_.Exception.Message))"
+            return $false
+        }
     }
     finally {
-        Set-Location $originalLocation -ErrorAction SilentlyContinue
-        Write-Host "Restored location to: ${originalLocation}"
+        Set-Location $origLocation -ErrorAction SilentlyContinue
     }
 }
 
-function Create-BatchAndPS1Files {
-    param (
-        [string]$NetworkPath,
-        [string]$InstallBatContent,
-        [string]$UninstallBatContent,
-        [string]$InstallPs1Content,
-        [string]$UninstallPs1Content
-    )
-    $originalLocation = Get-Location
-    Write-Host "Current location before file creation: ${originalLocation}"
+function Get-LatestWebView2Version {
+    param([switch]$Quiet)
+
+    if (-not $Quiet) {
+        Write-Host "WebView2 version API         : $EdgeVersionUrl"
+    }
+
     try {
-        Set-Location C: -ErrorAction Stop
-        Write-Host "Set location to C: for file creation"
-        if (-not (Test-Path $NetworkPath)) {
-            Write-Host "Creating directory: ${NetworkPath}"
-            New-Item -ItemType Directory -Path $NetworkPath -Force | Out-Null
+        $json = (curl.exe -L --fail --silent --show-error $EdgeVersionUrl) -join ''
+        if ($LASTEXITCODE -ne 0) { throw "Failed to fetch version info: $EdgeVersionUrl" }
+
+        $response = ConvertFrom-Json $json
+        $stableChannel = $response | Where-Object { $_.Product -eq "Stable" }
+        $latestVersion = $stableChannel.Releases |
+            Where-Object { $_.Platform -eq "Windows" -and $_.Architecture -eq "x64" } |
+            Sort-Object { [version]$_.ProductVersion } -Descending |
+            Select-Object -First 1 -ExpandProperty ProductVersion
+
+        if (-not $latestVersion) {
+            throw "Could not determine latest WebView2 version."
         }
-        $InstallBatPath = Join-Path $NetworkPath "install.bat"
-        $UninstallBatPath = Join-Path $NetworkPath "uninstall.bat"
-        Set-Content -Path $InstallBatPath -Value $InstallBatContent -Encoding ASCII -ErrorAction Stop
-        Write-Host "Created install.bat at ${NetworkPath}"
-        Set-Content -Path $UninstallBatPath -Value $UninstallBatContent -Encoding ASCII -ErrorAction Stop
-        Write-Host "Created uninstall.bat at ${NetworkPath}"
-        if ($InstallPs1Content -and $UninstallPs1Content) {
-            $InstallPs1Path = Join-Path $NetworkPath "install.ps1"
-            $UninstallPs1Path = Join-Path $NetworkPath "uninstall.ps1"
-            Set-Content -Path $InstallPs1Path -Value $InstallPs1Content -Encoding ASCII -ErrorAction Stop
-            Write-Host "Created install.ps1 at ${NetworkPath}"
-            Set-Content -Path $UninstallPs1Path -Value $UninstallPs1Content -Encoding ASCII -ErrorAction Stop
-            Write-Host "Created uninstall.ps1 at ${NetworkPath}"
+
+        if (-not $Quiet) {
+            Write-Host "Latest WebView2 version      : $latestVersion"
         }
+        return $latestVersion
     }
     catch {
-        Write-Error "Failed to create files in '${NetworkPath}': $($_.Exception.Message)"
-    }
-    finally {
-        Set-Location $originalLocation -ErrorAction SilentlyContinue
-        Write-Host "Restored location to: ${originalLocation}"
+        Write-Error "Failed to get WebView2 version: $($_.Exception.Message)"
+        return $null
     }
 }
 
@@ -163,214 +179,238 @@ function Remove-CMApplicationRevisionHistoryByCIId {
         [Parameter(Mandatory)][UInt32]$CI_ID,
         [UInt32]$KeepLatest = 1
     )
+
     $history = Get-CMApplicationRevisionHistory -Id $CI_ID -ErrorAction SilentlyContinue
     if (-not $history) { return }
+
     $revs = @()
     foreach ($h in @($history)) {
-        if ($h.PSObject.Properties.Name -contains 'Revision')  { $revs += [UInt32]$h.Revision;   continue }
+        if ($h.PSObject.Properties.Name -contains 'Revision') { $revs += [UInt32]$h.Revision; continue }
         if ($h.PSObject.Properties.Name -contains 'CIVersion') { $revs += [UInt32]$h.CIVersion; continue }
     }
+
     $revs = $revs | Sort-Object -Unique -Descending
     if ($revs.Count -le $KeepLatest) { return }
+
     foreach ($rev in ($revs | Select-Object -Skip $KeepLatest)) {
         Remove-CMApplicationRevisionHistory -Id $CI_ID -Revision $rev -Force -ErrorAction Stop
     }
 }
 
-function New-MECMApplication {
-    param (
-        [string]$AppName,
-        [string]$Version,
-        [string]$NetworkPath,
-        [string]$FileName,
-        [string]$Publisher,
-        [string]$DetectionPath,
-        [string]$DetectionFile,
-        [string]$DetectionStagedPath
+function New-MECMWebView2Application {
+    param(
+        [Parameter(Mandatory)][string]$AppName,
+        [Parameter(Mandatory)][string]$SoftwareVersion,
+        [Parameter(Mandatory)][string]$ContentPath,
+        [Parameter(Mandatory)][string]$ExeFileName,
+        [Parameter(Mandatory)][string]$Publisher
     )
-    $originalLocation = Get-Location
-    Write-Host "Current location before MECM application creation: ${originalLocation}"
+
+    $orig = Get-Location
+
     try {
-        if (-not (Test-IsAdmin)) { Write-Error "Script must be run with admin privileges."; return }
-        if (-not (Connect-CMSite -SiteCode $SiteCode)) { Write-Error "Failed to connect to CM site."; return }
-        Write-Host "Checking for existing application: ${AppName}"
-        $existingApp = Get-CMApplication -Name $AppName -ErrorAction SilentlyContinue
-        if ($existingApp) {
-            Write-Host "Application '${AppName}' already exists. Checking deployment types..."
-            $deploymentTypes = Get-CMDeploymentType -ApplicationName $AppName -ErrorAction SilentlyContinue
-            if ($deploymentTypes -and $deploymentTypes.Count -gt 0) {
-                Write-Warning "Application '${AppName}' already exists with $($deploymentTypes.Count) deployment type(s). Skipping creation."
-                return
-            } else {
-                Write-Host "Application '${AppName}' exists but has no deployment types. Continuing to add deployment type..."
-                $app = $existingApp
-            }
-        } else {
-            Write-Host "Creating application: ${AppName}"
-            $app = New-CMApplication -Name $AppName `
-                -Publisher $Publisher `
-                -SoftwareVersion $Version `
-                -Description $Comment `
-                -LocalizedApplicationName $AppName `
-                -ErrorAction Stop
+        if (-not (Test-IsAdmin)) { throw "Run PowerShell as Administrator." }
+
+        if (-not (Connect-CMSite -SiteCode $SiteCode)) { throw "CM site connection failed." }
+
+        $existing = Get-CMApplication -Name $AppName -ErrorAction SilentlyContinue
+        if ($existing) {
+            Write-Warning "Application already exists: $AppName"
+            return
         }
-        $detectionClauses = @()
-        # Primary detection clause
-        $detectionPathFormatted = if ($DetectionPath -like "*{0}*") { $DetectionPath -f $Version } else { $DetectionPath }
-        Write-Host "Creating detection clause for ${DetectionFile} at ${detectionPathFormatted}"
-        if (-not (Test-Path $detectionPathFormatted -ErrorAction SilentlyContinue)) {
-            Write-Warning "Detection path '${detectionPathFormatted}' is not accessible. Ensure it exists on target systems."
+
+        Write-Host "Creating CM Application      : $AppName"
+        $cmApp = New-CMApplication `
+            -Name $AppName `
+            -Publisher $Publisher `
+            -SoftwareVersion $SoftwareVersion `
+            -Description $Comment `
+            -AutoInstall $true `
+            -ErrorAction Stop
+
+        Write-Host "Application CI_ID            : $($cmApp.CI_ID)"
+
+        Set-Location C: -ErrorAction Stop
+
+        $installBatPath   = Join-Path $ContentPath "install.bat"
+        $uninstallBatPath = Join-Path $ContentPath "uninstall.bat"
+
+        if (-not (Test-Path -LiteralPath $installBatPath)) {
+            $installBat = @"
+@echo off
+setlocal
+start /wait "" "%~dp0$ExeFileName" /silent /install
+exit /b 0
+"@
+            Set-Content -LiteralPath $installBatPath -Value $installBat -Encoding ASCII -ErrorAction Stop
         }
-        $clause1 = New-CMDetectionClauseFile -Path $detectionPathFormatted `
-            -FileName $DetectionFile `
+
+        if (-not (Test-Path -LiteralPath $uninstallBatPath)) {
+            $uninstallBat = @"
+@echo off
+setlocal
+start /wait "" "%~dp0$ExeFileName" /silent /uninstall
+exit /b 0
+"@
+            Set-Content -LiteralPath $uninstallBatPath -Value $uninstallBat -Encoding ASCII -ErrorAction Stop
+        }
+
+        if (-not (Connect-CMSite -SiteCode $SiteCode)) { throw "CM site connection failed." }
+
+        $dtName = $AppName
+
+        # Detection: msedgewebview2.exe in version-specific EdgeWebView path
+        $detectionPath = "$env:ProgramFiles\Microsoft\EdgeWebView\Application\$SoftwareVersion"
+
+        $clause = New-CMDetectionClauseFile `
+            -Path $detectionPath `
+            -FileName "msedgewebview2.exe" `
             -Value `
             -PropertyType Version `
             -ExpressionOperator GreaterEquals `
-            -ExpectedValue $Version `
-            -ErrorAction Stop
-        $detectionClauses += $clause1
-        # Staged detection clause (for Edge only)
-        if ($DetectionStagedPath) {
-            Write-Host "Creating staged detection clause for ${DetectionFile} at ${DetectionStagedPath}"
-            if (-not (Test-Path $DetectionStagedPath -ErrorAction SilentlyContinue)) {
-                Write-Warning "Staged detection path '${DetectionStagedPath}' is not accessible. Ensure it exists on target systems."
-            }
-            $clause2 = New-CMDetectionClauseFile -Path $DetectionStagedPath `
-                -FileName $DetectionFile `
-                -Value `
-                -PropertyType Version `
-                -ExpressionOperator GreaterEquals `
-                -ExpectedValue $Version `
-                -ErrorAction Stop
-            $detectionClauses += $clause2
-        }
-        $params = @{
-            ApplicationName = $AppName
-            DeploymentTypeName = "${AppName}"
-            InstallCommand = "install.bat"
-            ContentLocation = $NetworkPath
-            ContentFallback = $true
-            SlowNetworkDeploymentMode = "Download"
-            UninstallCommand = "uninstall.bat"
-            InstallationBehaviorType = "InstallForSystem"
-            LogonRequirementType = "WhetherOrNotUserLoggedOn"
-            MaximumRuntimeMins = 20
-            EstimatedRuntimeMins = 10
-            AddDetectionClause = $detectionClauses
-            UserInteractionMode = "Hidden"
-            RebootBehavior = "NoAction"
-            ErrorAction = "Stop"
-        }
-        if ($DetectionStagedPath) {
-            $params.Add("DetectionClauseConnector", @{"LogicalName"=$clause2.Setting.LogicalName; "Connector"="OR"})
-        }
-        Write-Host "Adding script deployment type with parameters: $($params | Out-String)"
-        Add-CMScriptDeploymentType @params -Verbose
-        Remove-CMApplicationRevisionHistoryByCIId -CI_ID ([UInt32]$app.CI_ID) -KeepLatest 1
-        Write-Host "Created MECM application: ${AppName} with file-based detection"
-    }
-    catch {
-        Write-Error "Failed to create MECM application: $($_.Exception.Message)"
+            -ExpectedValue $SoftwareVersion
+
+        Write-Host "Adding Script Deployment Type: $dtName"
+        Add-CMScriptDeploymentType `
+            -ApplicationName $AppName `
+            -DeploymentTypeName $dtName `
+            -ContentLocation $ContentPath `
+            -InstallCommand "install.bat" `
+            -UninstallCommand "uninstall.bat" `
+            -InstallationBehaviorType InstallForSystem `
+            -LogonRequirementType WhetherOrNotUserLoggedOn `
+            -EstimatedRuntimeMins $EstimatedRuntimeMins `
+            -MaximumRuntimeMins $MaximumRuntimeMins `
+            -AddDetectionClause @($clause) `
+            -ContentFallback `
+            -SlowNetworkDeploymentMode Download `
+            -ErrorAction Stop | Out-Null
+
+        Remove-CMApplicationRevisionHistoryByCIId -CI_ID ([UInt32]$cmApp.CI_ID) -KeepLatest 1
+
+        Write-Host "Created MECM application     : $AppName"
     }
     finally {
-        Set-Location $originalLocation -ErrorAction SilentlyContinue
-        Write-Host "Restored location to: ${originalLocation}"
+        Set-Location $orig -ErrorAction SilentlyContinue
     }
 }
 
-# --- Main Script ---
+function Get-WebView2NetworkAppRoot {
+    param([Parameter(Mandatory)][string]$FileServerPath)
+
+    $appsRoot   = Join-Path $FileServerPath "Applications"
+    $vendorPath = Join-Path $appsRoot $VendorFolder
+    $appPath    = Join-Path $vendorPath $AppFolder
+
+    Initialize-Folder -Path $appsRoot
+    Initialize-Folder -Path $vendorPath
+    Initialize-Folder -Path $appPath
+
+    return $appPath
+}
+
+# --- Latest-only mode ---
+if ($GetLatestVersionOnly) {
+    try {
+        $ProgressPreference = 'SilentlyContinue'
+        $v = Get-LatestWebView2Version -Quiet
+        if (-not $v) { exit 1 }
+        Write-Output $v
+        exit 0
+    }
+    catch {
+        exit 1
+    }
+}
+
+# --- Main ---
 try {
+    $startLocation = Get-Location
+
+    Write-Host ""
+    Write-Host ("=" * 60)
+    Write-Host "WebView2 Runtime (x64) Auto-Packager starting"
+    Write-Host ("=" * 60)
+    Write-Host ""
+    Write-Host ("RunAsUser                    : {0}\{1}" -f $env:USERDOMAIN,$env:USERNAME)
+    Write-Host ("Machine                      : {0}" -f $env:COMPUTERNAME)
+    Write-Host "Start location               : $startLocation"
+    Write-Host "SiteCode                     : $SiteCode"
+    Write-Host "FileServerPath               : $FileServerPath"
+    Write-Host "BaseDownloadRoot             : $BaseDownloadRoot"
+    Write-Host "EdgeVersionUrl               : $EdgeVersionUrl"
+    Write-Host ""
+
     if (-not (Test-IsAdmin)) {
-        Write-Error "This script must be run with admin privileges. Please run PowerShell as Administrator."
+        Write-Error "Run PowerShell as Administrator."
         exit 1
     }
-    $originalLocation = Get-Location
-    Write-Host "Initial location: ${originalLocation}"
-    Set-Location C: -ErrorAction Stop
-    Write-Host "Set initial location to C: for script execution"
 
-    if ($GetLatestVersionOnly) {
-        $versionOnly = Get-LatestEdgeVersion -Quiet
-        Write-Output $versionOnly
-        return
+    Initialize-Folder -Path $BaseDownloadRoot
+
+    if (-not (Test-NetworkShareAccess -Path $FileServerPath)) {
+        throw "Network root path not accessible: $FileServerPath"
     }
 
-    $version = Get-LatestEdgeVersion
-    $downloadFolderName = "WebView2Installers_${version}"
-    $downloadPath = Join-Path $BaseDownloadRoot $downloadFolderName
-    if (-not (Test-Path -LiteralPath $downloadPath)) {
-        Write-Host "Creating download directory: ${downloadPath}"
-        New-Item -ItemType Directory -Path $downloadPath -Force | Out-Null
+    $networkAppRoot = Get-WebView2NetworkAppRoot -FileServerPath $FileServerPath
+
+    $version = Get-LatestWebView2Version
+    if (-not $version) {
+        throw "Could not resolve WebView2 version."
     }
 
-    $networkPath = Join-Path $WebView2NetworkShareRoot $version
-    if (-not (Test-NetworkShareAccess -Path $WebView2NetworkShareRoot)) {
-        Write-Error "Network share '${WebView2NetworkShareRoot}' is inaccessible. Skipping WebView2 application."
-        exit 1
-    }
-    if (-not (Test-Path -LiteralPath $networkPath)) {
-        Write-Host "Creating WebView2 network directory: ${networkPath}"
-        New-Item -ItemType Directory -Path $networkPath -Force -ErrorAction Stop | Out-Null
-    }
+    $localExe    = Join-Path $BaseDownloadRoot $ExeFileName
+    $contentPath = Join-Path $networkAppRoot $version
 
-    $product = $Product
-    $appName = $product.Name -f $version
-    $fileName = $product.FileName
-    $downloadUrl = $WebView2ExeUrl
-    $outputPath = Join-Path $downloadPath $fileName
-    $networkFilePath = Join-Path $networkPath $fileName
+    Initialize-Folder -Path $contentPath
 
-    if (Test-Path -LiteralPath $outputPath) {
-        $fileInfo = Get-Item -LiteralPath $outputPath -ErrorAction Stop
-        Write-Host "${fileName} already exists at ${outputPath} (Size=$($fileInfo.Length) bytes, LastModified=$($fileInfo.LastWriteTime)), skipping download."
+    $netExe = Join-Path $contentPath $ExeFileName
+
+    Write-Host "Version                      : $version"
+    Write-Host "Local installer              : $localExe"
+    Write-Host "ContentPath                  : $contentPath"
+    Write-Host "Network installer            : $netExe"
+    Write-Host ""
+
+    if (-not (Test-Path -LiteralPath $localExe)) {
+        Write-Host "Downloading installer..."
+        curl.exe -L --fail --silent --show-error -o $localExe $WebView2ExeUrl
+        if ($LASTEXITCODE -ne 0) { throw "Download failed: $WebView2ExeUrl" }
     }
     else {
-        Write-Host "Downloading ${appName} (${fileName}) from ${downloadUrl}"
-        Set-Location C: -ErrorAction Stop
-        curl.exe -L --fail --silent --show-error -o $outputPath $downloadUrl
-        if ($LASTEXITCODE -ne 0) { throw "Download failed: $downloadUrl" }
-        $fileInfo = Get-Item -LiteralPath $outputPath -ErrorAction Stop
-        Write-Host "Downloaded ${appName} (${fileName}) to ${outputPath} (Size=$($fileInfo.Length) bytes)"
+        Write-Host "Local installer exists. Skipping download."
     }
 
-    if (Test-Path -LiteralPath $networkFilePath) {
-        $fileInfo = Get-Item -LiteralPath $networkFilePath -ErrorAction Stop
-        Write-Host "${fileName} already exists at ${networkFilePath} (Size=$($fileInfo.Length) bytes, LastModified=$($fileInfo.LastWriteTime)), skipping copy."
+    if (-not (Test-Path -LiteralPath $netExe)) {
+        Write-Host "Copying installer to network..."
+        Copy-Item -LiteralPath $localExe -Destination $netExe -Force -ErrorAction Stop
     }
     else {
-        Set-Location C: -ErrorAction Stop
-        Write-Host "Copying ${fileName} to ${networkPath}"
-        Copy-Item -LiteralPath $outputPath -Destination $networkPath -Force -ErrorAction Stop
-        $fileInfo = Get-Item -LiteralPath $networkFilePath -ErrorAction Stop
-        Write-Host "Copied ${fileName} to ${networkPath} (Size=$($fileInfo.Length) bytes)"
+        Write-Host "Network installer exists. Skipping copy."
     }
 
-    Create-BatchAndPS1Files -NetworkPath $networkPath `
-        -InstallBatContent $product.InstallBatContent `
-        -UninstallBatContent $product.UninstallBatContent `
-        -InstallPs1Content $product.InstallPs1Content `
-        -UninstallPs1Content $product.UninstallPs1Content
+    $appName   = "Microsoft Edge WebView2 Runtime - $version"
+    $publisher = "Microsoft Corporation"
 
-    $params = @{
-        AppName = $appName
-        Version = $version
-        NetworkPath = $networkPath
-        FileName = $fileName
-        Publisher = $product.Publisher
-        DetectionPath = ($product.DetectionPath -f $version)
-        DetectionFile = $product.DetectionFile
-    }
-    New-MECMApplication @params
+    Write-Host ""
+    Write-Host "CM Application Name          : $appName"
+    Write-Host "CM SoftwareVersion           : $version"
+    Write-Host ""
 
+    New-MECMWebView2Application `
+        -AppName $appName `
+        -SoftwareVersion $version `
+        -ContentPath $contentPath `
+        -ExeFileName $ExeFileName `
+        -Publisher $publisher
+
+    Write-Host ""
     Write-Host "Script execution complete."
 }
 catch {
-    Write-Error "Script failed: $($_.Exception.Message)"
+    Write-Error "SCRIPT FAILED: $($_.Exception.Message)"
     exit 1
 }
 finally {
-    if ($originalLocation) {
-        Set-Location $originalLocation -ErrorAction SilentlyContinue
-        Write-Host "Restored initial location to: ${originalLocation}"
-    }
+    Set-Location $startLocation -ErrorAction SilentlyContinue
 }

@@ -7,50 +7,44 @@ CMName: Microsoft ODBC Driver 18 for SQL Server
     Packages Microsoft ODBC Driver 18 for SQL Server (x64) for MECM.
 
 .DESCRIPTION
-    Downloads the Microsoft ODBC Driver 18 (x64) installer, stages content to a
-    versioned network location, and creates an MECM Application with MSI-based detection.
+    Downloads the Microsoft ODBC Driver 18 (x64) MSI via the Microsoft FWLink
+    redirect URL, extracts ProductVersion and ProductCode via Windows Installer
+    COM, stages content to a versioned network location, and creates an MECM
+    Application with Windows Installer (ProductCode) detection.
+    Detection uses ProductCode version IsEquals packaged version.
 
-    This package uses:
-      - Static, version-agnostic install.bat and uninstall.bat wrappers
-      - Windows Installer (MSI) detection to enforce exact version alignment
-      - System installation context with no user logon requirement
+    NOTE: The FWLink URL always serves the current release. The version is read
+    from MSI properties after download.
 
-    Install and uninstall command files are created only if missing and are not
-    regenerated on subsequent runs to prevent drift or accidental command changes.
-
-    GetLatestVersionOnly fetches only the Microsoft documentation page (small HTML)
-    to read the current version — no installer download is performed.
+    GetLatestVersionOnly scrapes the Microsoft documentation page for the latest
+    version number (no MSI download required).
 
 .PARAMETER SiteCode
     ConfigMgr site code PSDrive name (e.g., "MCM").
     The PSDrive is assumed to already exist in the session.
 
 .PARAMETER Comment
-    Work order or comment string applied to the MECM application description.
+    Free-form change/WO text stored on the CM Application Description field.
 
 .PARAMETER FileServerPath
-    UNC root of the SCCM content share (e.g., "\\fileserver\sccm$").
+    UNC root that contains your Applications folder (example: \\fileserver\sccm$).
+    Content is staged under: <FileServerPath>\Applications\Microsoft\ODBC Driver 18 for SQL Server\<Version>
 
 .PARAMETER GetLatestVersionOnly
-    Fetches the current ODBC 18 version from the Microsoft documentation page,
-    outputs the version string, and exits. No MECM, network share, or download
-    actions are performed.
+    Scrapes the Microsoft documentation page for the current ODBC 18 version,
+    outputs the version string, and exits. No download or MECM changes are made.
 
-.NOTES
-    Requirements:
-      - PowerShell 5.1
-      - ConfigMgr Admin Console installed (for ConfigurationManager.psd1)
-      - RBAC permissions to create Applications and Deployment Types
-      - Local administrator
-      - Write access to FileServerPath
-
-    Detection:
-      - Windows Installer (MSI) ProductCode + ProductVersion (IsEquals)
+.REQUIREMENTS
+    - PowerShell 5.1
+    - ConfigMgr Admin Console installed (ConfigurationManager PowerShell module available)
+    - RBAC permissions to create Applications and Deployment Types
+    - Local administrator
+    - Write access to FileServerPath
 #>
 
 param(
-    [string]$SiteCode       = "MCM",
-    [string]$Comment        = "WO#00000001234567",
+    [string]$SiteCode = "MCM",
+    [string]$Comment = "WO#00000001234567",
     [string]$FileServerPath = "\\fileserver\sccm$",
     [switch]$GetLatestVersionOnly
 )
@@ -58,16 +52,19 @@ param(
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 # --- Configuration ---
-$LearnPageUrl         = "https://learn.microsoft.com/en-us/sql/connect/odbc/download-odbc-driver-for-sql-server"
-$FwLinkUrl            = "https://go.microsoft.com/fwlink/?linkid=2345415&clcid=0x409"
-$BaseDownloadRoot     = Join-Path $env:USERPROFILE "Downloads\_AutoPackager"
-$NetworkRootPath      = Join-Path $FileServerPath "Applications\Microsoft\ODBC Driver 18 for SQL Server"
-$Publisher            = "Microsoft Corporation"
+$LearnPageUrl = "https://learn.microsoft.com/en-us/sql/connect/odbc/download-odbc-driver-for-sql-server"
+$FwLinkUrl    = "https://go.microsoft.com/fwlink/?linkid=2345415&clcid=0x409"
+$MsiFileName  = "msodbcsql18.msi"
+
+$VendorFolder = "Microsoft"
+$AppFolder    = "ODBC Driver 18 for SQL Server"
+
+$BaseDownloadRoot = Join-Path $env:USERPROFILE "Downloads\_AutoPackager\ODBC18"
+
 $EstimatedRuntimeMins = 10
 $MaximumRuntimeMins   = 20
 
 # --- Functions ---
-
 function Test-IsAdmin {
     try {
         $identity  = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -82,7 +79,22 @@ function Test-IsAdmin {
 
 function Connect-CMSite {
     param([Parameter(Mandatory)][string]$SiteCode)
+
     try {
+        if (-not (Get-Module -Name ConfigurationManager -ErrorAction SilentlyContinue)) {
+            $cmModulePath = Join-Path $env:SMS_ADMIN_UI_PATH "..\ConfigurationManager.psd1"
+            if (Test-Path -LiteralPath $cmModulePath) {
+                Import-Module $cmModulePath -ErrorAction Stop
+            }
+            else {
+                Import-Module ConfigurationManager -ErrorAction Stop
+            }
+        }
+
+        if (-not (Get-PSDrive -Name $SiteCode -ErrorAction SilentlyContinue)) {
+            throw "Configuration Manager PSDrive '$SiteCode' is not available."
+        }
+
         Set-Location "${SiteCode}:" -ErrorAction Stop
         Write-Host "Connected to CM site: $SiteCode"
         return $true
@@ -93,85 +105,130 @@ function Connect-CMSite {
     }
 }
 
-function Ensure-Folder {
+function Initialize-Folder {
     param([Parameter(Mandatory)][string]$Path)
-    if (-not (Test-Path -LiteralPath $Path)) {
-        New-Item -ItemType Directory -Path $Path -Force | Out-Null
+
+    $origLocation = Get-Location
+    try {
+        Set-Location C: -ErrorAction Stop
+        if (-not (Test-Path -LiteralPath $Path)) {
+            New-Item -ItemType Directory -Path $Path -Force | Out-Null
+        }
+    }
+    finally {
+        Set-Location $origLocation -ErrorAction SilentlyContinue
     }
 }
 
 function Test-NetworkShareAccess {
     param([Parameter(Mandatory)][string]$Path)
-    $originalLocation = Get-Location
+
+    $origLocation = Get-Location
     try {
         Set-Location C: -ErrorAction Stop
+
         if (-not (Test-Path -LiteralPath $Path -ErrorAction SilentlyContinue)) {
             Write-Error "Network path does not exist or is inaccessible: $Path"
             return $false
         }
-        $tmp = Join-Path $Path ("_write_test_{0}.txt" -f (Get-Random))
-        Set-Content -LiteralPath $tmp -Value "test" -Encoding ASCII -ErrorAction Stop
-        Remove-Item -LiteralPath $tmp -ErrorAction Stop
-        return $true
-    }
-    catch {
-        Write-Error "Network share is not writable: $Path ($($_.Exception.Message))"
-        return $false
+
+        try {
+            $tmp = Join-Path $Path ("_write_test_{0}.txt" -f (Get-Random))
+            Set-Content -LiteralPath $tmp -Value "test" -Encoding ASCII -ErrorAction Stop
+            Remove-Item -LiteralPath $tmp -ErrorAction Stop
+            return $true
+        }
+        catch {
+            Write-Error "Network share is not writable: $Path ($($_.Exception.Message))"
+            return $false
+        }
     }
     finally {
-        Set-Location $originalLocation -ErrorAction SilentlyContinue
+        Set-Location $origLocation -ErrorAction SilentlyContinue
     }
 }
 
 function Get-Odbc18Version {
-    # Lightweight: parses the Microsoft documentation page — no installer download.
     param([switch]$Quiet)
-    if (-not $Quiet) { Write-Host "Fetching ODBC 18 version from: $LearnPageUrl" }
-    $html = (curl.exe -L --fail --silent --show-error $LearnPageUrl) -join "`n"
-    if ($LASTEXITCODE -ne 0) { throw "Failed to fetch ODBC documentation page: $LearnPageUrl" }
-    $verMatch = [regex]::Match($html, '\b(18\.\d+\.\d+\.\d+)\b')
-    if (-not $verMatch.Success) { throw "Could not parse ODBC 18 version from documentation page." }
-    $version = $verMatch.Groups[1].Value
-    if (-not $Quiet) { Write-Host "Latest ODBC Driver 18 version: $version" }
-    return $version
+
+    if (-not $Quiet) {
+        Write-Host "Learn page URL               : $LearnPageUrl"
+    }
+
+    try {
+        $html = (curl.exe -L --fail --silent --show-error $LearnPageUrl) -join "`n"
+        if ($LASTEXITCODE -ne 0) { throw "Failed to fetch ODBC documentation page: $LearnPageUrl" }
+
+        $verMatch = [regex]::Match($html, '\b(18\.\d+\.\d+\.\d+)\b')
+        if (-not $verMatch.Success) { throw "Could not parse ODBC 18 version from documentation page." }
+
+        $version = $verMatch.Groups[1].Value
+
+        if (-not $Quiet) {
+            Write-Host "Latest ODBC Driver 18 version: $version"
+        }
+        return $version
+    }
+    catch {
+        Write-Error "Failed to get ODBC 18 version: $($_.Exception.Message)"
+        return $null
+    }
 }
 
 function Resolve-Odbc18MsiUrl {
     param([switch]$Quiet)
+
     if (-not $Quiet) {
-        Write-Host "Learn download page : $LearnPageUrl"
-        Write-Host "FWLink (English)    : $FwLinkUrl"
+        Write-Host "FWLink URL                   : $FwLinkUrl"
     }
-    $final = (curl.exe --max-redirs 10 --silent --show-error --write-out "%{url_effective}" --output NUL $FwLinkUrl) -join ''
-    if ($LASTEXITCODE -ne 0) { throw "Failed to resolve URL: $FwLinkUrl" }
-    if ([string]::IsNullOrWhiteSpace($final)) { throw "Could not resolve final MSI URL." }
-    if ($final -notmatch '\.msi($|\?)') { throw "Resolved URL does not appear to be an MSI: $final" }
-    if (-not $Quiet) { Write-Host "Resolved MSI URL    : $final" }
-    return $final
+
+    try {
+        $final = (curl.exe --max-redirs 10 --silent --show-error --write-out "%{url_effective}" --output NUL $FwLinkUrl) -join ''
+        if ($LASTEXITCODE -ne 0) { throw "Failed to resolve URL: $FwLinkUrl" }
+        if ([string]::IsNullOrWhiteSpace($final)) { throw "Could not resolve final MSI URL." }
+        if ($final -notmatch '\.msi($|\?)') { throw "Resolved URL does not appear to be an MSI: $final" }
+
+        if (-not $Quiet) {
+            Write-Host "Resolved MSI URL             : $final"
+        }
+        return $final
+    }
+    catch {
+        Write-Error "Failed to resolve ODBC 18 MSI URL: $($_.Exception.Message)"
+        return $null
+    }
 }
 
 function Get-MsiPropertyMap {
     param([Parameter(Mandatory)][string]$MsiPath)
+
     $installer = $null
-    $db        = $null
-    $view      = $null
-    $record    = $null
+    $db = $null
+    $view = $null
+    $record = $null
+
     try {
         $installer = New-Object -ComObject WindowsInstaller.Installer
         $db = $installer.GetType().InvokeMember("OpenDatabase", "InvokeMethod", $null, $installer, @($MsiPath, 0))
+
         $wanted = @("ProductName", "ProductVersion", "Manufacturer", "ProductCode")
         $map = @{}
+
         foreach ($p in $wanted) {
-            $sql    = "SELECT ``Value`` FROM ``Property`` WHERE ``Property``='$p'"
-            $view   = $db.GetType().InvokeMember("OpenView",   "InvokeMethod", $null, $db,   @($sql))
+            $sql  = "SELECT `Value` FROM `Property` WHERE `Property`='$p'"
+            $view = $db.GetType().InvokeMember("OpenView", "InvokeMethod", $null, $db, @($sql))
             $view.GetType().InvokeMember("Execute", "InvokeMethod", $null, $view, $null) | Out-Null
-            $record = $view.GetType().InvokeMember("Fetch",     "InvokeMethod", $null, $view, $null)
+            $record = $view.GetType().InvokeMember("Fetch", "InvokeMethod", $null, $view, $null)
+
             if ($null -ne $record) {
-                $map[$p] = $record.GetType().InvokeMember("StringData", "GetProperty", $null, $record, 1)
-            } else {
+                $val = $record.GetType().InvokeMember("StringData", "GetProperty", $null, $record, 1)
+                $map[$p] = $val
+            }
+            else {
                 $map[$p] = $null
             }
         }
+
         return $map
     }
     finally {
@@ -190,29 +247,142 @@ function Remove-CMApplicationRevisionHistoryByCIId {
         [Parameter(Mandatory)][UInt32]$CI_ID,
         [UInt32]$KeepLatest = 1
     )
+
     $history = Get-CMApplicationRevisionHistory -Id $CI_ID -ErrorAction SilentlyContinue
     if (-not $history) { return }
+
     $revs = @()
     foreach ($h in @($history)) {
-        if ($h.PSObject.Properties.Name -contains 'Revision')  { $revs += [UInt32]$h.Revision;   continue }
+        if ($h.PSObject.Properties.Name -contains 'Revision') { $revs += [UInt32]$h.Revision; continue }
         if ($h.PSObject.Properties.Name -contains 'CIVersion') { $revs += [UInt32]$h.CIVersion; continue }
     }
+
     $revs = $revs | Sort-Object -Unique -Descending
     if ($revs.Count -le $KeepLatest) { return }
+
     foreach ($rev in ($revs | Select-Object -Skip $KeepLatest)) {
         Remove-CMApplicationRevisionHistory -Id $CI_ID -Revision $rev -Force -ErrorAction Stop
     }
 }
 
-# --- GetLatestVersionOnly mode ---
+function New-MECMOdbc18Application {
+    param(
+        [Parameter(Mandatory)][string]$AppName,
+        [Parameter(Mandatory)][string]$SoftwareVersion,
+        [Parameter(Mandatory)][string]$ContentPath,
+        [Parameter(Mandatory)][string]$MsiFileName,
+        [Parameter(Mandatory)][string]$ProductCode,
+        [Parameter(Mandatory)][string]$Publisher
+    )
+
+    $orig = Get-Location
+
+    try {
+        if (-not (Test-IsAdmin)) { throw "Run PowerShell as Administrator." }
+
+        if (-not (Connect-CMSite -SiteCode $SiteCode)) { throw "CM site connection failed." }
+
+        $existing = Get-CMApplication -Name $AppName -ErrorAction SilentlyContinue
+        if ($existing) {
+            Write-Warning "Application already exists: $AppName"
+            return
+        }
+
+        Write-Host "Creating CM Application      : $AppName"
+        $cmApp = New-CMApplication `
+            -Name $AppName `
+            -Publisher $Publisher `
+            -SoftwareVersion $SoftwareVersion `
+            -Description $Comment `
+            -AutoInstall $true `
+            -ErrorAction Stop
+
+        Write-Host "Application CI_ID            : $($cmApp.CI_ID)"
+
+        Set-Location C: -ErrorAction Stop
+
+        $installBatPath   = Join-Path $ContentPath "install.bat"
+        $uninstallBatPath = Join-Path $ContentPath "uninstall.bat"
+
+        if (-not (Test-Path -LiteralPath $installBatPath)) {
+            $installBat = @"
+@echo off
+setlocal
+start /wait "" msiexec.exe /i "%~dp0$MsiFileName" /qn /norestart
+exit /b 0
+"@
+            Set-Content -LiteralPath $installBatPath -Value $installBat -Encoding ASCII -ErrorAction Stop
+        }
+
+        if (-not (Test-Path -LiteralPath $uninstallBatPath)) {
+            $uninstallBat = @"
+@echo off
+setlocal
+start /wait "" msiexec.exe /x "%~dp0$MsiFileName" /qn /norestart
+exit /b 0
+"@
+            Set-Content -LiteralPath $uninstallBatPath -Value $uninstallBat -Encoding ASCII -ErrorAction Stop
+        }
+
+        if (-not (Connect-CMSite -SiteCode $SiteCode)) { throw "CM site connection failed." }
+
+        $dtName = $AppName
+
+        $clause = New-CMDetectionClauseWindowsInstaller `
+            -ProductCode $ProductCode `
+            -Value `
+            -ExpressionOperator IsEquals `
+            -ExpectedValue $SoftwareVersion
+
+        Write-Host "Adding Script Deployment Type: $dtName"
+        Add-CMScriptDeploymentType `
+            -ApplicationName $AppName `
+            -DeploymentTypeName $dtName `
+            -ContentLocation $ContentPath `
+            -InstallCommand "install.bat" `
+            -UninstallCommand "uninstall.bat" `
+            -InstallationBehaviorType InstallForSystem `
+            -LogonRequirementType WhetherOrNotUserLoggedOn `
+            -EstimatedRuntimeMins $EstimatedRuntimeMins `
+            -MaximumRuntimeMins $MaximumRuntimeMins `
+            -AddDetectionClause @($clause) `
+            -ContentFallback `
+            -SlowNetworkDeploymentMode Download `
+            -ErrorAction Stop | Out-Null
+
+        Remove-CMApplicationRevisionHistoryByCIId -CI_ID ([UInt32]$cmApp.CI_ID) -KeepLatest 1
+
+        Write-Host "Created MECM application     : $AppName"
+    }
+    finally {
+        Set-Location $orig -ErrorAction SilentlyContinue
+    }
+}
+
+function Get-Odbc18NetworkAppRoot {
+    param([Parameter(Mandatory)][string]$FileServerPath)
+
+    $appsRoot   = Join-Path $FileServerPath "Applications"
+    $vendorPath = Join-Path $appsRoot $VendorFolder
+    $appPath    = Join-Path $vendorPath $AppFolder
+
+    Initialize-Folder -Path $appsRoot
+    Initialize-Folder -Path $vendorPath
+    Initialize-Folder -Path $appPath
+
+    return $appPath
+}
+
+# --- Latest-only mode ---
 if ($GetLatestVersionOnly) {
     try {
-        $version = Get-Odbc18Version -Quiet
-        Write-Output $version
+        $ProgressPreference = 'SilentlyContinue'
+        $v = Get-Odbc18Version -Quiet
+        if (-not $v) { exit 1 }
+        Write-Output $v
         exit 0
     }
     catch {
-        Write-Error "Failed to retrieve ODBC 18 version: $($_.Exception.Message)"
         exit 1
     }
 }
@@ -226,14 +396,14 @@ try {
     Write-Host "Microsoft ODBC Driver 18 (x64) Auto-Packager starting"
     Write-Host ("=" * 60)
     Write-Host ""
-    Write-Host ("RunAsUser         : {0}\{1}" -f $env:USERDOMAIN, $env:USERNAME)
-    Write-Host ("Machine           : {0}"     -f $env:COMPUTERNAME)
-    Write-Host "Start location    : $startLocation"
-    Write-Host "SiteCode          : $SiteCode"
-    Write-Host "BaseDownloadRoot  : $BaseDownloadRoot"
-    Write-Host "NetworkRootPath   : $NetworkRootPath"
-    Write-Host "LearnPageUrl      : $LearnPageUrl"
-    Write-Host "FWLinkUrl         : $FwLinkUrl"
+    Write-Host ("RunAsUser                    : {0}\{1}" -f $env:USERDOMAIN,$env:USERNAME)
+    Write-Host ("Machine                      : {0}" -f $env:COMPUTERNAME)
+    Write-Host "Start location               : $startLocation"
+    Write-Host "SiteCode                     : $SiteCode"
+    Write-Host "FileServerPath               : $FileServerPath"
+    Write-Host "BaseDownloadRoot             : $BaseDownloadRoot"
+    Write-Host "LearnPageUrl                 : $LearnPageUrl"
+    Write-Host "FwLinkUrl                    : $FwLinkUrl"
     Write-Host ""
 
     if (-not (Test-IsAdmin)) {
@@ -241,18 +411,18 @@ try {
         exit 1
     }
 
-    Ensure-Folder -Path $BaseDownloadRoot
+    Initialize-Folder -Path $BaseDownloadRoot
 
-    if (-not (Test-NetworkShareAccess -Path $NetworkRootPath)) {
-        throw "Network root path not accessible: $NetworkRootPath"
+    if (-not (Test-NetworkShareAccess -Path $FileServerPath)) {
+        throw "Network root path not accessible: $FileServerPath"
     }
+
+    $networkAppRoot = Get-Odbc18NetworkAppRoot -FileServerPath $FileServerPath
 
     $msiUrl = Resolve-Odbc18MsiUrl
     if (-not $msiUrl) { throw "Could not resolve MSI download URL." }
 
-    $localMsi = Join-Path $BaseDownloadRoot "msodbcsql18.msi"
-    Write-Host "Local MSI path    : $localMsi"
-    Write-Host ""
+    $localMsi = Join-Path $BaseDownloadRoot $MsiFileName
 
     Write-Host "Downloading MSI..."
     curl.exe -L --fail --silent --show-error -o $localMsi $msiUrl
@@ -269,104 +439,53 @@ try {
     if ([string]::IsNullOrWhiteSpace($productVersion)) { throw "MSI ProductVersion missing." }
     if ([string]::IsNullOrWhiteSpace($productCode))    { throw "MSI ProductCode missing." }
 
-    Write-Host "MSI ProductName    : $productName"
-    Write-Host "MSI ProductVersion : $productVersion"
-    Write-Host "MSI Manufacturer   : $manufacturer"
-    Write-Host "MSI ProductCode    : $productCode"
-    Write-Host ""
+    $contentPath = Join-Path $networkAppRoot $productVersion
 
-    $contentPath = Join-Path $NetworkRootPath $productVersion
-    Ensure-Folder -Path $contentPath
+    Initialize-Folder -Path $contentPath
 
-    $msiFileName = "msodbcsql18.msi"
-    $netMsi      = Join-Path $contentPath $msiFileName
+    $netMsi = Join-Path $contentPath $MsiFileName
 
-    Write-Host "ContentPath       : $contentPath"
-    Write-Host "Network MSI       : $netMsi"
+    Write-Host "MSI ProductName              : $productName"
+    Write-Host "MSI ProductVersion           : $productVersion"
+    Write-Host "MSI Manufacturer             : $manufacturer"
+    Write-Host "MSI ProductCode              : $productCode"
+    Write-Host "Local MSI                    : $localMsi"
+    Write-Host "ContentPath                  : $contentPath"
+    Write-Host "Network MSI                  : $netMsi"
     Write-Host ""
 
     if (-not (Test-Path -LiteralPath $netMsi)) {
         Write-Host "Copying MSI to network..."
         Copy-Item -LiteralPath $localMsi -Destination $netMsi -Force -ErrorAction Stop
-    } else {
+    }
+    else {
         Write-Host "Network MSI exists. Skipping copy."
     }
 
-    $appName = "$productName $productVersion"
+    $appName   = "$productName $productVersion"
+    $publisher = $manufacturer
+    if ([string]::IsNullOrWhiteSpace($publisher)) { $publisher = "Microsoft Corporation" }
 
-    Write-Host "CM Application Name : $appName"
+    Write-Host ""
+    Write-Host "CM Application Name          : $appName"
+    Write-Host "CM SoftwareVersion           : $productVersion"
     Write-Host ""
 
-    if (-not (Connect-CMSite -SiteCode $SiteCode)) { throw "CM site connection failed." }
-
-    $existing = Get-CMApplication -Name $appName -ErrorAction SilentlyContinue
-    if ($existing) {
-        Write-Warning "Application already exists: $appName"
-        exit 1
-    }
-
-    Write-Host "Creating CM Application: $appName"
-    $cmApp = New-CMApplication `
-        -Name $appName `
-        -Publisher $Publisher `
+    New-MECMOdbc18Application `
+        -AppName $appName `
         -SoftwareVersion $productVersion `
-        -Description $Comment `
-        -ErrorAction Stop
-
-    # Static wrappers (do not overwrite if already present)
-    $installBatPath   = Join-Path $contentPath "install.bat"
-    $uninstallBatPath = Join-Path $contentPath "uninstall.bat"
-
-    if (-not (Test-Path -LiteralPath $installBatPath)) {
-        $installBat = @"
-@echo off
-setlocal
-start /wait "" msiexec.exe /i "%~dp0$msiFileName" /qn /norestart
-exit /b 0
-"@
-        Set-Content -LiteralPath $installBatPath -Value $installBat -Encoding ASCII -ErrorAction Stop
-    }
-
-    if (-not (Test-Path -LiteralPath $uninstallBatPath)) {
-        $uninstallBat = @"
-@echo off
-setlocal
-start /wait "" msiexec.exe /x "%~dp0$msiFileName" /qn /norestart
-exit /b 0
-"@
-        Set-Content -LiteralPath $uninstallBatPath -Value $uninstallBat -Encoding ASCII -ErrorAction Stop
-    }
-
-    $clause = New-CMDetectionClauseWindowsInstaller `
+        -ContentPath $contentPath `
+        -MsiFileName $MsiFileName `
         -ProductCode $productCode `
-        -Value `
-        -ExpressionOperator IsEquals `
-        -ExpectedValue $productVersion
-
-    Write-Host "Adding Script Deployment Type: $appName"
-    Add-CMScriptDeploymentType `
-        -ApplicationName $appName `
-        -DeploymentTypeName $appName `
-        -ContentLocation $contentPath `
-        -InstallCommand "install.bat" `
-        -UninstallCommand "uninstall.bat" `
-        -InstallationBehaviorType InstallForSystem `
-        -LogonRequirementType WhetherOrNotUserLoggedOn `
-        -UserInteractionMode Hidden `
-        -EstimatedRuntimeMins $EstimatedRuntimeMins `
-        -MaximumRuntimeMins $MaximumRuntimeMins `
-        -AddDetectionClause @($clause) `
-        -ContentFallback $true `
-        -SlowNetworkDeploymentMode Download `
-        -ErrorAction Stop | Out-Null
-
-    Remove-CMApplicationRevisionHistoryByCIId -CI_ID ([UInt32]$cmApp.CI_ID) -KeepLatest 1
+        -Publisher $publisher
 
     Write-Host ""
-    Write-Host "Created MECM application: $appName"
     Write-Host "Script execution complete."
 }
 catch {
     Write-Error "SCRIPT FAILED: $($_.Exception.Message)"
     exit 1
+}
+finally {
+    Set-Location $startLocation -ErrorAction SilentlyContinue
 }

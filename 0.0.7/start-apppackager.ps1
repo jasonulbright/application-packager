@@ -28,10 +28,10 @@
       - package-*.notps1   (treated as PowerShell script content; used for email/security systems)
 
 .EXAMPLE
-    .\AppPackager-GUI.ps1
+    .\start-apppackager.ps1
 
 .EXAMPLE
-    .\AppPackager-GUI.ps1 -SiteCode "MCM" -PackagersRoot "D:\CM\Packagers"
+    .\start-apppackager.ps1 -SiteCode "MCM" -PackagersRoot "D:\CM\Packagers"
 
 .NOTES
     Requirements:
@@ -43,12 +43,12 @@
       - No MECM queries on launch
       - No internet queries on launch
       - No network share access on launch
-	  
-# ScriptName : AppPackager-GUI.ps1
-# Purpose    : WinForms front-end for packager scripts (metadata-driven selection + actions)
-# Owner      : CM Engineering
-# Version    : 0.1.0
-# Updated    : 2026-01-26
+
+    ScriptName : start-apppackager.ps1
+    Purpose    : WinForms front-end for packager scripts (metadata-driven selection + actions)
+    Owner      : CM Engineering
+    Version    : 0.1.0
+    Updated    : 2026-01-26
 #>
 
 
@@ -59,20 +59,6 @@ param(
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
-
-try {
-    $icoPath = Join-Path $PSScriptRoot "apppackager.ico"
-    if (Test-Path -LiteralPath $icoPath) {
-        $form.Icon = [System.Windows.Media.Imaging.BitmapFrame]::Create(
-            [Uri]$icoPath,
-            [System.Windows.Media.Imaging.BitmapCreateOptions]::None,
-            [System.Windows.Media.Imaging.BitmapCacheOption]::OnLoad
-        )
-    }
-}
-catch {
-    # no-op: icon is optional
-}
 
 [System.Windows.Forms.Application]::EnableVisualStyles()
 try { [System.Windows.Forms.Application]::SetCompatibleTextRenderingDefault($false) } catch { }
@@ -108,7 +94,7 @@ function Write-ConfigStore {
     Set-Content -LiteralPath $path -Value $json -Encoding UTF8
 }
 
-function Apply-ConfigurationToInputs {
+function Set-ConfigurationInputs {
     param(
         [Parameter(Mandatory)][pscustomobject]$Config,
         [Parameter(Mandatory)][System.Windows.Forms.TextBox]$TxtComment,
@@ -121,7 +107,7 @@ function Apply-ConfigurationToInputs {
     if ($null -ne $Config.SiteCode)      { $TxtSiteCode.Text = [string]$Config.SiteCode }
 }
 
-function Upsert-Configuration {
+function Save-Configuration {
     param(
         [Parameter(Mandatory)][string]$Name,
         [Parameter(Mandatory)][string]$WOComment,
@@ -279,7 +265,7 @@ function Get-PackagerMetadata {
     }
 }
 
-function Load-Packagers {
+function Get-Packagers {
     param(
         [Parameter(Mandatory)][string]$Root
     )
@@ -369,8 +355,8 @@ function Invoke-PackagerGetLatestVersion {
     $p.StartInfo = $psi
 
     $null = $p.Start()
-    $stdout = $p.StandardOutput.ReadToEnd()
     $stderr = $p.StandardError.ReadToEnd()
+    $stdout = $p.StandardOutput.ReadToEnd()
     $p.WaitForExit()
 
     if ($p.ExitCode -ne 0) {
@@ -519,8 +505,8 @@ function Invoke-PackagerRun {
     $p.StartInfo = $psi
 
     $null = $p.Start()
-    $stdout = $p.StandardOutput.ReadToEnd()
     $stderr = $p.StandardError.ReadToEnd()
+    $stdout = $p.StandardOutput.ReadToEnd()
     $p.WaitForExit()
 
     Set-Content -LiteralPath $outLog -Value $stdout -Encoding UTF8
@@ -549,14 +535,12 @@ $form.BackColor = [System.Drawing.Color]::White
 $script:AppIconBitmap = $null
 $script:AppIconHandle = [IntPtr]::Zero
 
-try {
-    if (-not $logoPath) {
-        $logoPath = Join-Path $PSScriptRoot "apppackager-logo.jpg"
-        if (-not (Test-Path -LiteralPath $logoPath)) {
-            $logoPath = Join-Path $PSScriptRoot "apppackager-logo.png"
-        }
-    }
+$logoPath = Join-Path $PSScriptRoot "apppackager-logo.jpg"
+if (-not (Test-Path -LiteralPath $logoPath)) {
+    $logoPath = Join-Path $PSScriptRoot "apppackager-logo.png"
+}
 
+try {
     if (Test-Path -LiteralPath $logoPath) {
         $script:AppIconBitmap = New-Object System.Drawing.Bitmap $logoPath
         $script:AppIconHandle = $script:AppIconBitmap.GetHicon()
@@ -577,10 +561,6 @@ $picLogo.Location = New-Object System.Drawing.Point(20, 20)
 $picLogo.SizeMode = [System.Windows.Forms.PictureBoxSizeMode]::StretchImage
 $picLogo.BackColor = [System.Drawing.Color]::Transparent
 
-$logoPath = Join-Path $PSScriptRoot "apppackager-logo.jpg"
-if (-not (Test-Path -LiteralPath $logoPath)) {
-    $logoPath = Join-Path $PSScriptRoot "apppackager-logo.png"
-}
 if (Test-Path -LiteralPath $logoPath) {
     try { $picLogo.Image = [System.Drawing.Image]::FromFile($logoPath) } catch { }
 }
@@ -627,7 +607,7 @@ $lblDesc2.Anchor    = "Top,Left,Right"
 $lblDesc2.Text      = "No network or MECM actions occur until a button is explicitly selected."
 $descPanel.Controls.Add($lblDesc2)
 
-# Lines 3–5 (clean, no pipes)
+# Lines 3-5 (clean, no pipes)
 $lblDesc3 = New-Object System.Windows.Forms.Label
 $lblDesc3.AutoSize  = $true
 $lblDesc3.Font      = $descFont
@@ -752,7 +732,7 @@ $btnSaveConfig.BackColor = [System.Drawing.Color]::FromArgb(34, 139, 34) # green
 $btnSaveConfig.ForeColor = [System.Drawing.Color]::White
 $btnSaveConfig.UseVisualStyleBackColor = $false
 $btnSaveConfig.Cursor = [System.Windows.Forms.Cursors]::Hand
-$btnSaveConfig.Text = [char]::ConvertFromUtf32(0x2713)  # ✓ (safe: generated at runtime)
+$btnSaveConfig.Text = [char]::ConvertFromUtf32(0x2713)  # checkmark
 $btnSaveConfig.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
 $btnSaveConfig.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
 $btnSaveConfig.Anchor = "Top,Right"
@@ -761,7 +741,7 @@ $form.Controls.Add($btnSaveConfig)
 # Keep a script-scoped cache for the combo binding
 $script:ConfigCache = @()
 
-function Refresh-ConfigDropdown {
+function Update-ConfigDropdown {
     param([string]$SelectName = $null)
 
     $script:ConfigCache = @(Read-ConfigStore | Sort-Object Name)
@@ -788,7 +768,7 @@ $cmbLoadConfig.Add_SelectedIndexChanged({
 
     $cfg = $script:ConfigCache | Where-Object { $_.Name -eq $name } | Select-Object -First 1
     if ($cfg) {
-        Apply-ConfigurationToInputs -Config $cfg -TxtComment $txtComment -TxtFSPath $txtFSPath -TxtSiteCode $txtSiteCode
+        Set-ConfigurationInputs -Config $cfg -TxtComment $txtComment -TxtFSPath $txtFSPath -TxtSiteCode $txtSiteCode
     }
 })
 
@@ -796,12 +776,12 @@ $btnSaveConfig.Add_Click({
     $name = $txtSaveConfigName.Text.Trim()
     if ([string]::IsNullOrWhiteSpace($name) -or $name -eq "Configuration Name") { return }
 
-    $null = Upsert-Configuration -Name $name -WOComment $txtComment.Text -FileShareRoot $txtFSPath.Text -SiteCode $txtSiteCode.Text
-    Refresh-ConfigDropdown -SelectName $name
+    $null = Save-Configuration -Name $name -WOComment $txtComment.Text -FileShareRoot $txtFSPath.Text -SiteCode $txtSiteCode.Text
+    Update-ConfigDropdown -SelectName $name
 })
 
 # Initial population
-Refresh-ConfigDropdown
+Update-ConfigDropdown
 
 # Data grid
 $grid = New-Object System.Windows.Forms.DataGridView
@@ -949,10 +929,10 @@ $chkSelectAll.Add_CheckedChanged({
 })
 
 $grid.Add_CellValueChanged({
-    param($sender, $e)
+    param($s, $e)
 
     if ($e.ColumnIndex -eq 0 -and $e.RowIndex -ge 0) {
-        $grid.EndEdit()
+        $s.EndEdit()
 
         $allSelected = $true
         $anySelected = $false
@@ -990,10 +970,10 @@ $chkDebug.Location = New-Object System.Drawing.Point(20, 510)
 $chkDebug.Anchor = "Top,Left"
 $form.Controls.Add($chkDebug)
 
-# Emoji Definitions (preserves ANSI encoding)
-$emojiSearch = [char]::ConvertFromUtf32(0x1F50D)  # 🔍
-$emojiBox    = [char]::ConvertFromUtf32(0x1F5C4)  # 🗄
-$emojiPlay   = [char]::ConvertFromUtf32(0x25B6)   # ▶
+# Unicode emoji code points
+$emojiSearch = [char]::ConvertFromUtf32(0x1F50D)  # search
+$emojiBox    = [char]::ConvertFromUtf32(0x1F5C4)  # file cabinet
+$emojiPlay   = [char]::ConvertFromUtf32(0x25B6)   # play
 
 # Buttons row
 $btnLatest = New-Object System.Windows.Forms.Button
@@ -1039,10 +1019,9 @@ $txtLog.ReadOnly = $true
 $txtLog.Multiline = $true
 $txtLog.ScrollBars = "Vertical"
 $txtLog.WordWrap = $false
-$txtLog.Font = New-Object System.Drawing.Font("Consolas", 9)
+$txtLog.Font = New-Object System.Drawing.Font("Consolas", 10)
 $txtLog.BackColor = [System.Drawing.Color]::White
 $txtLog.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
-$txtLog.Font = New-Object System.Drawing.Font("Consolas", 10)
 $txtLog.Anchor = "Bottom,Left,Right"
 $txtLog.Location = New-Object System.Drawing.Point(20, 612)
 $txtLog.Size = New-Object System.Drawing.Size(1060, 54)
@@ -1068,59 +1047,59 @@ function Set-UILayout {
     $btnHeight = 52
     $logHeight = 54
 
-# Descriptor panel: left aligns after logo; right aligns with form padding
-$descLeft = ($picLogo.Right + 16)
-$descWidth = ($form.ClientSize.Width - $padding - $descLeft)
-if ($descWidth -lt 200) { $descWidth = 200 }
+    # Descriptor panel: left aligns after logo; right aligns with form padding
+    $descLeft = ($picLogo.Right + 16)
+    $descWidth = ($form.ClientSize.Width - $padding - $descLeft)
+    if ($descWidth -lt 200) { $descWidth = 200 }
 
-$descPanel.SetBounds($descLeft, ($picLogo.Top + 20), $descWidth, 112)
+    $descPanel.SetBounds($descLeft, ($picLogo.Top + 20), $descWidth, 112)
 
-$wrapW = [Math]::Max(200, ($descPanel.Width - (2 * $padX)))
-$lblDesc1.MaximumSize = New-Object System.Drawing.Size($wrapW, 0)
-$lblDesc2.MaximumSize = New-Object System.Drawing.Size($wrapW, 0)
-$lblDesc3.MaximumSize = New-Object System.Drawing.Size($wrapW, 0)
-$lblDesc4.MaximumSize = New-Object System.Drawing.Size($wrapW, 0)
-$lblDesc5.MaximumSize = New-Object System.Drawing.Size($wrapW, 0)
+    $wrapW = [Math]::Max(200, ($descPanel.Width - (2 * $padX)))
+    $lblDesc1.MaximumSize = New-Object System.Drawing.Size($wrapW, 0)
+    $lblDesc2.MaximumSize = New-Object System.Drawing.Size($wrapW, 0)
+    $lblDesc3.MaximumSize = New-Object System.Drawing.Size($wrapW, 0)
+    $lblDesc4.MaximumSize = New-Object System.Drawing.Size($wrapW, 0)
+    $lblDesc5.MaximumSize = New-Object System.Drawing.Size($wrapW, 0)
 
     $siteBoxWidth    = 80
     $fsBoxWidth      = 200
     $commentBoxWidth = 220
     $headerGap       = 12
     $topY = ($picLogo.Top + 172)
-	$configY = $topY - 34
-	if ($configY -lt 28) { $configY = 28 }  # safety for small window sizes
+    $configY = $topY - 34
+    if ($configY -lt 28) { $configY = 28 }  # safety for small window sizes
 
-# Config row: right-aligned, fits between descriptor and WO row
-$saveBtnW = 44
-$saveNameW = 200
-$loadW = 220
-$cfgGap = 12
+    # Config row: right-aligned, fits between descriptor and WO row
+    $saveBtnW = 44
+    $saveNameW = 200
+    $loadW = 220
+    $cfgGap = 12
 
-# Right edge padding
-$right = ($form.ClientSize.Width - $padding)
+    # Right edge padding
+    $right = ($form.ClientSize.Width - $padding)
 
-# Save button at far right
-$btnSaveConfig.SetBounds(($right - $saveBtnW), $configY, $saveBtnW, 26)
+    # Save button at far right
+    $btnSaveConfig.SetBounds(($right - $saveBtnW), $configY, $saveBtnW, 26)
 
-# Save name textbox to the left of save button
-$txtSaveConfigName.SetBounds(($btnSaveConfig.Left - $cfgGap - $saveNameW), $configY, $saveNameW, 24)
+    # Save name textbox to the left of save button
+    $txtSaveConfigName.SetBounds(($btnSaveConfig.Left - $cfgGap - $saveNameW), $configY, $saveNameW, 24)
 
-# Save label to the left of save name
-$lblSaveConfig.Location = New-Object System.Drawing.Point(
-    ($txtSaveConfigName.Left - 8 - $lblSaveConfig.PreferredWidth),
-    ($configY + 3)
-)
+    # Save label to the left of save name
+    $lblSaveConfig.Location = New-Object System.Drawing.Point(
+        ($txtSaveConfigName.Left - 8 - $lblSaveConfig.PreferredWidth),
+        ($configY + 3)
+    )
 
-# Load combo to the left of save label area (leave a gap)
-$cmbLoadConfig.SetBounds(($lblSaveConfig.Left - $gap - $loadW), $configY, $loadW, 24)
+    # Load combo to the left of save label area (leave a gap)
+    $cmbLoadConfig.SetBounds(($lblSaveConfig.Left - $gap - $loadW), $configY, $loadW, 24)
 
-# Load label to the left of load combo
-$lblLoadConfig.Location = New-Object System.Drawing.Point(
-    ($cmbLoadConfig.Left - 8 - $lblLoadConfig.PreferredWidth),
-    ($configY + 3)
-)
+    # Load label to the left of load combo
+    $lblLoadConfig.Location = New-Object System.Drawing.Point(
+        ($cmbLoadConfig.Left - 8 - $lblLoadConfig.PreferredWidth),
+        ($configY + 3)
+    )
 
-	$txtSiteCode.SetBounds(
+    $txtSiteCode.SetBounds(
         ($form.ClientSize.Width - $padding - $siteBoxWidth),
         $topY,
         $siteBoxWidth,
@@ -1220,7 +1199,7 @@ $grid.Columns["CMName"].DataPropertyName = "CMName"
 $grid.Columns["Script"].DataPropertyName = "Script"
 
 $grid.Add_CellBeginEdit({
-    param($sender, $e)
+    param($s, $e)
     if ($e.ColumnIndex -eq 0 -and $e.RowIndex -ge 0) {
         $path = [string]$dt.Rows[$e.RowIndex]["FullPath"]
         if ($path -match "\.notps1$") {
@@ -1230,11 +1209,11 @@ $grid.Add_CellBeginEdit({
 })
 
 $grid.Add_RowPrePaint({
-    param($sender, $e)
+    param($s, $e)
     try {
         $path = [string]$dt.Rows[$e.RowIndex]["FullPath"]
         if ($path -match "\.notps1$") {
-            $grid.Rows[$e.RowIndex].DefaultCellStyle.ForeColor = [System.Drawing.Color]::DarkGray
+            $s.Rows[$e.RowIndex].DefaultCellStyle.ForeColor = [System.Drawing.Color]::DarkGray
         }
     }
     catch { }
@@ -1395,6 +1374,10 @@ $btnMecm.Add_Click({
             }
         }
 
+        Select-OnlyUpdateAvailable -DataTable $dt
+        $grid.EndEdit()
+        $grid.Refresh()
+
         $statusLabel.Text = "MECM query complete."
     }
     finally {
@@ -1403,9 +1386,6 @@ $btnMecm.Add_Click({
         $btnMecm.Enabled   = $true
         $btnRun.Enabled    = $true
     }
-Select-OnlyUpdateAvailable -DataTable $dt
-$grid.EndEdit()
-$grid.Refresh()
 })
 
 $btnRun.Add_Click({
@@ -1492,7 +1472,7 @@ $btnRun.Add_Click({
 $form.Add_Shown({
     Add-LogLine -TextBox $txtLog -Message ("Loading packagers from: {0}" -f $PackagersRoot)
 
-    $items = Load-Packagers -Root $PackagersRoot
+    $items = Get-Packagers -Root $PackagersRoot
     foreach ($m in $items) {
         $row = $dt.NewRow()
         $row["Selected"] = $false
@@ -1500,7 +1480,7 @@ $form.Add_Shown({
         $row["Application"] = $m.Application
         $row["CurrentVersion"] = ""
         $row["LatestVersion"] = ""
-        $row["Status"] = "Unknown"
+        $row["Status"] = $m.Status
         $row["CMName"] = $m.CMName
         $row["Script"] = $m.Script
         $row["FullPath"] = $m.FullPath

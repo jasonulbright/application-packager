@@ -4,54 +4,59 @@ App: Mozilla Firefox (x64)
 CMName: Mozilla Firefox
 
 .SYNOPSIS
-    Automates downloading the latest Mozilla Firefox x64 MSI and creating an MECM application.
+    Packages Mozilla Firefox (x64) MSI for MECM.
 
 .DESCRIPTION
-    Creates one MECM application for Mozilla Firefox x64 with file-version-based detection.
-    Downloads the MSI from Mozilla's release servers, copies to the SCCM content share,
-    creates install/uninstall batch files, and registers the application in MECM.
-    Application name format: "Mozilla Firefox <version> (x64)".
+    Downloads the latest Mozilla Firefox x64 MSI from the official Mozilla
+    release servers, stages content to a versioned network location, and creates
+    an MECM Application with file-version-based detection.
+    Detection uses firefox.exe version >= packaged version in the Program Files
+    install path.
 
 .PARAMETER SiteCode
     ConfigMgr site code PSDrive name (e.g., "MCM").
+    The PSDrive is assumed to already exist in the session.
 
 .PARAMETER Comment
-    Work order or comment string applied to the MECM application description.
+    Free-form change/WO text stored on the CM Application Description field.
 
 .PARAMETER FileServerPath
-    UNC root of the SCCM content share (e.g., "\\fileserver\sccm$").
+    UNC root that contains your Applications folder (example: \\fileserver\sccm$).
+    Content is staged under: <FileServerPath>\Applications\Mozilla\Firefox\<Version>
 
 .PARAMETER GetLatestVersionOnly
-    Outputs only the latest version string and exits.
+    Outputs only the latest available Firefox version string and exits.
 
-.NOTES
-    Requires:
-      - PowerShell 5.1
-      - ConfigMgr Admin Console installed (for ConfigurationManager.psd1)
-      - RBAC rights to create Applications and Deployment Types
+.REQUIREMENTS
+    - PowerShell 5.1
+    - ConfigMgr Admin Console installed (ConfigurationManager PowerShell module available)
+    - RBAC permissions to create Applications and Deployment Types
+    - Local administrator
+    - Write access to FileServerPath
 #>
 
 param(
-    [string]$SiteCode       = "MCM",
-    [string]$Comment        = "WO#00000001234567",
+    [string]$SiteCode = "MCM",
+    [string]$Comment = "WO#00000001234567",
     [string]$FileServerPath = "\\fileserver\sccm$",
     [switch]$GetLatestVersionOnly
 )
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-$ErrorActionPreference = "Stop"
 
 # --- Configuration ---
-$BaseDownloadRoot       = Join-Path $env:USERPROFILE "Downloads"
-$FirefoxNetworkRoot     = Join-Path $FileServerPath "Applications\Mozilla\Firefox"
-$FirefoxVersionsJsonUrl = "https://product-details.mozilla.org/1.0/firefox_versions.json"
-$FirefoxDownloadBase    = "https://releases.mozilla.org/pub/firefox/releases"
-$Publisher              = "Mozilla"
-$DetectionFolder        = "C:\Program Files\Mozilla Firefox"
-$DetectionFile          = "firefox.exe"
+$VersionsJsonUrl  = "https://product-details.mozilla.org/1.0/firefox_versions.json"
+$DownloadBase     = "https://releases.mozilla.org/pub/firefox/releases"
+
+$VendorFolder = "Mozilla"
+$AppFolder    = "Firefox"
+
+$BaseDownloadRoot = Join-Path $env:USERPROFILE "Downloads\_AutoPackager\Firefox"
+
+$EstimatedRuntimeMins = 10
+$MaximumRuntimeMins   = 30
 
 # --- Functions ---
-
 function Test-IsAdmin {
     try {
         $identity  = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -59,14 +64,29 @@ function Test-IsAdmin {
         return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     }
     catch {
-        Write-Warning "Failed to check admin privileges: $($_.Exception.Message)"
+        Write-Warning "Admin check failed: $($_.Exception.Message)"
         return $false
     }
 }
 
 function Connect-CMSite {
     param([Parameter(Mandatory)][string]$SiteCode)
+
     try {
+        if (-not (Get-Module -Name ConfigurationManager -ErrorAction SilentlyContinue)) {
+            $cmModulePath = Join-Path $env:SMS_ADMIN_UI_PATH "..\ConfigurationManager.psd1"
+            if (Test-Path -LiteralPath $cmModulePath) {
+                Import-Module $cmModulePath -ErrorAction Stop
+            }
+            else {
+                Import-Module ConfigurationManager -ErrorAction Stop
+            }
+        }
+
+        if (-not (Get-PSDrive -Name $SiteCode -ErrorAction SilentlyContinue)) {
+            throw "Configuration Manager PSDrive '$SiteCode' is not available."
+        }
+
         Set-Location "${SiteCode}:" -ErrorAction Stop
         Write-Host "Connected to CM site: $SiteCode"
         return $true
@@ -77,41 +97,73 @@ function Connect-CMSite {
     }
 }
 
-function Test-NetworkShareAccess {
+function Initialize-Folder {
     param([Parameter(Mandatory)][string]$Path)
-    $originalLocation = Get-Location
+
+    $origLocation = Get-Location
     try {
-        if (-not (Test-Path -LiteralPath $Path -ErrorAction Stop)) {
-            Write-Error "Network path '$Path' does not exist or is inaccessible."
-            return $false
+        Set-Location C: -ErrorAction Stop
+        if (-not (Test-Path -LiteralPath $Path)) {
+            New-Item -ItemType Directory -Path $Path -Force | Out-Null
         }
-        $testFile = Join-Path $Path ("_write_test_{0}.txt" -f (Get-Random))
-        Set-Content -LiteralPath $testFile -Value "Test" -Encoding ASCII -ErrorAction Stop
-        Remove-Item -LiteralPath $testFile -ErrorAction Stop
-        return $true
-    }
-    catch {
-        Write-Error "Failed to access network share '$Path': $($_.Exception.Message)"
-        return $false
     }
     finally {
-        Set-Location $originalLocation -ErrorAction SilentlyContinue
+        Set-Location $origLocation -ErrorAction SilentlyContinue
+    }
+}
+
+function Test-NetworkShareAccess {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $origLocation = Get-Location
+    try {
+        Set-Location C: -ErrorAction Stop
+
+        if (-not (Test-Path -LiteralPath $Path -ErrorAction SilentlyContinue)) {
+            Write-Error "Network path does not exist or is inaccessible: $Path"
+            return $false
+        }
+
+        try {
+            $tmp = Join-Path $Path ("_write_test_{0}.txt" -f (Get-Random))
+            Set-Content -LiteralPath $tmp -Value "test" -Encoding ASCII -ErrorAction Stop
+            Remove-Item -LiteralPath $tmp -ErrorAction Stop
+            return $true
+        }
+        catch {
+            Write-Error "Network share is not writable: $Path ($($_.Exception.Message))"
+            return $false
+        }
+    }
+    finally {
+        Set-Location $origLocation -ErrorAction SilentlyContinue
     }
 }
 
 function Get-LatestFirefoxVersion {
     param([switch]$Quiet)
+
+    if (-not $Quiet) {
+        Write-Host "Versions JSON URL            : $VersionsJsonUrl"
+    }
+
     try {
-        $jsonText = (curl.exe -L --fail --silent --show-error $FirefoxVersionsJsonUrl) -join ''
-        if ($LASTEXITCODE -ne 0) { throw "Failed to fetch Firefox version info: $FirefoxVersionsJsonUrl" }
+        $jsonText = (curl.exe -L --fail --silent --show-error $VersionsJsonUrl) -join ''
+        if ($LASTEXITCODE -ne 0) { throw "Failed to fetch Firefox version info: $VersionsJsonUrl" }
+
         $json = ConvertFrom-Json $jsonText
         $version = $json.LATEST_FIREFOX_VERSION
-        if ([string]::IsNullOrWhiteSpace($version)) { throw "LATEST_FIREFOX_VERSION field was empty." }
-        if (-not $Quiet) { Write-Host "Latest Firefox version: $version" }
+        if ([string]::IsNullOrWhiteSpace($version)) {
+            throw "LATEST_FIREFOX_VERSION field was empty."
+        }
+
+        if (-not $Quiet) {
+            Write-Host "Latest Firefox version       : $version"
+        }
         return $version
     }
     catch {
-        Write-Error "Failed to retrieve latest Firefox version: $($_.Exception.Message)"
+        Write-Error "Failed to get Firefox version: $($_.Exception.Message)"
         return $null
     }
 }
@@ -121,15 +173,19 @@ function Remove-CMApplicationRevisionHistoryByCIId {
         [Parameter(Mandatory)][UInt32]$CI_ID,
         [UInt32]$KeepLatest = 1
     )
+
     $history = Get-CMApplicationRevisionHistory -Id $CI_ID -ErrorAction SilentlyContinue
     if (-not $history) { return }
+
     $revs = @()
     foreach ($h in @($history)) {
-        if ($h.PSObject.Properties.Name -contains 'Revision')  { $revs += [UInt32]$h.Revision;   continue }
+        if ($h.PSObject.Properties.Name -contains 'Revision') { $revs += [UInt32]$h.Revision; continue }
         if ($h.PSObject.Properties.Name -contains 'CIVersion') { $revs += [UInt32]$h.CIVersion; continue }
     }
+
     $revs = $revs | Sort-Object -Unique -Descending
     if ($revs.Count -le $KeepLatest) { return }
+
     foreach ($rev in ($revs | Select-Object -Skip $KeepLatest)) {
         Remove-CMApplicationRevisionHistory -Id $CI_ID -Revision $rev -Force -ErrorAction Stop
     }
@@ -138,149 +194,209 @@ function Remove-CMApplicationRevisionHistoryByCIId {
 function New-MECMFirefoxApplication {
     param(
         [Parameter(Mandatory)][string]$AppName,
-        [Parameter(Mandatory)][string]$Version,
-        [Parameter(Mandatory)][string]$NetworkPath
+        [Parameter(Mandatory)][string]$SoftwareVersion,
+        [Parameter(Mandatory)][string]$ContentPath,
+        [Parameter(Mandatory)][string]$MsiFileName,
+        [Parameter(Mandatory)][string]$Publisher
     )
-    $originalLocation = Get-Location
+
+    $orig = Get-Location
+
     try {
-        if (-not (Connect-CMSite -SiteCode $SiteCode)) {
-            Write-Error "Failed to connect to CM site."
+        if (-not (Test-IsAdmin)) { throw "Run PowerShell as Administrator." }
+
+        if (-not (Connect-CMSite -SiteCode $SiteCode)) { throw "CM site connection failed." }
+
+        $existing = Get-CMApplication -Name $AppName -ErrorAction SilentlyContinue
+        if ($existing) {
+            Write-Warning "Application already exists: $AppName"
             return
         }
 
-        $existingApp = Get-CMApplication -Name $AppName -ErrorAction SilentlyContinue
-        if ($existingApp) {
-            $dts = Get-CMDeploymentType -ApplicationName $AppName -ErrorAction SilentlyContinue
-            if ($dts -and $dts.Count -gt 0) {
-                Write-Warning "Application '$AppName' already exists with $($dts.Count) deployment type(s). Skipping."
-                return
-            }
-            $cmApp = $existingApp
-        }
-        else {
-            Write-Host "Creating application: $AppName"
-            $cmApp = New-CMApplication `
-                -Name $AppName `
-                -Publisher $Publisher `
-                -SoftwareVersion $Version `
-                -LocalizedApplicationName $AppName `
-                -Description $Comment `
-                -ErrorAction Stop
+        Write-Host "Creating CM Application      : $AppName"
+        $cmApp = New-CMApplication `
+            -Name $AppName `
+            -Publisher $Publisher `
+            -SoftwareVersion $SoftwareVersion `
+            -Description $Comment `
+            -AutoInstall $true `
+            -ErrorAction Stop
+
+        Write-Host "Application CI_ID            : $($cmApp.CI_ID)"
+
+        Set-Location C: -ErrorAction Stop
+
+        $installBatPath   = Join-Path $ContentPath "install.bat"
+        $uninstallBatPath = Join-Path $ContentPath "uninstall.bat"
+
+        if (-not (Test-Path -LiteralPath $installBatPath)) {
+            $installBat = @"
+@echo off
+setlocal
+start /wait "" msiexec.exe /i "%~dp0$MsiFileName" /qn /norestart
+exit /b 0
+"@
+            Set-Content -LiteralPath $installBatPath -Value $installBat -Encoding ASCII -ErrorAction Stop
         }
 
-        $detectionClause = New-CMDetectionClauseFile `
-            -Path $DetectionFolder `
-            -FileName $DetectionFile `
+        if (-not (Test-Path -LiteralPath $uninstallBatPath)) {
+            $uninstallBat = @"
+@echo off
+setlocal
+start /wait "" msiexec.exe /x "%~dp0$MsiFileName" /qn /norestart
+exit /b 0
+"@
+            Set-Content -LiteralPath $uninstallBatPath -Value $uninstallBat -Encoding ASCII -ErrorAction Stop
+        }
+
+        if (-not (Connect-CMSite -SiteCode $SiteCode)) { throw "CM site connection failed." }
+
+        $dtName = $AppName
+
+        $clause = New-CMDetectionClauseFile `
+            -Path "$env:ProgramFiles\Mozilla Firefox" `
+            -FileName "firefox.exe" `
+            -Value `
             -PropertyType Version `
             -ExpressionOperator GreaterEquals `
-            -ExpectedValue $Version `
-            -Value
+            -ExpectedValue $SoftwareVersion
 
-        $params = @{
-            ApplicationName           = $AppName
-            DeploymentTypeName        = "$AppName Script DT"
-            InstallCommand            = "install.bat"
-            UninstallCommand          = "uninstall.bat"
-            ContentLocation           = $NetworkPath
-            InstallationBehaviorType  = "InstallForSystem"
-            LogonRequirementType      = "WhetherOrNotUserLoggedOn"
-            MaximumRuntimeMins        = 30
-            EstimatedRuntimeMins      = 10
-            ContentFallback           = $true
-            SlowNetworkDeploymentMode = "Download"
-            AddDetectionClause        = $detectionClause
-            ErrorAction               = "Stop"
-        }
+        Write-Host "Adding Script Deployment Type: $dtName"
+        Add-CMScriptDeploymentType `
+            -ApplicationName $AppName `
+            -DeploymentTypeName $dtName `
+            -ContentLocation $ContentPath `
+            -InstallCommand "install.bat" `
+            -UninstallCommand "uninstall.bat" `
+            -InstallationBehaviorType InstallForSystem `
+            -LogonRequirementType WhetherOrNotUserLoggedOn `
+            -EstimatedRuntimeMins $EstimatedRuntimeMins `
+            -MaximumRuntimeMins $MaximumRuntimeMins `
+            -AddDetectionClause @($clause) `
+            -ContentFallback `
+            -SlowNetworkDeploymentMode Download `
+            -ErrorAction Stop | Out-Null
 
-        Add-CMScriptDeploymentType @params | Out-Null
         Remove-CMApplicationRevisionHistoryByCIId -CI_ID ([UInt32]$cmApp.CI_ID) -KeepLatest 1
 
-        Write-Host "Created MECM application: $AppName"
-    }
-    catch {
-        Write-Error "Failed to create MECM application: $($_.Exception.Message)"
+        Write-Host "Created MECM application     : $AppName"
     }
     finally {
-        Set-Location $originalLocation -ErrorAction SilentlyContinue
+        Set-Location $orig -ErrorAction SilentlyContinue
     }
+}
+
+function Get-FirefoxNetworkAppRoot {
+    param([Parameter(Mandatory)][string]$FileServerPath)
+
+    $appsRoot   = Join-Path $FileServerPath "Applications"
+    $vendorPath = Join-Path $appsRoot $VendorFolder
+    $appPath    = Join-Path $vendorPath $AppFolder
+
+    Initialize-Folder -Path $appsRoot
+    Initialize-Folder -Path $vendorPath
+    Initialize-Folder -Path $appPath
+
+    return $appPath
 }
 
 # --- Latest-only mode ---
 if ($GetLatestVersionOnly) {
-    $v = Get-LatestFirefoxVersion -Quiet
-    if (-not $v) { exit 1 }
-    Write-Output $v
-    exit 0
+    try {
+        $ProgressPreference = 'SilentlyContinue'
+        $v = Get-LatestFirefoxVersion -Quiet
+        if (-not $v) { exit 1 }
+        Write-Output $v
+        exit 0
+    }
+    catch {
+        exit 1
+    }
 }
 
 # --- Main ---
 try {
+    $startLocation = Get-Location
+
+    Write-Host ""
+    Write-Host ("=" * 60)
+    Write-Host "Mozilla Firefox (x64) Auto-Packager starting"
+    Write-Host ("=" * 60)
+    Write-Host ""
+    Write-Host ("RunAsUser                    : {0}\{1}" -f $env:USERDOMAIN,$env:USERNAME)
+    Write-Host ("Machine                      : {0}" -f $env:COMPUTERNAME)
+    Write-Host "Start location               : $startLocation"
+    Write-Host "SiteCode                     : $SiteCode"
+    Write-Host "FileServerPath               : $FileServerPath"
+    Write-Host "BaseDownloadRoot             : $BaseDownloadRoot"
+    Write-Host "VersionsJsonUrl              : $VersionsJsonUrl"
+    Write-Host ""
+
     if (-not (Test-IsAdmin)) {
-        Write-Error "This script must be run as Administrator."
+        Write-Error "Run PowerShell as Administrator."
         exit 1
     }
 
-    Set-Location $PSScriptRoot -ErrorAction Stop
-    Write-Host "Set initial location to script directory: $PSScriptRoot"
+    Initialize-Folder -Path $BaseDownloadRoot
 
-    $Version = Get-LatestFirefoxVersion
-    if (-not $Version) { exit 1 }
-
-    $AppName     = "Mozilla Firefox $Version (x64)"
-    $MsiFileName = "Firefox Setup $Version.msi"
-    $DownloadUrl = "$FirefoxDownloadBase/$Version/win64/en-US/" + ($MsiFileName -replace ' ', '%20')
-
-    $LocalFolder        = Join-Path $BaseDownloadRoot "Firefox_$Version"
-    $LocalMsi           = Join-Path $LocalFolder $MsiFileName
-    $NetworkVersionPath = Join-Path $FirefoxNetworkRoot $Version
-    $NetworkMsi         = Join-Path $NetworkVersionPath $MsiFileName
-
-    if (-not (Test-Path -LiteralPath $LocalFolder)) {
-        New-Item -ItemType Directory -Path $LocalFolder -Force | Out-Null
+    if (-not (Test-NetworkShareAccess -Path $FileServerPath)) {
+        throw "Network root path not accessible: $FileServerPath"
     }
 
-    if (-not (Test-NetworkShareAccess -Path $FirefoxNetworkRoot)) {
-        Write-Error "Network share '$FirefoxNetworkRoot' is inaccessible. Exiting."
-        exit 1
+    $networkAppRoot = Get-FirefoxNetworkAppRoot -FileServerPath $FileServerPath
+
+    $version = Get-LatestFirefoxVersion
+    if (-not $version) {
+        throw "Could not resolve Firefox version."
     }
 
-    if (-not (Test-Path -LiteralPath $NetworkVersionPath)) {
-        Write-Host "Creating network directory: $NetworkVersionPath"
-        New-Item -ItemType Directory -Path $NetworkVersionPath -Force -ErrorAction Stop | Out-Null
-    }
+    $msiFileName = "Firefox Setup $version.msi"
+    $downloadUrl = "$DownloadBase/$version/win64/en-US/" + ($msiFileName -replace ' ', '%20')
+    $localMsi    = Join-Path $BaseDownloadRoot $msiFileName
+    $contentPath = Join-Path $networkAppRoot $version
 
-    # Download MSI
-    if (-not (Test-Path -LiteralPath $LocalMsi)) {
-        Write-Host "Downloading: $DownloadUrl"
-        curl.exe -L --fail --silent --show-error -o $LocalMsi $DownloadUrl
-        if ($LASTEXITCODE -ne 0) { throw "Download failed: $DownloadUrl" }
-        Write-Host "Downloaded: $LocalMsi"
+    Initialize-Folder -Path $contentPath
+
+    $netMsi = Join-Path $contentPath $msiFileName
+
+    Write-Host "Version                      : $version"
+    Write-Host "Download URL                 : $downloadUrl"
+    Write-Host "Local MSI                    : $localMsi"
+    Write-Host "ContentPath                  : $contentPath"
+    Write-Host "Network MSI                  : $netMsi"
+    Write-Host ""
+
+    if (-not (Test-Path -LiteralPath $localMsi)) {
+        Write-Host "Downloading MSI..."
+        curl.exe -L --fail --silent --show-error -o $localMsi $downloadUrl
+        if ($LASTEXITCODE -ne 0) { throw "Download failed: $downloadUrl" }
     }
     else {
-        Write-Host "MSI already exists locally: $LocalMsi"
+        Write-Host "Local MSI exists. Skipping download."
     }
 
-    # Copy to network share
-    if (-not (Test-Path -LiteralPath $NetworkMsi)) {
-        Write-Host "Copying MSI to network share..."
-        Copy-Item -LiteralPath $LocalMsi -Destination $NetworkVersionPath -Force -ErrorAction Stop
-        Write-Host "Copied to: $NetworkVersionPath"
+    if (-not (Test-Path -LiteralPath $netMsi)) {
+        Write-Host "Copying MSI to network..."
+        Copy-Item -LiteralPath $localMsi -Destination $netMsi -Force -ErrorAction Stop
     }
     else {
-        Write-Host "MSI already exists on network share: $NetworkMsi"
+        Write-Host "Network MSI exists. Skipping copy."
     }
 
-    # Create batch files
-    $installBat   = Join-Path $NetworkVersionPath "install.bat"
-    $uninstallBat = Join-Path $NetworkVersionPath "uninstall.bat"
-    Set-Content -LiteralPath $installBat   -Value "start /wait msiexec.exe /i `"%~dp0$MsiFileName`" /qn /norestart" -Encoding ASCII
-    Set-Content -LiteralPath $uninstallBat -Value "start /wait msiexec.exe /x `"%~dp0$MsiFileName`" /qn /norestart" -Encoding ASCII
-    Write-Host "Created install.bat and uninstall.bat in $NetworkVersionPath"
+    $appName   = "Mozilla Firefox $version (x64)"
+    $publisher = "Mozilla"
+
+    Write-Host ""
+    Write-Host "CM Application Name          : $appName"
+    Write-Host "CM SoftwareVersion           : $version"
+    Write-Host ""
 
     New-MECMFirefoxApplication `
-        -AppName     $AppName `
-        -Version     $Version `
-        -NetworkPath $NetworkVersionPath
+        -AppName $appName `
+        -SoftwareVersion $version `
+        -ContentPath $contentPath `
+        -MsiFileName $msiFileName `
+        -Publisher $publisher
 
     Write-Host ""
     Write-Host "Script execution complete."
@@ -288,4 +404,7 @@ try {
 catch {
     Write-Error "SCRIPT FAILED: $($_.Exception.Message)"
     exit 1
+}
+finally {
+    Set-Location $startLocation -ErrorAction SilentlyContinue
 }

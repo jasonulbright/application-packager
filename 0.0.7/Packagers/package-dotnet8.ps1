@@ -1,67 +1,73 @@
 <#
-Vendor: Microsoft
+Vendor: Microsoft Corporation
 App: .NET 8 Desktop Runtime (x86+x64)
 CMName: Microsoft Windows Desktop Runtime - 8
 
 .SYNOPSIS
-    Automates downloading .NET 8.0 Windows Desktop Runtime installers (x86 and x64) and creating an MECM application.
+    Packages .NET 8 Windows Desktop Runtime (x86 and x64) for MECM.
+
 .DESCRIPTION
-    Creates one MECM application:
-    - Microsoft Windows Desktop Runtime (x86 and x64 combined) with one deployment type, file-based detection (x86 AND x64), and batch file installation.
-    Application names match Programs and Features naming for consistency.
+    Downloads the latest .NET 8 Windows Desktop Runtime installers for both
+    x86 and x64 from the official Microsoft CDN, stages content to a versioned
+    network location, and creates an MECM Application with file-based detection.
+    Detection uses hostfxr.dll existence in the version-specific fxr path for
+    both architectures (x86 AND x64).
+
 .PARAMETER SiteCode
-    ConfigMgr site code for the CM PSDrive (e.g., "MCM").
+    ConfigMgr site code PSDrive name (e.g., "MCM").
+    The PSDrive is assumed to already exist in the session.
+
 .PARAMETER Comment
-    Work order or comment string applied to the MECM application description.
+    Free-form change/WO text stored on the CM Application Description field.
+
 .PARAMETER FileServerPath
-    UNC root of the SCCM content share (e.g., "\\fileserver\sccm$").
+    UNC root that contains your Applications folder (example: \\fileserver\sccm$).
+    Content is staged under: <FileServerPath>\Applications\Microsoft\.NET Core\<Version>
+
 .PARAMETER GetLatestVersionOnly
-    Outputs only the latest version string and exits.
-.NOTES
-    Requires:
-      - PowerShell 5.1
-      - ConfigMgr Admin Console installed (for ConfigurationManager.psd1)
-      - RBAC rights to create Applications and Deployment Types
+    Outputs only the latest available .NET 8 runtime version string and exits.
+
+.REQUIREMENTS
+    - PowerShell 5.1
+    - ConfigMgr Admin Console installed (ConfigurationManager PowerShell module available)
+    - RBAC permissions to create Applications and Deployment Types
+    - Local administrator
+    - Write access to FileServerPath
 #>
 
 param(
-    [string]$SiteCode       = "MCM",
-    [string]$Comment        = "WO#00000001234567",
+    [string]$SiteCode = "MCM",
+    [string]$Comment = "WO#00000001234567",
     [string]$FileServerPath = "\\fileserver\sccm$",
     [switch]$GetLatestVersionOnly
 )
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-$ErrorActionPreference = "Stop"
 
-# --- Configuration Variables ---
-$BaseDownloadRoot = Join-Path $env:USERPROFILE "Downloads"
-$DesktopRuntimeRootNetworkPath = Join-Path $FileServerPath "Applications\Microsoft\.NET Core"
-$DownloadBaseUrl = "https://dotnetcli.azureedge.net/dotnet/"
+# --- Configuration ---
+$ReleasesIndexUrl  = "https://builds.dotnet.microsoft.com/dotnet/release-metadata/releases-index.json"
+$DownloadUrlBase   = "https://dotnetcli.azureedge.net/dotnet/WindowsDesktop/Runtime"
 
-$TargetProducts = @(
-    @{
-        Name = "Microsoft Windows Desktop Runtime - {0}"
-        FileNamePatterns = @("windowsdesktop-runtime-{0}-win-x64.exe", "windowsdesktop-runtime-{0}-win-x86.exe")
-        UrlSegment = "WindowsDesktop"
-        RootNetworkPath = $DesktopRuntimeRootNetworkPath
-        ProgramsAndFeaturesName = "Microsoft Windows Desktop Runtime - {0} (x86)"
-        RegistryKey = "SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
-        RegistryKey64 = "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
-        DetectionType = "Folder"
-        Publisher = "Microsoft Corporation"
-    }
-)
+$VendorFolder = "Microsoft"
+$AppFolder    = ".NET Core"
+
+$X64FileNamePattern = "windowsdesktop-runtime-{0}-win-x64.exe"
+$X86FileNamePattern = "windowsdesktop-runtime-{0}-win-x86.exe"
+
+$BaseDownloadRoot = Join-Path $env:USERPROFILE "Downloads\_AutoPackager\DotNet8DesktopRuntime"
+
+$EstimatedRuntimeMins = 10
+$MaximumRuntimeMins   = 30
 
 # --- Functions ---
 function Test-IsAdmin {
     try {
-        $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+        $identity  = [Security.Principal.WindowsIdentity]::GetCurrent()
         $principal = New-Object Security.Principal.WindowsPrincipal($identity)
         return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     }
     catch {
-        Write-Warning "Failed to check admin privileges: $($_.Exception.Message)"
+        Write-Warning "Admin check failed: $($_.Exception.Message)"
         return $false
     }
 }
@@ -70,6 +76,20 @@ function Connect-CMSite {
     param([Parameter(Mandatory)][string]$SiteCode)
 
     try {
+        if (-not (Get-Module -Name ConfigurationManager -ErrorAction SilentlyContinue)) {
+            $cmModulePath = Join-Path $env:SMS_ADMIN_UI_PATH "..\ConfigurationManager.psd1"
+            if (Test-Path -LiteralPath $cmModulePath) {
+                Import-Module $cmModulePath -ErrorAction Stop
+            }
+            else {
+                Import-Module ConfigurationManager -ErrorAction Stop
+            }
+        }
+
+        if (-not (Get-PSDrive -Name $SiteCode -ErrorAction SilentlyContinue)) {
+            throw "Configuration Manager PSDrive '$SiteCode' is not available."
+        }
+
         Set-Location "${SiteCode}:" -ErrorAction Stop
         Write-Host "Connected to CM site: $SiteCode"
         return $true
@@ -80,103 +100,79 @@ function Connect-CMSite {
     }
 }
 
+function Initialize-Folder {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $origLocation = Get-Location
+    try {
+        Set-Location C: -ErrorAction Stop
+        if (-not (Test-Path -LiteralPath $Path)) {
+            New-Item -ItemType Directory -Path $Path -Force | Out-Null
+        }
+    }
+    finally {
+        Set-Location $origLocation -ErrorAction SilentlyContinue
+    }
+}
+
 function Test-NetworkShareAccess {
     param([Parameter(Mandatory)][string]$Path)
 
-    $originalLocation = Get-Location
+    $origLocation = Get-Location
     try {
-        if (-not (Test-Path -LiteralPath $Path -ErrorAction Stop)) {
-            Write-Error "Network path '$Path' does not exist or is inaccessible."
+        Set-Location C: -ErrorAction Stop
+
+        if (-not (Test-Path -LiteralPath $Path -ErrorAction SilentlyContinue)) {
+            Write-Error "Network path does not exist or is inaccessible: $Path"
             return $false
         }
 
-        $testFile = Join-Path $Path ("_write_test_{0}.txt" -f (Get-Random))
-        Set-Content -LiteralPath $testFile -Value "Test" -Encoding ASCII -ErrorAction Stop
-        Remove-Item -LiteralPath $testFile -ErrorAction Stop
-
-        return $true
-    }
-    catch {
-        Write-Error "Failed to access network share '$Path': $($_.Exception.Message)"
-        return $false
+        try {
+            $tmp = Join-Path $Path ("_write_test_{0}.txt" -f (Get-Random))
+            Set-Content -LiteralPath $tmp -Value "test" -Encoding ASCII -ErrorAction Stop
+            Remove-Item -LiteralPath $tmp -ErrorAction Stop
+            return $true
+        }
+        catch {
+            Write-Error "Network share is not writable: $Path ($($_.Exception.Message))"
+            return $false
+        }
     }
     finally {
-        Set-Location $originalLocation -ErrorAction SilentlyContinue
+        Set-Location $origLocation -ErrorAction SilentlyContinue
     }
 }
 
-function Get-LatestDotnet8RuntimeVersion {
-    param(
-        [Parameter(Mandatory)][string]$UrlSegment
-    )
+function Get-LatestDotNet8Version {
+    param([switch]$Quiet)
 
-    $versionIndexUrl = "{0}{1}/Runtime/" -f $DownloadBaseUrl, $UrlSegment
-    Write-Host "Fetching .NET 8 version list from: ${versionIndexUrl}"
-
-    $pageHtml = (curl.exe -L --fail --silent --show-error $versionIndexUrl) -join "`n"
-    if ($LASTEXITCODE -ne 0) { throw "Failed to fetch .NET 8 version list: $versionIndexUrl" }
-    $versions = [regex]::Matches($pageHtml, 'href="(8\.0\.\d+/)"') |
-        ForEach-Object { $_.Groups[1].Value.TrimEnd('/') } |
-        Select-Object -Unique
-
-    if (-not $versions) {
-        throw "Could not find any .NET 8.0 versions under ${versionIndexUrl}"
+    if (-not $Quiet) {
+        Write-Host "Releases index URL           : $ReleasesIndexUrl"
     }
 
-    $latest = $versions | Sort-Object { [version]$_ } -Descending | Select-Object -First 1
-    if (-not $latest) {
-        throw "Failed to determine latest .NET 8.0 version."
-    }
-
-    Write-Host "Latest .NET 8 runtime version: ${latest}"
-    return $latest
-}
-
-function Get-NextDotnet8PatchVersion {
-    param(
-        [Parameter(Mandatory)][string]$CurrentVersion,
-        [Parameter(Mandatory)][string[]]$AllVersions
-    )
-
-    $sorted = $AllVersions | Sort-Object { [version]$_ }
-    $idx = [Array]::IndexOf($sorted, $CurrentVersion)
-    if ($idx -ge 0 -and $idx -lt ($sorted.Count - 1)) {
-        return $sorted[$idx + 1]
-    }
-    return $null
-}
-
-function Create-BatchFiles {
-    param ([string]$NetworkPath, [string]$Version, [string]$ProductName)
-
-    $originalLocation = Get-Location
-    Write-Host "Current location before batch file creation: ${originalLocation}"
     try {
-        Set-Location $PSScriptRoot -ErrorAction Stop
-        Write-Host "Set location to script directory for batch file creation: ${PSScriptRoot}"
+        $json = (curl.exe -L --fail --silent --show-error $ReleasesIndexUrl) -join ''
+        if ($LASTEXITCODE -ne 0) { throw "Failed to fetch .NET release info: $ReleasesIndexUrl" }
 
-        $InstallBatContent = @"
-start /wait "" "%~dp0windowsdesktop-runtime-${Version}-win-x64.exe" /install /quiet /norestart
-start /wait "" "%~dp0windowsdesktop-runtime-${Version}-win-x86.exe" /install /quiet /norestart
-"@
+        $releases = ConvertFrom-Json $json
+        $dotnet8Channel = $releases.'releases-index' |
+            Where-Object { $_.'channel-version' -eq '8.0' -and $_.'release-type' -eq 'lts' } |
+            Select-Object -First 1
 
-        $UninstallBatContent = @"
-start /wait "" "%~dp0windowsdesktop-runtime-${Version}-win-x64.exe" /uninstall /quiet /norestart
-start /wait "" "%~dp0windowsdesktop-runtime-${Version}-win-x86.exe" /uninstall /quiet /norestart
-"@
+        if (-not $dotnet8Channel -or -not $dotnet8Channel.'latest-runtime') {
+            throw "Could not find .NET 8.0 LTS release channel or latest runtime."
+        }
 
-        $InstallBatPath = Join-Path $NetworkPath "install.bat"
-        $UninstallBatPath = Join-Path $NetworkPath "uninstall.bat"
-        Set-Content -Path $InstallBatPath -Value $InstallBatContent -Encoding ASCII -ErrorAction Stop
-        Set-Content -Path $UninstallBatPath -Value $UninstallBatContent -Encoding ASCII -ErrorAction Stop
-        Write-Host "Created install.bat and uninstall.bat at ${NetworkPath}"
+        $version = $dotnet8Channel.'latest-runtime'
+
+        if (-not $Quiet) {
+            Write-Host "Latest .NET 8 runtime version: $version"
+        }
+        return $version
     }
     catch {
-        Write-Error "Failed to create batch files in '${NetworkPath}': $($_.Exception.Message)"
-    }
-    finally {
-        Set-Location $originalLocation -ErrorAction SilentlyContinue
-        Write-Host "Restored location to: ${originalLocation}"
+        Write-Error "Failed to get .NET 8 version: $($_.Exception.Message)"
+        return $null
     }
 }
 
@@ -185,201 +181,273 @@ function Remove-CMApplicationRevisionHistoryByCIId {
         [Parameter(Mandatory)][UInt32]$CI_ID,
         [UInt32]$KeepLatest = 1
     )
+
     $history = Get-CMApplicationRevisionHistory -Id $CI_ID -ErrorAction SilentlyContinue
     if (-not $history) { return }
+
     $revs = @()
     foreach ($h in @($history)) {
-        if ($h.PSObject.Properties.Name -contains 'Revision')  { $revs += [UInt32]$h.Revision;   continue }
+        if ($h.PSObject.Properties.Name -contains 'Revision') { $revs += [UInt32]$h.Revision; continue }
         if ($h.PSObject.Properties.Name -contains 'CIVersion') { $revs += [UInt32]$h.CIVersion; continue }
     }
+
     $revs = $revs | Sort-Object -Unique -Descending
     if ($revs.Count -le $KeepLatest) { return }
+
     foreach ($rev in ($revs | Select-Object -Skip $KeepLatest)) {
         Remove-CMApplicationRevisionHistory -Id $CI_ID -Revision $rev -Force -ErrorAction Stop
     }
 }
 
-function New-MECMApplication {
+function New-MECMDotNet8DesktopRuntimeApplication {
     param(
         [Parameter(Mandatory)][string]$AppName,
-        [Parameter(Mandatory)][string]$Publisher,
-        [Parameter(Mandatory)][string]$ProductVersion,
-        [Parameter(Mandatory)][string]$NetworkPath,
-        [Parameter(Mandatory)][string]$Version,
-        [Parameter(Mandatory)][string]$NextVersion,
-        [Parameter(Mandatory)][string]$DetectionType
+        [Parameter(Mandatory)][string]$SoftwareVersion,
+        [Parameter(Mandatory)][string]$ContentPath,
+        [Parameter(Mandatory)][string]$X64FileName,
+        [Parameter(Mandatory)][string]$X86FileName,
+        [Parameter(Mandatory)][string]$Publisher
     )
 
-    $originalLocation = Get-Location
-    Write-Host "Current location before MECM application creation: ${originalLocation}"
-    Write-Host "Application Name: ${AppName}"
+    $orig = Get-Location
 
     try {
-        if (-not (Test-IsAdmin)) { Write-Error "Script must be run with admin privileges."; return }
-        if (-not (Connect-CMSite -SiteCode $SiteCode)) { Write-Error "Failed to connect to CM site."; return }
+        if (-not (Test-IsAdmin)) { throw "Run PowerShell as Administrator." }
 
-        Write-Host "Checking for existing application: ${AppName}"
-        $existingApp = Get-CMApplication -Name $AppName -ErrorAction SilentlyContinue
-        if ($existingApp) {
-            Write-Host "Application '${AppName}' already exists. Skipping creation."
+        if (-not (Connect-CMSite -SiteCode $SiteCode)) { throw "CM site connection failed." }
+
+        $existing = Get-CMApplication -Name $AppName -ErrorAction SilentlyContinue
+        if ($existing) {
+            Write-Warning "Application already exists: $AppName"
             return
         }
 
-        Write-Host "Creating new MECM application: ${AppName}"
+        Write-Host "Creating CM Application      : $AppName"
         $cmApp = New-CMApplication `
             -Name $AppName `
             -Publisher $Publisher `
-            -SoftwareVersion $ProductVersion `
+            -SoftwareVersion $SoftwareVersion `
             -Description $Comment `
-            -LocalizedApplicationName $AppName `
+            -AutoInstall $true `
             -ErrorAction Stop
 
-        Create-BatchFiles -NetworkPath $NetworkPath -Version $Version -ProductName $AppName
+        Write-Host "Application CI_ID            : $($cmApp.CI_ID)"
 
-        $detectionClauses = @()
+        Set-Location C: -ErrorAction Stop
 
-        if ($DetectionType -eq "Folder") {
-            $x86Clause = New-CMDetectionClauseFile -Path "$env:ProgramFiles (x86)\dotnet\host\fxr\${Version}" -FileName "hostfxr.dll" -Existence -Is64Bit:$false
-            $x64Clause = New-CMDetectionClauseFile -Path "$env:ProgramFiles\dotnet\host\fxr\${Version}" -FileName "hostfxr.dll" -Existence -Is64Bit
+        $installBatPath   = Join-Path $ContentPath "install.bat"
+        $uninstallBatPath = Join-Path $ContentPath "uninstall.bat"
 
-            $detectionClauses += $x86Clause, $x64Clause
-
-            if ($NextVersion) {
-                $x86NextClause = New-CMDetectionClauseFile -Path "$env:ProgramFiles (x86)\dotnet\host\fxr\${NextVersion}" -FileName "hostfxr.dll" -Existence -Is64Bit:$false
-                $x64NextClause = New-CMDetectionClauseFile -Path "$env:ProgramFiles\dotnet\host\fxr\${NextVersion}" -FileName "hostfxr.dll" -Existence -Is64Bit
-                $detectionClauses += $x86NextClause, $x64NextClause
-            }
+        if (-not (Test-Path -LiteralPath $installBatPath)) {
+            $installBat = @"
+@echo off
+setlocal
+start /wait "" "%~dp0$X64FileName" /install /quiet /norestart
+start /wait "" "%~dp0$X86FileName" /install /quiet /norestart
+exit /b 0
+"@
+            Set-Content -LiteralPath $installBatPath -Value $installBat -Encoding ASCII -ErrorAction Stop
         }
 
-        Write-Host "Calling Add-CMScriptDeploymentType with parameters:"
-        Write-Host "  ApplicationName: ${AppName}"
-        Write-Host "  DeploymentTypeName: ${AppName} Script DT"
-        Write-Host "  ContentLocation: ${NetworkPath}"
-        Write-Host "  InstallCommand: install.bat"
-        Write-Host "  UninstallCommand: uninstall.bat"
-        Write-Host "  InstallationBehaviorType: InstallForSystem"
-        Write-Host "  LogonRequirementType: WhetherOrNotUserLoggedOn"
-        Write-Host "  MaximumRuntimeMins: 30"
-        Write-Host "  EstimatedRuntimeMins: 10"
-        Write-Host "  Detection clauses count: $($detectionClauses.Count)"
-
-        $params = @{
-            ApplicationName          = $AppName
-            DeploymentTypeName       = "${AppName} Script DT"
-            InstallCommand           = "install.bat"
-            ContentLocation          = $NetworkPath
-            UninstallCommand         = "uninstall.bat"
-            InstallationBehaviorType = "InstallForSystem"
-            LogonRequirementType     = "WhetherOrNotUserLoggedOn"
-            MaximumRuntimeMins       = 30
-            EstimatedRuntimeMins     = 10
-            AddDetectionClause       = $detectionClauses
-            ErrorAction              = "Stop"
+        if (-not (Test-Path -LiteralPath $uninstallBatPath)) {
+            $uninstallBat = @"
+@echo off
+setlocal
+start /wait "" "%~dp0$X64FileName" /uninstall /quiet /norestart
+start /wait "" "%~dp0$X86FileName" /uninstall /quiet /norestart
+exit /b 0
+"@
+            Set-Content -LiteralPath $uninstallBatPath -Value $uninstallBat -Encoding ASCII -ErrorAction Stop
         }
 
-        Add-CMScriptDeploymentType @params | Out-Null
+        if (-not (Connect-CMSite -SiteCode $SiteCode)) { throw "CM site connection failed." }
+
+        $dtName = $AppName
+
+        # Detection: hostfxr.dll existence in version-specific fxr paths (x86 AND x64)
+        $x86Clause = New-CMDetectionClauseFile `
+            -Path "$env:ProgramFiles (x86)\dotnet\host\fxr\${SoftwareVersion}" `
+            -FileName "hostfxr.dll" `
+            -Existence `
+            -Is64Bit:$false
+
+        $x64Clause = New-CMDetectionClauseFile `
+            -Path "$env:ProgramFiles\dotnet\host\fxr\${SoftwareVersion}" `
+            -FileName "hostfxr.dll" `
+            -Existence `
+            -Is64Bit
+
+        Write-Host "Adding Script Deployment Type: $dtName"
+        Add-CMScriptDeploymentType `
+            -ApplicationName $AppName `
+            -DeploymentTypeName $dtName `
+            -ContentLocation $ContentPath `
+            -InstallCommand "install.bat" `
+            -UninstallCommand "uninstall.bat" `
+            -InstallationBehaviorType InstallForSystem `
+            -LogonRequirementType WhetherOrNotUserLoggedOn `
+            -EstimatedRuntimeMins $EstimatedRuntimeMins `
+            -MaximumRuntimeMins $MaximumRuntimeMins `
+            -AddDetectionClause @($x86Clause, $x64Clause) `
+            -ContentFallback `
+            -SlowNetworkDeploymentMode Download `
+            -ErrorAction Stop | Out-Null
+
         Remove-CMApplicationRevisionHistoryByCIId -CI_ID ([UInt32]$cmApp.CI_ID) -KeepLatest 1
 
-        Write-Host "Created MECM application: ${AppName} with ${DetectionType}-based detection"
-    }
-    catch {
-        Write-Error "Failed to create MECM application: $($_.Exception.Message)"
+        Write-Host "Created MECM application     : $AppName"
     }
     finally {
-        Set-Location $originalLocation -ErrorAction SilentlyContinue
-        Write-Host "Restored location to: ${originalLocation}"
+        Set-Location $orig -ErrorAction SilentlyContinue
     }
 }
 
-# --- Main Script ---
+function Get-DotNet8DesktopRuntimeNetworkAppRoot {
+    param([Parameter(Mandatory)][string]$FileServerPath)
+
+    $appsRoot   = Join-Path $FileServerPath "Applications"
+    $vendorPath = Join-Path $appsRoot $VendorFolder
+    $appPath    = Join-Path $vendorPath $AppFolder
+
+    Initialize-Folder -Path $appsRoot
+    Initialize-Folder -Path $vendorPath
+    Initialize-Folder -Path $appPath
+
+    return $appPath
+}
+
+# --- Latest-only mode ---
+if ($GetLatestVersionOnly) {
+    try {
+        $ProgressPreference = 'SilentlyContinue'
+        $v = Get-LatestDotNet8Version -Quiet
+        if (-not $v) { exit 1 }
+        Write-Output $v
+        exit 0
+    }
+    catch {
+        exit 1
+    }
+}
+
+# --- Main ---
 try {
+    $startLocation = Get-Location
+
+    Write-Host ""
+    Write-Host ("=" * 60)
+    Write-Host ".NET 8 Desktop Runtime (x86+x64) Auto-Packager starting"
+    Write-Host ("=" * 60)
+    Write-Host ""
+    Write-Host ("RunAsUser                    : {0}\{1}" -f $env:USERDOMAIN,$env:USERNAME)
+    Write-Host ("Machine                      : {0}" -f $env:COMPUTERNAME)
+    Write-Host "Start location               : $startLocation"
+    Write-Host "SiteCode                     : $SiteCode"
+    Write-Host "FileServerPath               : $FileServerPath"
+    Write-Host "BaseDownloadRoot             : $BaseDownloadRoot"
+    Write-Host "ReleasesIndexUrl             : $ReleasesIndexUrl"
+    Write-Host ""
+
     if (-not (Test-IsAdmin)) {
-        Write-Error "This script must be run with admin privileges. Please run PowerShell as Administrator."
+        Write-Error "Run PowerShell as Administrator."
         exit 1
     }
 
-    Set-Location $PSScriptRoot -ErrorAction Stop
-    Write-Host "Set initial location to script directory: ${PSScriptRoot}"
+    Initialize-Folder -Path $BaseDownloadRoot
 
-    foreach ($Product in $TargetProducts) {
-
-        $allVersionsUrl = "{0}{1}/Runtime/" -f $DownloadBaseUrl, $Product.UrlSegment
-        $AllVersionsHtml = (curl.exe -L --fail --silent --show-error $allVersionsUrl) -join "`n"
-        if ($LASTEXITCODE -ne 0) { throw "Failed to fetch .NET 8 version list: $allVersionsUrl" }
-        $AllVersions = [regex]::Matches($AllVersionsHtml, 'href="(8\.0\.\d+/)"') |
-            ForEach-Object { $_.Groups[1].Value.TrimEnd('/') } |
-            Select-Object -Unique
-
-        $Version = Get-LatestDotnet8RuntimeVersion -UrlSegment $Product.UrlSegment
-        if ($GetLatestVersionOnly) {
-            Write-Output $Version
-            return
-        }
-
-        $NextVersion = Get-NextDotnet8PatchVersion -CurrentVersion $Version -AllVersions $AllVersions
-
-        $AppName = $Product.Name -f $Version
-        $ProductVersion = $Version
-        $DetectionType = $Product.DetectionType
-        $RegistryKey = $Product.RegistryKey
-        $RegistryKey64 = if ($Product.RegistryKey64) { $Product.RegistryKey64 } else { $RegistryKey }
-        $Publisher = $Product.Publisher
-
-        if (-not (Test-NetworkShareAccess -Path $Product.RootNetworkPath)) {
-            Write-Error "Network share '${($Product.RootNetworkPath)}' is inaccessible. Skipping '${AppName}'."
-            continue
-        }
-
-        $NetworkPath = Join-Path $Product.RootNetworkPath $Version
-        if (-not (Test-Path $NetworkPath)) {
-            Write-Host "Creating network directory: ${NetworkPath}"
-            New-Item -ItemType Directory -Path $NetworkPath -Force -ErrorAction Stop | Out-Null
-        }
-
-        $DownloadFolderName = "dotnet8_${($Product.UrlSegment)}_${Version}_installers"
-        $DownloadPath = Join-Path $BaseDownloadRoot $DownloadFolderName
-        if (-not (Test-Path -LiteralPath $DownloadPath)) {
-            New-Item -ItemType Directory -Path $DownloadPath -Force | Out-Null
-        }
-
-        foreach ($pattern in $Product.FileNamePatterns) {
-            $fileName = $pattern -f $Version
-            $downloadUrl = "{0}{1}/Runtime/{2}/{3}" -f $DownloadBaseUrl, $Product.UrlSegment, $Version, $fileName
-
-            $localFile = Join-Path $DownloadPath $fileName
-            $networkFile = Join-Path $NetworkPath $fileName
-
-            if (-not (Test-Path -LiteralPath $localFile)) {
-                Write-Host "Downloading: ${downloadUrl}"
-                curl.exe -L --fail --silent --show-error -o $localFile $downloadUrl
-                if ($LASTEXITCODE -ne 0) { throw "Download failed: $downloadUrl" }
-            }
-            else {
-                Write-Host "Local file exists, skipping download: ${localFile}"
-            }
-
-            if (-not (Test-Path -LiteralPath $networkFile)) {
-                Copy-Item -LiteralPath $localFile -Destination $networkFile -Force -ErrorAction Stop
-                Write-Host "Copied to network: ${networkFile}"
-            }
-            else {
-                Write-Host "Network file exists, skipping copy: ${networkFile}"
-            }
-        }
-
-        New-MECMApplication `
-            -AppName $AppName `
-            -Publisher $Publisher `
-            -ProductVersion $ProductVersion `
-            -NetworkPath $NetworkPath `
-            -Version $Version `
-            -NextVersion $NextVersion `
-            -DetectionType $DetectionType
+    if (-not (Test-NetworkShareAccess -Path $FileServerPath)) {
+        throw "Network root path not accessible: $FileServerPath"
     }
 
+    $networkAppRoot = Get-DotNet8DesktopRuntimeNetworkAppRoot -FileServerPath $FileServerPath
+
+    $version = Get-LatestDotNet8Version
+    if (-not $version) {
+        throw "Could not resolve .NET 8 runtime version."
+    }
+
+    $x64FileName = $X64FileNamePattern -f $version
+    $x86FileName = $X86FileNamePattern -f $version
+    $contentPath = Join-Path $networkAppRoot $version
+
+    Initialize-Folder -Path $contentPath
+
+    $localX64  = Join-Path $BaseDownloadRoot $x64FileName
+    $localX86  = Join-Path $BaseDownloadRoot $x86FileName
+    $netX64    = Join-Path $contentPath $x64FileName
+    $netX86    = Join-Path $contentPath $x86FileName
+
+    Write-Host "Version                      : $version"
+    Write-Host "Local x64 installer          : $localX64"
+    Write-Host "Local x86 installer          : $localX86"
+    Write-Host "ContentPath                  : $contentPath"
+    Write-Host "Network x64 installer        : $netX64"
+    Write-Host "Network x86 installer        : $netX86"
+    Write-Host ""
+
+    # Download x64
+    if (-not (Test-Path -LiteralPath $localX64)) {
+        Write-Host "Downloading x64 installer..."
+        $downloadUrl = "${DownloadUrlBase}/${version}/${x64FileName}"
+        curl.exe -L --fail --silent --show-error -o $localX64 $downloadUrl
+        if ($LASTEXITCODE -ne 0) { throw "Download failed: $downloadUrl" }
+    }
+    else {
+        Write-Host "Local x64 installer exists. Skipping download."
+    }
+
+    # Download x86
+    if (-not (Test-Path -LiteralPath $localX86)) {
+        Write-Host "Downloading x86 installer..."
+        $downloadUrl = "${DownloadUrlBase}/${version}/${x86FileName}"
+        curl.exe -L --fail --silent --show-error -o $localX86 $downloadUrl
+        if ($LASTEXITCODE -ne 0) { throw "Download failed: $downloadUrl" }
+    }
+    else {
+        Write-Host "Local x86 installer exists. Skipping download."
+    }
+
+    # Copy x64 to network
+    if (-not (Test-Path -LiteralPath $netX64)) {
+        Write-Host "Copying x64 installer to network..."
+        Copy-Item -LiteralPath $localX64 -Destination $netX64 -Force -ErrorAction Stop
+    }
+    else {
+        Write-Host "Network x64 installer exists. Skipping copy."
+    }
+
+    # Copy x86 to network
+    if (-not (Test-Path -LiteralPath $netX86)) {
+        Write-Host "Copying x86 installer to network..."
+        Copy-Item -LiteralPath $localX86 -Destination $netX86 -Force -ErrorAction Stop
+    }
+    else {
+        Write-Host "Network x86 installer exists. Skipping copy."
+    }
+
+    $appName   = "Microsoft Windows Desktop Runtime - ${version}"
+    $publisher = "Microsoft Corporation"
+
+    Write-Host ""
+    Write-Host "CM Application Name          : $appName"
+    Write-Host "CM SoftwareVersion           : $version"
+    Write-Host ""
+
+    New-MECMDotNet8DesktopRuntimeApplication `
+        -AppName $appName `
+        -SoftwareVersion $version `
+        -ContentPath $contentPath `
+        -X64FileName $x64FileName `
+        -X86FileName $x86FileName `
+        -Publisher $publisher
+
+    Write-Host ""
     Write-Host "Script execution complete."
 }
 catch {
     Write-Error "SCRIPT FAILED: $($_.Exception.Message)"
     exit 1
+}
+finally {
+    Set-Location $startLocation -ErrorAction SilentlyContinue
 }

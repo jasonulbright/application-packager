@@ -9,7 +9,7 @@ CMName: Adobe Acrobat (Reader) DC
 .DESCRIPTION
     Parses Adobe's official release notes page to determine the current Acrobat DC
     version, constructs the enterprise installer URL, downloads the x64 MUI EXE,
-    stages content to a versioned network folder, and creates an MECM Application
+    stages content to a versioned network location, and creates an MECM Application
     with file version-based detection.
 
     Install:   AcroRdrDCx64{version}_MUI.exe /sAll /rs /rps /msi /qn /norestart
@@ -24,50 +24,50 @@ CMName: Adobe Acrobat (Reader) DC
       Download URL uses the same parts concatenated (e.g., 2500121223)
 
 .PARAMETER SiteCode
-    ConfigMgr site code PSDrive name (e.g., "MCM"). The PSDrive is assumed to already exist.
+    ConfigMgr site code PSDrive name (e.g., "MCM").
+    The PSDrive is assumed to already exist in the session.
 
 .PARAMETER Comment
-    Work order or comment string applied to the MECM application description.
+    Free-form change/WO text stored on the CM Application Description field.
 
 .PARAMETER FileServerPath
-    UNC root of the SCCM content share (e.g., "\\fileserver\sccm$").
+    UNC root that contains your Applications folder (example: \\fileserver\sccm$).
+    Content is staged under: <FileServerPath>\Applications\Adobe\Acrobat Reader DC\<Version>
 
 .PARAMETER GetLatestVersionOnly
     Parses Adobe's release notes page for the current version, outputs the version
     string, and exits. No download or MECM changes are made.
 
-.NOTES
-    Requires:
-      - PowerShell 5.1
-      - ConfigMgr Admin Console installed (for ConfigurationManager.psd1)
-      - RBAC rights to create Applications and Deployment Types
-      - Local administrator
-      - Write access to FileServerPath
-
-    Acrobat DC installs to: %ProgramFiles%\Adobe\Acrobat DC\Acrobat\
+.REQUIREMENTS
+    - PowerShell 5.1
+    - ConfigMgr Admin Console installed (ConfigurationManager PowerShell module available)
+    - RBAC permissions to create Applications and Deployment Types
+    - Local administrator
+    - Write access to FileServerPath
 #>
 
 param(
-    [string]$SiteCode       = "MCM",
-    [string]$Comment        = "WO#00000001234567",
+    [string]$SiteCode = "MCM",
+    [string]$Comment = "WO#00000001234567",
     [string]$FileServerPath = "\\fileserver\sccm$",
     [switch]$GetLatestVersionOnly
 )
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-$ErrorActionPreference = "Stop"
 
 # --- Configuration ---
 $AdobeReleaseNotesUrl = "https://www.adobe.com/devnet-docs/acrobatetk/tools/ReleaseNotesDC/index.html"
 $AdobeDownloadBase    = "https://ardownload3.adobe.com/pub/adobe/acrobat/win/AcrobatDC"
-$BaseDownloadRoot     = Join-Path $env:USERPROFILE "Downloads\_AutoPackager"
-$NetworkRootPath      = Join-Path $FileServerPath "Applications\Adobe\Acrobat Reader DC"
-$Publisher            = "Adobe Inc."
+
+$VendorFolder = "Adobe"
+$AppFolder    = "Acrobat Reader DC"
+
+$BaseDownloadRoot = Join-Path $env:USERPROFILE "Downloads\_AutoPackager\AdobeReader"
+
 $EstimatedRuntimeMins = 15
 $MaximumRuntimeMins   = 30
 
 # --- Functions ---
-
 function Test-IsAdmin {
     try {
         $identity  = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -82,7 +82,22 @@ function Test-IsAdmin {
 
 function Connect-CMSite {
     param([Parameter(Mandatory)][string]$SiteCode)
+
     try {
+        if (-not (Get-Module -Name ConfigurationManager -ErrorAction SilentlyContinue)) {
+            $cmModulePath = Join-Path $env:SMS_ADMIN_UI_PATH "..\ConfigurationManager.psd1"
+            if (Test-Path -LiteralPath $cmModulePath) {
+                Import-Module $cmModulePath -ErrorAction Stop
+            }
+            else {
+                Import-Module ConfigurationManager -ErrorAction Stop
+            }
+        }
+
+        if (-not (Get-PSDrive -Name $SiteCode -ErrorAction SilentlyContinue)) {
+            throw "Configuration Manager PSDrive '$SiteCode' is not available."
+        }
+
         Set-Location "${SiteCode}:" -ErrorAction Stop
         Write-Host "Connected to CM site: $SiteCode"
         return $true
@@ -93,61 +108,89 @@ function Connect-CMSite {
     }
 }
 
-function Ensure-Folder {
+function Initialize-Folder {
     param([Parameter(Mandatory)][string]$Path)
-    if (-not (Test-Path -LiteralPath $Path)) {
-        New-Item -ItemType Directory -Path $Path -Force | Out-Null
+
+    $origLocation = Get-Location
+    try {
+        Set-Location C: -ErrorAction Stop
+        if (-not (Test-Path -LiteralPath $Path)) {
+            New-Item -ItemType Directory -Path $Path -Force | Out-Null
+        }
+    }
+    finally {
+        Set-Location $origLocation -ErrorAction SilentlyContinue
     }
 }
 
 function Test-NetworkShareAccess {
     param([Parameter(Mandatory)][string]$Path)
-    $originalLocation = Get-Location
+
+    $origLocation = Get-Location
     try {
         Set-Location C: -ErrorAction Stop
+
         if (-not (Test-Path -LiteralPath $Path -ErrorAction SilentlyContinue)) {
             Write-Error "Network path does not exist or is inaccessible: $Path"
             return $false
         }
-        $tmp = Join-Path $Path ("_write_test_{0}.txt" -f (Get-Random))
-        Set-Content -LiteralPath $tmp -Value "test" -Encoding ASCII -ErrorAction Stop
-        Remove-Item -LiteralPath $tmp -ErrorAction Stop
-        return $true
-    }
-    catch {
-        Write-Error "Network share is not writable: $Path ($($_.Exception.Message))"
-        return $false
+
+        try {
+            $tmp = Join-Path $Path ("_write_test_{0}.txt" -f (Get-Random))
+            Set-Content -LiteralPath $tmp -Value "test" -Encoding ASCII -ErrorAction Stop
+            Remove-Item -LiteralPath $tmp -ErrorAction Stop
+            return $true
+        }
+        catch {
+            Write-Error "Network share is not writable: $Path ($($_.Exception.Message))"
+            return $false
+        }
     }
     finally {
-        Set-Location $originalLocation -ErrorAction SilentlyContinue
+        Set-Location $origLocation -ErrorAction SilentlyContinue
     }
 }
 
 function Get-AdobeAcrobatVersion {
-    # Lightweight: parses Adobe's release notes page — no installer download.
-    # Version format on page: NN.NNN.NNNNN  (e.g., 25.001.21223)
     param([switch]$Quiet)
-    if (-not $Quiet) { Write-Host "Fetching Adobe Acrobat release notes: $AdobeReleaseNotesUrl" }
-    $html = (curl.exe -L --fail --silent --show-error $AdobeReleaseNotesUrl) -join "`n"
-    if ($LASTEXITCODE -ne 0) { throw "Failed to fetch Adobe release notes: $AdobeReleaseNotesUrl" }
-    # First match is the most recent release listed on the page
-    $verMatch = [regex]::Match($html, '\b(\d{2}\.\d{3}\.\d{5})\b')
-    if (-not $verMatch.Success) { throw "Could not parse Acrobat DC version from release notes page." }
-    $version = $verMatch.Groups[1].Value
-    if (-not $Quiet) { Write-Host "Latest Acrobat DC version: $version" }
-    return $version
+
+    if (-not $Quiet) {
+        Write-Host "Release notes URL            : $AdobeReleaseNotesUrl"
+    }
+
+    try {
+        $html = (curl.exe -L --fail --silent --show-error $AdobeReleaseNotesUrl) -join "`n"
+        if ($LASTEXITCODE -ne 0) { throw "Failed to fetch Adobe release notes: $AdobeReleaseNotesUrl" }
+
+        $verMatch = [regex]::Match($html, '\b(\d{2}\.\d{3}\.\d{5})\b')
+        if (-not $verMatch.Success) { throw "Could not parse Acrobat DC version from release notes page." }
+
+        $version = $verMatch.Groups[1].Value
+
+        if (-not $Quiet) {
+            Write-Host "Latest Acrobat DC version    : $version"
+        }
+        return $version
+    }
+    catch {
+        Write-Error "Failed to get Acrobat DC version: $($_.Exception.Message)"
+        return $null
+    }
 }
 
 function Get-AdobeInstallerInfo {
-    # Converts the dotted version to the URL format and constructs the download URL.
-    # Input:  "25.001.21223"
-    # Output: @{ UrlVersion = "2500121223"; FileName = "AcroRdrDCx642500121223_MUI.exe"; Url = "https://..." }
     param([Parameter(Mandatory)][string]$Version)
-    $parts      = $Version -split '\.'           # ["25", "001", "21223"]
-    $urlVersion = "$($parts[0])$($parts[1])$($parts[2])"  # "2500121223"
+
+    $parts      = $Version -split '\.'
+    $urlVersion = "$($parts[0])$($parts[1])$($parts[2])"
     $fileName   = "AcroRdrDCx64${urlVersion}_MUI.exe"
     $url        = "$AdobeDownloadBase/$urlVersion/$fileName"
-    return @{ UrlVersion = $urlVersion; FileName = $fileName; Url = $url }
+
+    return [PSCustomObject]@{
+        UrlVersion  = $urlVersion
+        FileName    = $fileName
+        DownloadUrl = $url
+    }
 }
 
 function Remove-CMApplicationRevisionHistoryByCIId {
@@ -155,123 +198,76 @@ function Remove-CMApplicationRevisionHistoryByCIId {
         [Parameter(Mandatory)][UInt32]$CI_ID,
         [UInt32]$KeepLatest = 1
     )
+
     $history = Get-CMApplicationRevisionHistory -Id $CI_ID -ErrorAction SilentlyContinue
     if (-not $history) { return }
+
     $revs = @()
     foreach ($h in @($history)) {
-        if ($h.PSObject.Properties.Name -contains 'Revision')  { $revs += [UInt32]$h.Revision;   continue }
+        if ($h.PSObject.Properties.Name -contains 'Revision') { $revs += [UInt32]$h.Revision; continue }
         if ($h.PSObject.Properties.Name -contains 'CIVersion') { $revs += [UInt32]$h.CIVersion; continue }
     }
+
     $revs = $revs | Sort-Object -Unique -Descending
     if ($revs.Count -le $KeepLatest) { return }
+
     foreach ($rev in ($revs | Select-Object -Skip $KeepLatest)) {
         Remove-CMApplicationRevisionHistory -Id $CI_ID -Revision $rev -Force -ErrorAction Stop
     }
 }
 
-# --- GetLatestVersionOnly mode ---
-if ($GetLatestVersionOnly) {
+function New-MECMAdobeReaderApplication {
+    param(
+        [Parameter(Mandatory)][string]$AppName,
+        [Parameter(Mandatory)][string]$SoftwareVersion,
+        [Parameter(Mandatory)][string]$DetectionVersion,
+        [Parameter(Mandatory)][string]$ContentPath,
+        [Parameter(Mandatory)][string]$InstallerFileName,
+        [Parameter(Mandatory)][string]$Publisher
+    )
+
+    $orig = Get-Location
+
     try {
-        $version = Get-AdobeAcrobatVersion -Quiet
-        Write-Output $version
-        exit 0
-    }
-    catch {
-        Write-Error "Failed to retrieve Acrobat DC version: $($_.Exception.Message)"
-        exit 1
-    }
-}
+        if (-not (Test-IsAdmin)) { throw "Run PowerShell as Administrator." }
 
-# --- Main ---
-$originalLocation = Get-Location
+        if (-not (Connect-CMSite -SiteCode $SiteCode)) { throw "CM site connection failed." }
 
-try {
-    if (-not (Test-IsAdmin)) {
-        Write-Error "This script must be run as Administrator."
-        exit 1
-    }
+        $existing = Get-CMApplication -Name $AppName -ErrorAction SilentlyContinue
+        if ($existing) {
+            Write-Warning "Application already exists: $AppName"
+            return
+        }
 
-    Set-Location C: -ErrorAction Stop
+        Write-Host "Creating CM Application      : $AppName"
+        $cmApp = New-CMApplication `
+            -Name $AppName `
+            -Publisher $Publisher `
+            -SoftwareVersion $SoftwareVersion `
+            -Description $Comment `
+            -AutoInstall $true `
+            -ErrorAction Stop
 
-    Write-Host ""
-    Write-Host ("=" * 60)
-    Write-Host "Adobe Acrobat (Reader) DC Auto-Packager starting"
-    Write-Host ("=" * 60)
-    Write-Host ""
-    Write-Host ("RunAsUser             : {0}\{1}" -f $env:USERDOMAIN, $env:USERNAME)
-    Write-Host ("Machine               : {0}"     -f $env:COMPUTERNAME)
-    Write-Host "SiteCode              : $SiteCode"
-    Write-Host "BaseDownloadRoot      : $BaseDownloadRoot"
-    Write-Host "NetworkRootPath       : $NetworkRootPath"
-    Write-Host "AdobeReleaseNotesUrl  : $AdobeReleaseNotesUrl"
-    Write-Host ""
+        Write-Host "Application CI_ID            : $($cmApp.CI_ID)"
 
-    Ensure-Folder -Path $BaseDownloadRoot
+        Set-Location C: -ErrorAction Stop
 
-    if (-not (Test-NetworkShareAccess -Path $NetworkRootPath)) {
-        throw "Network root path not accessible: $NetworkRootPath"
-    }
+        $installBatPath   = Join-Path $ContentPath "install.bat"
+        $uninstallBatPath = Join-Path $ContentPath "uninstall.bat"
+        $uninstallPs1Path = Join-Path $ContentPath "uninstall.ps1"
 
-    Set-Location C: -ErrorAction Stop
-
-    # 1. Get current version from Adobe release notes
-    $version     = Get-AdobeAcrobatVersion
-    $dlInfo      = Get-AdobeInstallerInfo -Version $version
-    $fileName    = $dlInfo.FileName
-    $downloadUrl = $dlInfo.Url
-
-    Write-Host "Version       : $version"
-    Write-Host "URL version   : $($dlInfo.UrlVersion)"
-    Write-Host "File name     : $fileName"
-    Write-Host "Download URL  : $downloadUrl"
-    Write-Host ""
-
-    # 2. Download installer
-    $localExe = Join-Path $BaseDownloadRoot $fileName
-    if (-not (Test-Path -LiteralPath $localExe)) {
-        Write-Host "Downloading $fileName ..."
-        curl.exe -L --fail --silent --show-error -o $localExe $downloadUrl
-        if ($LASTEXITCODE -ne 0) { throw "Download failed: $downloadUrl" }
-        Write-Host "Downloaded: $localExe"
-    } else {
-        Write-Host "Installer already cached locally: $localExe"
-    }
-
-    # 3. Read file version from downloaded EXE for MECM detection
-    $exeFileVersion = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($localExe).FileVersion
-    if ([string]::IsNullOrWhiteSpace($exeFileVersion)) {
-        Write-Warning "Could not read FileVersion from EXE; using release notes version for detection."
-        $exeFileVersion = $version
-    }
-    Write-Host "EXE FileVersion (used for detection) : $exeFileVersion"
-
-    # 4. Create versioned content folder
-    $contentPath = Join-Path $NetworkRootPath $version
-    Ensure-Folder -Path $contentPath
-
-    # 5. Copy installer to network
-    $netExe = Join-Path $contentPath $fileName
-    if (-not (Test-Path -LiteralPath $netExe)) {
-        Write-Host "Copying installer to network..."
-        Copy-Item -LiteralPath $localExe -Destination $netExe -Force -ErrorAction Stop
-        Write-Host "Copied: $netExe"
-    } else {
-        Write-Host "Network installer already exists. Skipping copy."
-    }
-
-    # 6. Write install.bat
-    $installBatPath = Join-Path $contentPath "install.bat"
-    $installBat = @"
+        if (-not (Test-Path -LiteralPath $installBatPath)) {
+            $installBat = @"
 @echo off
 setlocal
-start /wait "" "%~dp0$fileName" /sAll /rs /rps /msi /qn /norestart
+start /wait "" "%~dp0$InstallerFileName" /sAll /rs /rps /msi /qn /norestart
 exit /b 0
 "@
-    Set-Content -LiteralPath $installBatPath -Value $installBat -Encoding ASCII -ErrorAction Stop
+            Set-Content -LiteralPath $installBatPath -Value $installBat -Encoding ASCII -ErrorAction Stop
+        }
 
-    # 7. Write uninstall.ps1 — registry lookup finds the product code at runtime
-    $uninstallPs1Path = Join-Path $contentPath "uninstall.ps1"
-    $uninstallPs1 = @'
+        if (-not (Test-Path -LiteralPath $uninstallPs1Path)) {
+            $uninstallPs1 = @'
 $app = Get-ChildItem `
     'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
     'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall' `
@@ -284,78 +280,187 @@ if ($app) {
     Start-Process msiexec.exe -ArgumentList "/x `"$($app.PSChildName)`" /qn /norestart" -Wait -NoNewWindow
 }
 '@
-    Set-Content -LiteralPath $uninstallPs1Path -Value $uninstallPs1 -Encoding UTF8 -ErrorAction Stop
+            Set-Content -LiteralPath $uninstallPs1Path -Value $uninstallPs1 -Encoding UTF8 -ErrorAction Stop
+        }
 
-    Write-Host "install.bat and uninstall.ps1 created."
+        if (-not (Test-Path -LiteralPath $uninstallBatPath)) {
+            $uninstallBat = @"
+@echo off
+setlocal
+PowerShell.exe -NonInteractive -ExecutionPolicy Bypass -File "%~dp0uninstall.ps1"
+exit /b %ERRORLEVEL%
+"@
+            Set-Content -LiteralPath $uninstallBatPath -Value $uninstallBat -Encoding ASCII -ErrorAction Stop
+        }
 
-    # 8. Connect to Configuration Manager
-    $appName = "Adobe Acrobat (Reader) DC $version"
-    Write-Host "CM Application Name : $appName"
+        if (-not (Connect-CMSite -SiteCode $SiteCode)) { throw "CM site connection failed." }
+
+        $dtName = $AppName
+
+        $clause = New-CMDetectionClauseFile `
+            -Path "$env:ProgramFiles\Adobe\Acrobat DC\Acrobat" `
+            -FileName "Acrobat.exe" `
+            -Value `
+            -PropertyType Version `
+            -ExpressionOperator GreaterEquals `
+            -ExpectedValue $DetectionVersion `
+            -Is64Bit
+
+        Write-Host "Adding Script Deployment Type: $dtName"
+        Add-CMScriptDeploymentType `
+            -ApplicationName $AppName `
+            -DeploymentTypeName $dtName `
+            -ContentLocation $ContentPath `
+            -InstallCommand "install.bat" `
+            -UninstallCommand "uninstall.bat" `
+            -InstallationBehaviorType InstallForSystem `
+            -LogonRequirementType WhetherOrNotUserLoggedOn `
+            -EstimatedRuntimeMins $EstimatedRuntimeMins `
+            -MaximumRuntimeMins $MaximumRuntimeMins `
+            -AddDetectionClause @($clause) `
+            -ContentFallback `
+            -SlowNetworkDeploymentMode Download `
+            -ErrorAction Stop | Out-Null
+
+        Remove-CMApplicationRevisionHistoryByCIId -CI_ID ([UInt32]$cmApp.CI_ID) -KeepLatest 1
+
+        Write-Host "Created MECM application     : $AppName"
+    }
+    finally {
+        Set-Location $orig -ErrorAction SilentlyContinue
+    }
+}
+
+function Get-AdobeReaderNetworkAppRoot {
+    param([Parameter(Mandatory)][string]$FileServerPath)
+
+    $appsRoot   = Join-Path $FileServerPath "Applications"
+    $vendorPath = Join-Path $appsRoot $VendorFolder
+    $appPath    = Join-Path $vendorPath $AppFolder
+
+    Initialize-Folder -Path $appsRoot
+    Initialize-Folder -Path $vendorPath
+    Initialize-Folder -Path $appPath
+
+    return $appPath
+}
+
+# --- Latest-only mode ---
+if ($GetLatestVersionOnly) {
+    try {
+        $ProgressPreference = 'SilentlyContinue'
+        $v = Get-AdobeAcrobatVersion -Quiet
+        if (-not $v) { exit 1 }
+        Write-Output $v
+        exit 0
+    }
+    catch {
+        exit 1
+    }
+}
+
+# --- Main ---
+try {
+    $startLocation = Get-Location
+
+    Write-Host ""
+    Write-Host ("=" * 60)
+    Write-Host "Adobe Acrobat (Reader) DC (x64) Auto-Packager starting"
+    Write-Host ("=" * 60)
+    Write-Host ""
+    Write-Host ("RunAsUser                    : {0}\{1}" -f $env:USERDOMAIN,$env:USERNAME)
+    Write-Host ("Machine                      : {0}" -f $env:COMPUTERNAME)
+    Write-Host "Start location               : $startLocation"
+    Write-Host "SiteCode                     : $SiteCode"
+    Write-Host "FileServerPath               : $FileServerPath"
+    Write-Host "BaseDownloadRoot             : $BaseDownloadRoot"
+    Write-Host "AdobeReleaseNotesUrl         : $AdobeReleaseNotesUrl"
     Write-Host ""
 
-    if (-not (Connect-CMSite -SiteCode $SiteCode)) {
-        throw "Cannot proceed without CM connection."
-    }
-
-    # 9. Check for existing application
-    $existingApp = Get-CMApplication -Name $appName -ErrorAction SilentlyContinue
-    if ($existingApp) {
-        Write-Warning "Application '$appName' already exists (CI_ID: $($existingApp.CI_ID)). Exiting."
+    if (-not (Test-IsAdmin)) {
+        Write-Error "Run PowerShell as Administrator."
         exit 1
     }
 
-    # 10. Create application
-    Write-Host "Creating application '$appName'..." -ForegroundColor Yellow
-    $cmApp = New-CMApplication `
-        -Name $appName `
-        -Publisher $Publisher `
+    Initialize-Folder -Path $BaseDownloadRoot
+
+    if (-not (Test-NetworkShareAccess -Path $FileServerPath)) {
+        throw "Network root path not accessible: $FileServerPath"
+    }
+
+    $networkAppRoot = Get-AdobeReaderNetworkAppRoot -FileServerPath $FileServerPath
+
+    $version = Get-AdobeAcrobatVersion
+    if (-not $version) {
+        throw "Could not resolve Acrobat DC version."
+    }
+
+    $dlInfo      = Get-AdobeInstallerInfo -Version $version
+    $fileName    = $dlInfo.FileName
+    $downloadUrl = $dlInfo.DownloadUrl
+    $contentPath = Join-Path $networkAppRoot $version
+
+    Initialize-Folder -Path $contentPath
+
+    $localExe = Join-Path $BaseDownloadRoot $fileName
+    $netExe   = Join-Path $contentPath $fileName
+
+    Write-Host "Version                      : $version"
+    Write-Host "URL version                  : $($dlInfo.UrlVersion)"
+    Write-Host "Installer file               : $fileName"
+    Write-Host "Local installer              : $localExe"
+    Write-Host "ContentPath                  : $contentPath"
+    Write-Host "Network installer            : $netExe"
+    Write-Host ""
+
+    if (-not (Test-Path -LiteralPath $localExe)) {
+        Write-Host "Downloading installer..."
+        curl.exe -L --fail --silent --show-error -o $localExe $downloadUrl
+        if ($LASTEXITCODE -ne 0) { throw "Download failed: $downloadUrl" }
+    }
+    else {
+        Write-Host "Local installer exists. Skipping download."
+    }
+
+    $exeFileVersion = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($localExe).FileVersion
+    if ([string]::IsNullOrWhiteSpace($exeFileVersion)) {
+        Write-Warning "Could not read FileVersion from EXE; using release notes version for detection."
+        $exeFileVersion = $version
+    }
+    Write-Host "EXE FileVersion (detection)  : $exeFileVersion"
+
+    if (-not (Test-Path -LiteralPath $netExe)) {
+        Write-Host "Copying installer to network..."
+        Copy-Item -LiteralPath $localExe -Destination $netExe -Force -ErrorAction Stop
+    }
+    else {
+        Write-Host "Network installer exists. Skipping copy."
+    }
+
+    $appName   = "Adobe Acrobat (Reader) DC $version"
+    $publisher = "Adobe Inc."
+
+    Write-Host ""
+    Write-Host "CM Application Name          : $appName"
+    Write-Host "CM SoftwareVersion           : $version"
+    Write-Host "CM Detection Version         : $exeFileVersion"
+    Write-Host ""
+
+    New-MECMAdobeReaderApplication `
+        -AppName $appName `
         -SoftwareVersion $version `
-        -LocalizedApplicationName $appName `
-        -Description $Comment `
-        -AutoInstall $true `
-        -ErrorAction Stop
+        -DetectionVersion $exeFileVersion `
+        -ContentPath $contentPath `
+        -InstallerFileName $fileName `
+        -Publisher $publisher
 
-    Write-Host "Application CI_ID: $($cmApp.CI_ID)"
-
-    # 11. File version detection on Acrobat.exe
-    $detectionClause = New-CMDetectionClauseFile `
-        -Path "$env:ProgramFiles\Adobe\Acrobat DC\Acrobat" `
-        -FileName "Acrobat.exe" `
-        -Value `
-        -PropertyType Version `
-        -ExpressionOperator GreaterEquals `
-        -ExpectedValue $exeFileVersion `
-        -Is64Bit
-
-    # 12. Add Script Deployment Type
-    Write-Host "Adding deployment type '$appName'..."
-    Add-CMScriptDeploymentType `
-        -ApplicationName $appName `
-        -DeploymentTypeName $appName `
-        -ContentLocation $contentPath `
-        -InstallCommand "install.bat" `
-        -UninstallCommand "PowerShell.exe -NonInteractive -ExecutionPolicy Bypass -File uninstall.ps1" `
-        -InstallationBehaviorType InstallForSystem `
-        -LogonRequirementType WhetherOrNotUserLoggedOn `
-        -UserInteractionMode Hidden `
-        -EstimatedRuntimeMins $EstimatedRuntimeMins `
-        -MaximumRuntimeMins $MaximumRuntimeMins `
-        -AddDetectionClause @($detectionClause) `
-        -ContentFallback $true `
-        -SlowNetworkDeploymentMode Download `
-        -RebootBehavior NoAction `
-        -ErrorAction Stop | Out-Null
-
-    # 13. Revision history cleanup
-    Remove-CMApplicationRevisionHistoryByCIId -CI_ID ([UInt32]$cmApp.CI_ID) -KeepLatest 1
-
-    Write-Host "Adobe Acrobat (Reader) DC $version packaged successfully." -ForegroundColor Green
+    Write-Host ""
+    Write-Host "Script execution complete."
 }
 catch {
-    Write-Error "Script failed: $($_.Exception.Message)"
+    Write-Error "SCRIPT FAILED: $($_.Exception.Message)"
     exit 1
 }
 finally {
-    Set-Location $originalLocation -ErrorAction SilentlyContinue
-    Write-Host "Restored initial location to: ${originalLocation}"
+    Set-Location $startLocation -ErrorAction SilentlyContinue
 }

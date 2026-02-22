@@ -1,55 +1,90 @@
 <#
 Vendor: Microsoft Corporation
-App: VS Code
+App: Visual Studio Code (x64)
 CMName: VS Code
 
 .SYNOPSIS
-    Automates downloading the latest VS Code installer and creating a MECM application.
+    Packages Visual Studio Code (x64) for MECM.
+
 .DESCRIPTION
-    Creates a single MECM application for Visual Studio Code (x64), using version-based detection
-    and batch file installation.
-    Application name matches Programs and Features (e.g., "VS Code 1.104.2").
-    Uses static metadata (Publisher: "Microsoft", SoftwareVersion: download version).
-    MECM settings: 20-minute max runtime, 10-minute estimated runtime, system installation, no user logon requirement.
-    Checks for existing files locally and on network share to skip redundant downloads/copies.
-    Uses Add-CMScriptDeploymentType with version-based detection for Code.exe (>= 1.104.0) to resolve Tenable finding ID 265431.
-    Sets content tab: Enables fallback source locations and sets slow network mode to "Download content from distribution point and run locally".
-.NOTES
-    - Run with admin privileges for MECM operations.
-    - Customize $SiteCode for your MECM environment (e.g., PRD).
-    - Requires PowerShell 5.1 and Configuration Manager module.
+    Downloads the latest VS Code x64 installer from the official update API,
+    stages content to a versioned network location, and creates an MECM Application
+    with file-based version detection.
+
+.PARAMETER SiteCode
+    ConfigMgr site code PSDrive name (e.g., "MCM").
+    The PSDrive is assumed to already exist in the session.
+
+.PARAMETER Comment
+    Free-form change/WO text stored on the CM Application Description field.
+
+.PARAMETER FileServerPath
+    UNC root that contains your Applications folder (example: \\fileserver\sccm$).
+    Content is staged under: <FileServerPath>\Applications\Microsoft\Visual Studio Code\<Version>
+
+.PARAMETER GetLatestVersionOnly
+    Outputs only the latest available VS Code version string and exits.
+
+.REQUIREMENTS
+    - PowerShell 5.1
+    - ConfigMgr Admin Console installed (ConfigurationManager PowerShell module available)
+    - RBAC permissions to create Applications and Deployment Types
+    - Local administrator
+    - Write access to FileServerPath
 #>
 
 param(
-    [string]$SiteCode       = "MCM",
-    [string]$Comment        = "WO#00000001234567",
+    [string]$SiteCode = "MCM",
+    [string]$Comment = "WO#00000001234567",
     [string]$FileServerPath = "\\fileserver\sccm$",
     [switch]$GetLatestVersionOnly
 )
 
-# --- Configuration Variables ---
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-$BaseDownloadRoot = Join-Path $env:USERPROFILE "Downloads"
-$VSCodeRootNetworkPath = Join-Path $FileServerPath "Applications\Microsoft\Visual Studio Code"
+
+# --- Configuration ---
 $StaticDownloadUrl = "https://update.code.visualstudio.com/latest/win32-x64/stable"
-$VersionApiUrl = "https://update.code.visualstudio.com/api/releases/stable"
+$VersionApiUrl     = "https://update.code.visualstudio.com/api/releases/stable"
+
+$VendorFolder = "Microsoft"
+$AppFolder    = "Visual Studio Code"
+
+$BaseDownloadRoot = Join-Path $env:USERPROFILE "Downloads\_AutoPackager\VSCode"
+
+$EstimatedRuntimeMins = 10
+$MaximumRuntimeMins   = 20
 
 # --- Functions ---
 function Test-IsAdmin {
     try {
-        $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+        $identity  = [Security.Principal.WindowsIdentity]::GetCurrent()
         $principal = New-Object Security.Principal.WindowsPrincipal($identity)
         return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     }
     catch {
-        Write-Warning "Failed to check admin privileges: $($_.Exception.Message)"
+        Write-Warning "Admin check failed: $($_.Exception.Message)"
         return $false
     }
 }
 
 function Connect-CMSite {
     param([Parameter(Mandatory)][string]$SiteCode)
+
     try {
+        if (-not (Get-Module -Name ConfigurationManager -ErrorAction SilentlyContinue)) {
+            $cmModulePath = Join-Path $env:SMS_ADMIN_UI_PATH "..\ConfigurationManager.psd1"
+            if (Test-Path -LiteralPath $cmModulePath) {
+                Import-Module $cmModulePath -ErrorAction Stop
+            }
+            else {
+                Import-Module ConfigurationManager -ErrorAction Stop
+            }
+        }
+
+        if (-not (Get-PSDrive -Name $SiteCode -ErrorAction SilentlyContinue)) {
+            throw "Configuration Manager PSDrive '$SiteCode' is not available."
+        }
+
         Set-Location "${SiteCode}:" -ErrorAction Stop
         Write-Host "Connected to CM site: $SiteCode"
         return $true
@@ -60,84 +95,74 @@ function Connect-CMSite {
     }
 }
 
-function Get-LatestVSCodeVersion {
-    param([switch]$Quiet)
+function Initialize-Folder {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $origLocation = Get-Location
     try {
-        $json = (curl.exe -L --fail --silent --show-error $VersionApiUrl) -join ''
-        if ($LASTEXITCODE -ne 0) { throw "Failed to fetch version info: $VersionApiUrl" }
-        $versions = ConvertFrom-Json $json
-        if (-not $versions -or $versions.Count -eq 0) {
-            Write-Error "No versions found in API response."
-            exit 1
+        Set-Location C: -ErrorAction Stop
+        if (-not (Test-Path -LiteralPath $Path)) {
+            New-Item -ItemType Directory -Path $Path -Force | Out-Null
         }
-        $version = $versions[0]
-        if (-not $Quiet) {
-            Write-Host "Found latest VS Code version: $version"
-        }
-        return $version
     }
-    catch {
-        Write-Error "Failed to get VS Code version from API: $($_.Exception.Message)"
-        exit 1
+    finally {
+        Set-Location $origLocation -ErrorAction SilentlyContinue
     }
 }
 
 function Test-NetworkShareAccess {
-    param ([string]$Path)
-    $originalLocation = Get-Location
-    Write-Host "Current location before network share validation: ${originalLocation}"
+    param([Parameter(Mandatory)][string]$Path)
+
+    $origLocation = Get-Location
     try {
-        Set-Location $PSScriptRoot -ErrorAction Stop
-        Write-Host "Set location to script directory for network share validation: ${PSScriptRoot}"
-        if (-not (Test-Path $Path)) {
-            Write-Error "Network path '${Path}' does not exist or is inaccessible."
-            exit 1
+        Set-Location C: -ErrorAction Stop
+
+        if (-not (Test-Path -LiteralPath $Path -ErrorAction SilentlyContinue)) {
+            Write-Error "Network path does not exist or is inaccessible: $Path"
+            return $false
         }
 
-        $testFile = Join-Path $Path "_write_test_$(Get-Random).txt"
-        Set-Content -Path $testFile -Value "Test" -Encoding ASCII
-        Remove-Item $testFile -Force
-        Write-Host "Network share '${Path}' is accessible and writable."
-    }
-    catch {
-        Write-Error "Failed to access network share '${Path}': $($_.Exception.Message)"
-        exit 1
+        try {
+            $tmp = Join-Path $Path ("_write_test_{0}.txt" -f (Get-Random))
+            Set-Content -LiteralPath $tmp -Value "test" -Encoding ASCII -ErrorAction Stop
+            Remove-Item -LiteralPath $tmp -ErrorAction Stop
+            return $true
+        }
+        catch {
+            Write-Error "Network share is not writable: $Path ($($_.Exception.Message))"
+            return $false
+        }
     }
     finally {
-        Set-Location $originalLocation -ErrorAction SilentlyContinue
-        Write-Host "Restored location to: ${originalLocation}"
+        Set-Location $origLocation -ErrorAction SilentlyContinue
     }
 }
 
-function Create-BatchFiles {
-    param ([string]$NetworkPath, [string]$Version, [string]$FileName)
-    $originalLocation = Get-Location
-    Write-Host "Current location before batch file creation: ${originalLocation}"
+function Get-LatestVSCodeVersion {
+    param([switch]$Quiet)
+
+    if (-not $Quiet) {
+        Write-Host "VS Code version API          : $VersionApiUrl"
+    }
+
     try {
-        Set-Location $PSScriptRoot -ErrorAction Stop
-        Write-Host "Set location to script directory for batch file creation: ${PSScriptRoot}"
-        Write-Host "Verifying Set-Content cmdlet: $(Get-Command Set-Content | Select-Object -ExpandProperty Source)"
-        $InstallBatContent = @"
-start /wait "" "%~dp0${FileName}" /VERYSILENT /NORESTART /FORCECLOSEAPPLICATIONS /MERGETASKS=!runcode
-"@
-        $UninstallBatContent = @"
-"C:\Program Files\Microsoft VS Code\unins000.exe" /SILENT
-"@
-        $InstallBatPath = Join-Path $NetworkPath "install.bat"
-        $UninstallBatPath = Join-Path $NetworkPath "uninstall.bat"
-        Write-Host "Writing install.bat to ${InstallBatPath}"
-        Set-Content -Path $InstallBatPath -Value $InstallBatContent -Encoding ASCII -ErrorAction Stop
-        Write-Host "Writing uninstall.bat to ${UninstallBatPath}"
-        Set-Content -Path $UninstallBatPath -Value $UninstallBatContent -Encoding ASCII -ErrorAction Stop
-        Write-Host "Created install.bat and uninstall.bat at ${NetworkPath}"
+        $json = (curl.exe -L --fail --silent --show-error $VersionApiUrl) -join ''
+        if ($LASTEXITCODE -ne 0) { throw "Failed to fetch version info: $VersionApiUrl" }
+
+        $versions = ConvertFrom-Json $json
+        if (-not $versions -or $versions.Count -eq 0) {
+            throw "No versions found in API response."
+        }
+
+        $version = $versions[0]
+        if (-not $Quiet) {
+            Write-Host "Latest VS Code version       : $version"
+        }
+        return $version
     }
     catch {
-        Write-Error "Failed to create batch files in '${NetworkPath}': $($_.Exception.Message)"
-        throw
-    }
-    finally {
-        Set-Location $originalLocation -ErrorAction SilentlyContinue
-        Write-Host "Restored location to: ${originalLocation}"
+        Write-Error "Failed to get VS Code version: $($_.Exception.Message)"
+        return $null
     }
 }
 
@@ -146,172 +171,236 @@ function Remove-CMApplicationRevisionHistoryByCIId {
         [Parameter(Mandatory)][UInt32]$CI_ID,
         [UInt32]$KeepLatest = 1
     )
+
     $history = Get-CMApplicationRevisionHistory -Id $CI_ID -ErrorAction SilentlyContinue
     if (-not $history) { return }
+
     $revs = @()
     foreach ($h in @($history)) {
-        if ($h.PSObject.Properties.Name -contains 'Revision')  { $revs += [UInt32]$h.Revision;   continue }
+        if ($h.PSObject.Properties.Name -contains 'Revision') { $revs += [UInt32]$h.Revision; continue }
         if ($h.PSObject.Properties.Name -contains 'CIVersion') { $revs += [UInt32]$h.CIVersion; continue }
     }
+
     $revs = $revs | Sort-Object -Unique -Descending
     if ($revs.Count -le $KeepLatest) { return }
+
     foreach ($rev in ($revs | Select-Object -Skip $KeepLatest)) {
         Remove-CMApplicationRevisionHistory -Id $CI_ID -Revision $rev -Force -ErrorAction Stop
     }
 }
 
-function New-MECMApplication {
-    param (
-        [string]$AppName,
-        [string]$Version,
-        [string]$NetworkPath,
-        [string]$FileName,
-        [string]$Publisher
+function New-MECMVSCodeApplication {
+    param(
+        [Parameter(Mandatory)][string]$AppName,
+        [Parameter(Mandatory)][string]$SoftwareVersion,
+        [Parameter(Mandatory)][string]$ContentPath,
+        [Parameter(Mandatory)][string]$FileName,
+        [Parameter(Mandatory)][string]$Publisher
     )
-    $originalLocation = Get-Location
-    Write-Host "Current location before MECM application creation: ${originalLocation}"
+
+    $orig = Get-Location
+
     try {
-        if (-not (Test-IsAdmin)) { Write-Error "Script must be run with admin privileges."; return }
-        if (-not (Connect-CMSite -SiteCode $SiteCode)) { Write-Error "Failed to connect to CM site."; return }
+        if (-not (Test-IsAdmin)) { throw "Run PowerShell as Administrator." }
 
-        Write-Host "Checking for existing application: ${AppName}"
-        $existingApp = Get-CMApplication -Name $AppName -ErrorAction SilentlyContinue
-        if ($existingApp) {
-            Write-Host "Application '${AppName}' already exists. Checking deployment types..."
-            $deploymentTypes = Get-CMDeploymentType -ApplicationName $AppName -ErrorAction SilentlyContinue
-            if ($deploymentTypes -and $deploymentTypes.Count -gt 0) {
-                Write-Warning "Application '${AppName}' already exists with $($deploymentTypes.Count) deployment type(s). Skipping creation."
-                return
-            } else {
-                Write-Host "Application '${AppName}' exists but has no deployment types. Continuing to add deployment type..."
-                $app = $existingApp
-            }
-        } else {
-            Write-Host "Creating application: ${AppName}"
-            $app = New-CMApplication -Name $AppName `
-                -Publisher $Publisher `
-                -SoftwareVersion $Version `
-                -Description $Comment `
-                -LocalizedApplicationName $AppName `
-                -ErrorAction Stop
+        if (-not (Connect-CMSite -SiteCode $SiteCode)) { throw "CM site connection failed." }
+
+        $existing = Get-CMApplication -Name $AppName -ErrorAction SilentlyContinue
+        if ($existing) {
+            Write-Warning "Application already exists: $AppName"
+            return
         }
 
-        Write-Host "Creating batch files for ${AppName}"
-        Create-BatchFiles -NetworkPath $NetworkPath -Version $Version -FileName $FileName
+        Write-Host "Creating CM Application      : $AppName"
+        $cmApp = New-CMApplication `
+            -Name $AppName `
+            -Publisher $Publisher `
+            -SoftwareVersion $SoftwareVersion `
+            -Description $Comment `
+            -AutoInstall $true `
+            -ErrorAction Stop
 
-        Write-Host "Creating version-based detection clause for Code.exe (>= 1.104.0)"
-        $detectionClauses = @()
-        $detectionClause = New-CMDetectionClauseFile -Path "$env:ProgramFiles\Microsoft VS Code" -FileName "Code.exe" -Value -PropertyType Version -ExpressionOperator GreaterEquals -ExpectedValue "1.104.0" -ErrorAction Stop
-        $detectionClauses += $detectionClause
+        Write-Host "Application CI_ID            : $($cmApp.CI_ID)"
 
-        Write-Host "Calling Add-CMScriptDeploymentType with parameters:"
-        Write-Host "  ApplicationName: ${AppName}"
-        Write-Host "  Detection clauses count: $($detectionClauses.Count)"
+        Set-Location C: -ErrorAction Stop
 
-        $params = @{
-            ApplicationName = $AppName
-            DeploymentTypeName = "${AppName}"
-            InstallCommand = "install.bat"
-            ContentLocation = $NetworkPath
-            UninstallCommand = "uninstall.bat"
-            InstallationBehaviorType = "InstallForSystem"
-            LogonRequirementType = "WhetherOrNotUserLoggedOn"
-            MaximumRuntimeMins = 20
-            EstimatedRuntimeMins = 10
-            AddDetectionClause = $detectionClauses
-            ContentFallback = $true  # Enables fallback source locations (checks the box)
-            SlowNetworkDeploymentMode = "Download"  # Download content from distribution point and run locally
-            ErrorAction = "Stop"
+        $installBatPath   = Join-Path $ContentPath "install.bat"
+        $uninstallBatPath = Join-Path $ContentPath "uninstall.bat"
+
+        if (-not (Test-Path -LiteralPath $installBatPath)) {
+            $installBat = @"
+@echo off
+setlocal
+start /wait "" "%~dp0$FileName" /VERYSILENT /NORESTART /FORCECLOSEAPPLICATIONS /MERGETASKS=!runcode
+exit /b 0
+"@
+            Set-Content -LiteralPath $installBatPath -Value $installBat -Encoding ASCII -ErrorAction Stop
         }
 
-        Add-CMScriptDeploymentType @params
-        Remove-CMApplicationRevisionHistoryByCIId -CI_ID ([UInt32]$app.CI_ID) -KeepLatest 1
-        Write-Host "Created MECM application: ${AppName} with version-based detection (>= 1.104.0) and content tab settings configured"
-    }
-    catch {
-        Write-Error "Failed to create MECM application: $($_.Exception.Message)"
-        throw
+        if (-not (Test-Path -LiteralPath $uninstallBatPath)) {
+            $uninstallBat = @"
+@echo off
+setlocal
+"C:\Program Files\Microsoft VS Code\unins000.exe" /SILENT
+exit /b 0
+"@
+            Set-Content -LiteralPath $uninstallBatPath -Value $uninstallBat -Encoding ASCII -ErrorAction Stop
+        }
+
+        if (-not (Connect-CMSite -SiteCode $SiteCode)) { throw "CM site connection failed." }
+
+        $dtName = $AppName
+
+        $clause = New-CMDetectionClauseFile `
+            -Path "$env:ProgramFiles\Microsoft VS Code" `
+            -FileName "Code.exe" `
+            -Value `
+            -PropertyType Version `
+            -ExpressionOperator GreaterEquals `
+            -ExpectedValue $SoftwareVersion
+
+        Write-Host "Adding Script Deployment Type: $dtName"
+        Add-CMScriptDeploymentType `
+            -ApplicationName $AppName `
+            -DeploymentTypeName $dtName `
+            -ContentLocation $ContentPath `
+            -InstallCommand "install.bat" `
+            -UninstallCommand "uninstall.bat" `
+            -InstallationBehaviorType InstallForSystem `
+            -LogonRequirementType WhetherOrNotUserLoggedOn `
+            -EstimatedRuntimeMins $EstimatedRuntimeMins `
+            -MaximumRuntimeMins $MaximumRuntimeMins `
+            -AddDetectionClause @($clause) `
+            -ContentFallback `
+            -SlowNetworkDeploymentMode Download `
+            -ErrorAction Stop | Out-Null
+
+        Remove-CMApplicationRevisionHistoryByCIId -CI_ID ([UInt32]$cmApp.CI_ID) -KeepLatest 1
+
+        Write-Host "Created MECM application     : $AppName"
     }
     finally {
-        Set-Location $originalLocation -ErrorAction SilentlyContinue
-        Write-Host "Restored location to: ${originalLocation}"
+        Set-Location $orig -ErrorAction SilentlyContinue
     }
 }
 
-# --- Main Script ---
+function Get-VSCodeNetworkAppRoot {
+    param([Parameter(Mandatory)][string]$FileServerPath)
+
+    $appsRoot   = Join-Path $FileServerPath "Applications"
+    $vendorPath = Join-Path $appsRoot $VendorFolder
+    $appPath    = Join-Path $vendorPath $AppFolder
+
+    Initialize-Folder -Path $appsRoot
+    Initialize-Folder -Path $vendorPath
+    Initialize-Folder -Path $appPath
+
+    return $appPath
+}
+
+# --- Latest-only mode ---
+if ($GetLatestVersionOnly) {
+    try {
+        $ProgressPreference = 'SilentlyContinue'
+        $v = Get-LatestVSCodeVersion -Quiet
+        if (-not $v) { exit 1 }
+        Write-Output $v
+        exit 0
+    }
+    catch {
+        exit 1
+    }
+}
+
+# --- Main ---
 try {
+    $startLocation = Get-Location
+
+    Write-Host ""
+    Write-Host ("=" * 60)
+    Write-Host "VS Code (x64) Auto-Packager starting"
+    Write-Host ("=" * 60)
+    Write-Host ""
+    Write-Host ("RunAsUser                    : {0}\{1}" -f $env:USERDOMAIN,$env:USERNAME)
+    Write-Host ("Machine                      : {0}" -f $env:COMPUTERNAME)
+    Write-Host "Start location               : $startLocation"
+    Write-Host "SiteCode                     : $SiteCode"
+    Write-Host "FileServerPath               : $FileServerPath"
+    Write-Host "BaseDownloadRoot             : $BaseDownloadRoot"
+    Write-Host "VersionApiUrl                : $VersionApiUrl"
+    Write-Host ""
+
     if (-not (Test-IsAdmin)) {
-        Write-Error "This script must be run with admin privileges. Please run PowerShell as Administrator."
+        Write-Error "Run PowerShell as Administrator."
         exit 1
     }
 
-    Set-Location $PSScriptRoot -ErrorAction Stop
-    Write-Host "Set initial location to script directory: ${PSScriptRoot}"
-    Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)"
-    Write-Host "Verifying Set-Content cmdlet: $(Get-Command Set-Content | Select-Object -ExpandProperty Source)"
+    Initialize-Folder -Path $BaseDownloadRoot
 
-    if ($GetLatestVersionOnly) {
-        $v = Get-LatestVSCodeVersion -Quiet
-        Write-Output $v
-        return
+    if (-not (Test-NetworkShareAccess -Path $FileServerPath)) {
+        throw "Network root path not accessible: $FileServerPath"
     }
 
-    $Version = Get-LatestVSCodeVersion
-    if (-not $Version) { exit 1 }
+    $networkAppRoot = Get-VSCodeNetworkAppRoot -FileServerPath $FileServerPath
 
-    $FileName = "VSCodeSetup-x64-${Version}.exe"
-    $DownloadFolderName = "VSCode_${Version}_installers"
-    $DownloadPath = Join-Path $BaseDownloadRoot $DownloadFolderName
-    $NetworkPath = Join-Path $VSCodeRootNetworkPath $Version
-    $AppName = "VS Code $Version"
-    $Publisher = "Microsoft"
-
-    Write-Host "DownloadPath: ${DownloadPath}"
-    Write-Host "NetworkPath: ${NetworkPath}"
-
-    Test-NetworkShareAccess -Path $VSCodeRootNetworkPath
-
-    if (-not (Test-Path $DownloadPath)) {
-        New-Item -ItemType Directory -Path $DownloadPath -Force | Out-Null
-        Write-Host "Created local download directory: ${DownloadPath}"
+    $version = Get-LatestVSCodeVersion
+    if (-not $version) {
+        throw "Could not resolve VS Code version."
     }
 
-    if (-not (Test-Path $NetworkPath)) {
-        New-Item -ItemType Directory -Path $NetworkPath -Force | Out-Null
-        Write-Host "Created network directory: ${NetworkPath}"
-    }
+    $fileName    = "VSCodeSetup-x64-${version}.exe"
+    $localExe    = Join-Path $BaseDownloadRoot $fileName
+    $contentPath = Join-Path $networkAppRoot $version
 
-    $OutputPath = Join-Path $DownloadPath $FileName
-    $NetworkFilePath = Join-Path $NetworkPath $FileName
-    Write-Host "OutputPath: ${OutputPath}"
-    Write-Host "NetworkFilePath: ${NetworkFilePath}"
+    Initialize-Folder -Path $contentPath
 
-    if (-not (Test-Path $OutputPath)) {
-        Write-Host "Downloading VS Code installer from ${StaticDownloadUrl}"
-        curl.exe -L --fail --silent --show-error -o $OutputPath $StaticDownloadUrl
+    $netExe = Join-Path $contentPath $fileName
+
+    Write-Host "Version                      : $version"
+    Write-Host "Local installer              : $localExe"
+    Write-Host "ContentPath                  : $contentPath"
+    Write-Host "Network installer            : $netExe"
+    Write-Host ""
+
+    if (-not (Test-Path -LiteralPath $localExe)) {
+        Write-Host "Downloading installer..."
+        curl.exe -L --fail --silent --show-error -o $localExe $StaticDownloadUrl
         if ($LASTEXITCODE -ne 0) { throw "Download failed: $StaticDownloadUrl" }
-        Write-Host "Downloaded installer to ${OutputPath}"
-    } else {
-        Write-Host "Installer already exists locally: ${OutputPath}. Skipping download."
+    }
+    else {
+        Write-Host "Local installer exists. Skipping download."
     }
 
-    if (-not (Test-Path $NetworkFilePath)) {
-        Write-Host "Copying installer to network path..."
-        Copy-Item -Path $OutputPath -Destination $NetworkPath -Force -ErrorAction Stop
-        Write-Host "Copied installer to ${NetworkFilePath}"
-    } else {
-        Write-Host "Installer already exists on network: ${NetworkFilePath}. Skipping copy."
+    if (-not (Test-Path -LiteralPath $netExe)) {
+        Write-Host "Copying installer to network..."
+        Copy-Item -LiteralPath $localExe -Destination $netExe -Force -ErrorAction Stop
+    }
+    else {
+        Write-Host "Network installer exists. Skipping copy."
     }
 
-    Write-Host "Creating batch install/uninstall wrappers..."
-    Create-BatchFiles -NetworkPath $NetworkPath -Version $Version -FileName $FileName
+    $appName   = "VS Code $version"
+    $publisher = "Microsoft Corporation"
 
-    Write-Host "Creating MECM application..."
-    New-MECMApplication -AppName $AppName -Version $Version -NetworkPath $NetworkPath -FileName $FileName -Publisher $Publisher
+    Write-Host ""
+    Write-Host "CM Application Name          : $appName"
+    Write-Host "CM SoftwareVersion           : $version"
+    Write-Host ""
 
-    Write-Host "Script completed successfully for ${AppName}"
+    New-MECMVSCodeApplication `
+        -AppName $appName `
+        -SoftwareVersion $version `
+        -ContentPath $contentPath `
+        -FileName $fileName `
+        -Publisher $publisher
+
+    Write-Host ""
+    Write-Host "Script execution complete."
 }
 catch {
-    Write-Error "Script failed: $($_.Exception.Message)"
+    Write-Error "SCRIPT FAILED: $($_.Exception.Message)"
     exit 1
+}
+finally {
+    Set-Location $startLocation -ErrorAction SilentlyContinue
 }

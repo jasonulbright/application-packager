@@ -4,16 +4,14 @@ App: Google Chrome Enterprise (x64)
 CMName: Google Chrome Enterprise
 
 .SYNOPSIS
-    Packages the latest Google Chrome Enterprise (x64) MSI for MECM.
+    Packages Google Chrome Enterprise (x64) MSI for MECM.
 
 .DESCRIPTION
-    Downloads the latest Google Chrome Enterprise x64 MSI from Google's static enterprise
-    download URL, stages content to a versioned network folder, and creates an MECM
-    Application with Windows Installer (MSI) detection.
-
-    Install:   msiexec.exe /i googlechromestandaloneenterprise64.msi /qn /norestart
-    Uninstall: msiexec.exe /x googlechromestandaloneenterprise64.msi /qn /norestart
-    Detection: Windows Installer ProductCode + ProductVersion (IsEquals)
+    Downloads the latest Google Chrome Enterprise x64 MSI from Google's static
+    enterprise download URL, extracts ProductVersion and ProductCode via Windows
+    Installer COM, stages content to a versioned network location, and creates
+    an MECM Application with Windows Installer (ProductCode) detection.
+    Detection uses ProductCode version IsEquals packaged version.
 
     NOTE: Google's enterprise MSI URL always serves the current stable release.
     The version is read from MSI properties after download.
@@ -22,49 +20,51 @@ CMName: Google Chrome Enterprise
     and exits without downloading the installer.
 
 .PARAMETER SiteCode
-    ConfigMgr site code PSDrive name (e.g., "MCM"). The PSDrive is assumed to already exist.
+    ConfigMgr site code PSDrive name (e.g., "MCM").
+    The PSDrive is assumed to already exist in the session.
 
 .PARAMETER Comment
-    Work order or comment string applied to the MECM application description.
+    Free-form change/WO text stored on the CM Application Description field.
 
 .PARAMETER FileServerPath
-    UNC root of the SCCM content share (e.g., "\\fileserver\sccm$").
+    UNC root that contains your Applications folder (example: \\fileserver\sccm$).
+    Content is staged under: <FileServerPath>\Applications\Google\Chrome Enterprise\<Version>
 
 .PARAMETER GetLatestVersionOnly
-    Queries the Chrome VersionHistory API for the current stable version, outputs the
-    version string, and exits. No download or MECM changes are made.
+    Queries the Chrome VersionHistory API for the current stable version, outputs
+    the version string, and exits. No download or MECM changes are made.
 
-.NOTES
-    Requires:
-      - PowerShell 5.1
-      - ConfigMgr Admin Console installed (for ConfigurationManager.psd1)
-      - RBAC rights to create Applications and Deployment Types
-      - Local administrator
-      - Write access to FileServerPath
+.REQUIREMENTS
+    - PowerShell 5.1
+    - ConfigMgr Admin Console installed (ConfigurationManager PowerShell module available)
+    - RBAC permissions to create Applications and Deployment Types
+    - Local administrator
+    - Write access to FileServerPath
 #>
 
 param(
-    [string]$SiteCode       = "MCM",
-    [string]$Comment        = "WO#00000001234567",
+    [string]$SiteCode = "MCM",
+    [string]$Comment = "WO#00000001234567",
     [string]$FileServerPath = "\\fileserver\sccm$",
     [switch]$GetLatestVersionOnly
 )
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-$ErrorActionPreference = "Stop"
 
 # --- Configuration ---
-$ChromeVersionApiUrl  = "https://versionhistory.googleapis.com/v1/chrome/platforms/win64/channels/stable/versions?order_by=version+desc&pageSize=1"
-$MsiDownloadUrl       = "https://dl.google.com/dl/chrome/install/googlechromestandaloneenterprise64.msi"
-$MsiFileName          = "googlechromestandaloneenterprise64.msi"
-$BaseDownloadRoot     = Join-Path $env:USERPROFILE "Downloads\_AutoPackager"
-$NetworkRootPath      = Join-Path $FileServerPath "Applications\Google\Chrome Enterprise"
-$Publisher            = "Google LLC"
+$ChromeVersionApiUrl = "https://versionhistory.googleapis.com/v1/chrome/platforms/win64/channels/stable/versions?order_by=version+desc&pageSize=1"
+$MsiDownloadUrl      = "https://dl.google.com/dl/chrome/install/googlechromestandaloneenterprise64.msi"
+$MsiFileName         = "googlechromestandaloneenterprise64.msi"
+
+$VendorFolder = "Google"
+$AppFolder    = "Chrome Enterprise"
+
+$BaseDownloadRoot = Join-Path $env:USERPROFILE "Downloads\_AutoPackager\Chrome"
+
 $EstimatedRuntimeMins = 10
 $MaximumRuntimeMins   = 20
 
 # --- Functions ---
-
 function Test-IsAdmin {
     try {
         $identity  = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -79,7 +79,22 @@ function Test-IsAdmin {
 
 function Connect-CMSite {
     param([Parameter(Mandatory)][string]$SiteCode)
+
     try {
+        if (-not (Get-Module -Name ConfigurationManager -ErrorAction SilentlyContinue)) {
+            $cmModulePath = Join-Path $env:SMS_ADMIN_UI_PATH "..\ConfigurationManager.psd1"
+            if (Test-Path -LiteralPath $cmModulePath) {
+                Import-Module $cmModulePath -ErrorAction Stop
+            }
+            else {
+                Import-Module ConfigurationManager -ErrorAction Stop
+            }
+        }
+
+        if (-not (Get-PSDrive -Name $SiteCode -ErrorAction SilentlyContinue)) {
+            throw "Configuration Manager PSDrive '$SiteCode' is not available."
+        }
+
         Set-Location "${SiteCode}:" -ErrorAction Stop
         Write-Host "Connected to CM site: $SiteCode"
         return $true
@@ -90,70 +105,107 @@ function Connect-CMSite {
     }
 }
 
-function Ensure-Folder {
+function Initialize-Folder {
     param([Parameter(Mandatory)][string]$Path)
-    if (-not (Test-Path -LiteralPath $Path)) {
-        New-Item -ItemType Directory -Path $Path -Force | Out-Null
+
+    $origLocation = Get-Location
+    try {
+        Set-Location C: -ErrorAction Stop
+        if (-not (Test-Path -LiteralPath $Path)) {
+            New-Item -ItemType Directory -Path $Path -Force | Out-Null
+        }
+    }
+    finally {
+        Set-Location $origLocation -ErrorAction SilentlyContinue
     }
 }
 
 function Test-NetworkShareAccess {
     param([Parameter(Mandatory)][string]$Path)
-    $originalLocation = Get-Location
+
+    $origLocation = Get-Location
     try {
         Set-Location C: -ErrorAction Stop
+
         if (-not (Test-Path -LiteralPath $Path -ErrorAction SilentlyContinue)) {
             Write-Error "Network path does not exist or is inaccessible: $Path"
             return $false
         }
-        $tmp = Join-Path $Path ("_write_test_{0}.txt" -f (Get-Random))
-        Set-Content -LiteralPath $tmp -Value "test" -Encoding ASCII -ErrorAction Stop
-        Remove-Item -LiteralPath $tmp -ErrorAction Stop
-        return $true
-    }
-    catch {
-        Write-Error "Network share is not writable: $Path ($($_.Exception.Message))"
-        return $false
+
+        try {
+            $tmp = Join-Path $Path ("_write_test_{0}.txt" -f (Get-Random))
+            Set-Content -LiteralPath $tmp -Value "test" -Encoding ASCII -ErrorAction Stop
+            Remove-Item -LiteralPath $tmp -ErrorAction Stop
+            return $true
+        }
+        catch {
+            Write-Error "Network share is not writable: $Path ($($_.Exception.Message))"
+            return $false
+        }
     }
     finally {
-        Set-Location $originalLocation -ErrorAction SilentlyContinue
+        Set-Location $origLocation -ErrorAction SilentlyContinue
     }
 }
 
 function Get-ChromeStableVersion {
     param([switch]$Quiet)
-    if (-not $Quiet) { Write-Host "Querying Chrome VersionHistory API: $ChromeVersionApiUrl" }
-    $json = (curl.exe -L --fail --silent --show-error $ChromeVersionApiUrl) -join ''
-    if ($LASTEXITCODE -ne 0) { throw "Failed to query Chrome version API: $ChromeVersionApiUrl" }
-    $data = ConvertFrom-Json $json
-    $version = $data.versions[0].version
-    if ([string]::IsNullOrWhiteSpace($version)) { throw "Could not parse Chrome stable version from API response." }
-    if (-not $Quiet) { Write-Host "Latest Chrome stable version: $version" }
-    return $version
+
+    if (-not $Quiet) {
+        Write-Host "Chrome version API URL        : $ChromeVersionApiUrl"
+    }
+
+    try {
+        $json = (curl.exe -L --fail --silent --show-error $ChromeVersionApiUrl) -join ''
+        if ($LASTEXITCODE -ne 0) { throw "Failed to query Chrome version API: $ChromeVersionApiUrl" }
+
+        $data = ConvertFrom-Json $json
+        $version = $data.versions[0].version
+        if ([string]::IsNullOrWhiteSpace($version)) {
+            throw "Could not parse Chrome stable version from API response."
+        }
+
+        if (-not $Quiet) {
+            Write-Host "Latest Chrome stable version : $version"
+        }
+        return $version
+    }
+    catch {
+        Write-Error "Failed to get Chrome version: $($_.Exception.Message)"
+        return $null
+    }
 }
 
 function Get-MsiPropertyMap {
     param([Parameter(Mandatory)][string]$MsiPath)
+
     $installer = $null
-    $db        = $null
-    $view      = $null
-    $record    = $null
+    $db = $null
+    $view = $null
+    $record = $null
+
     try {
         $installer = New-Object -ComObject WindowsInstaller.Installer
         $db = $installer.GetType().InvokeMember("OpenDatabase", "InvokeMethod", $null, $installer, @($MsiPath, 0))
-        $wanted = @("ProductName", "ProductVersion", "Manufacturer", "ProductCode")
+
+        $wanted = @("ProductVersion", "ProductCode")
         $map = @{}
+
         foreach ($p in $wanted) {
-            $sql    = "SELECT ``Value`` FROM ``Property`` WHERE ``Property``='$p'"
-            $view   = $db.GetType().InvokeMember("OpenView",   "InvokeMethod", $null, $db,   @($sql))
+            $sql  = "SELECT `Value` FROM `Property` WHERE `Property`='$p'"
+            $view = $db.GetType().InvokeMember("OpenView", "InvokeMethod", $null, $db, @($sql))
             $view.GetType().InvokeMember("Execute", "InvokeMethod", $null, $view, $null) | Out-Null
-            $record = $view.GetType().InvokeMember("Fetch",     "InvokeMethod", $null, $view, $null)
+            $record = $view.GetType().InvokeMember("Fetch", "InvokeMethod", $null, $view, $null)
+
             if ($null -ne $record) {
-                $map[$p] = $record.GetType().InvokeMember("StringData", "GetProperty", $null, $record, 1)
-            } else {
+                $val = $record.GetType().InvokeMember("StringData", "GetProperty", $null, $record, 1)
+                $map[$p] = $val
+            }
+            else {
                 $map[$p] = $null
             }
         }
+
         return $map
     }
     finally {
@@ -172,190 +224,237 @@ function Remove-CMApplicationRevisionHistoryByCIId {
         [Parameter(Mandatory)][UInt32]$CI_ID,
         [UInt32]$KeepLatest = 1
     )
+
     $history = Get-CMApplicationRevisionHistory -Id $CI_ID -ErrorAction SilentlyContinue
     if (-not $history) { return }
+
     $revs = @()
     foreach ($h in @($history)) {
-        if ($h.PSObject.Properties.Name -contains 'Revision')  { $revs += [UInt32]$h.Revision;   continue }
+        if ($h.PSObject.Properties.Name -contains 'Revision') { $revs += [UInt32]$h.Revision; continue }
         if ($h.PSObject.Properties.Name -contains 'CIVersion') { $revs += [UInt32]$h.CIVersion; continue }
     }
+
     $revs = $revs | Sort-Object -Unique -Descending
     if ($revs.Count -le $KeepLatest) { return }
+
     foreach ($rev in ($revs | Select-Object -Skip $KeepLatest)) {
         Remove-CMApplicationRevisionHistory -Id $CI_ID -Revision $rev -Force -ErrorAction Stop
     }
 }
 
-# --- GetLatestVersionOnly mode ---
+function New-MECMChromeApplication {
+    param(
+        [Parameter(Mandatory)][string]$AppName,
+        [Parameter(Mandatory)][string]$SoftwareVersion,
+        [Parameter(Mandatory)][string]$ContentPath,
+        [Parameter(Mandatory)][string]$MsiFileName,
+        [Parameter(Mandatory)][string]$ProductCode,
+        [Parameter(Mandatory)][string]$Publisher
+    )
+
+    $orig = Get-Location
+
+    try {
+        if (-not (Test-IsAdmin)) { throw "Run PowerShell as Administrator." }
+
+        if (-not (Connect-CMSite -SiteCode $SiteCode)) { throw "CM site connection failed." }
+
+        $existing = Get-CMApplication -Name $AppName -ErrorAction SilentlyContinue
+        if ($existing) {
+            Write-Warning "Application already exists: $AppName"
+            return
+        }
+
+        Write-Host "Creating CM Application      : $AppName"
+        $cmApp = New-CMApplication `
+            -Name $AppName `
+            -Publisher $Publisher `
+            -SoftwareVersion $SoftwareVersion `
+            -Description $Comment `
+            -AutoInstall $true `
+            -ErrorAction Stop
+
+        Write-Host "Application CI_ID            : $($cmApp.CI_ID)"
+
+        Set-Location C: -ErrorAction Stop
+
+        $installBatPath   = Join-Path $ContentPath "install.bat"
+        $uninstallBatPath = Join-Path $ContentPath "uninstall.bat"
+
+        if (-not (Test-Path -LiteralPath $installBatPath)) {
+            $installBat = @"
+@echo off
+setlocal
+start /wait "" msiexec.exe /i "%~dp0$MsiFileName" /qn /norestart
+exit /b 0
+"@
+            Set-Content -LiteralPath $installBatPath -Value $installBat -Encoding ASCII -ErrorAction Stop
+        }
+
+        if (-not (Test-Path -LiteralPath $uninstallBatPath)) {
+            $uninstallBat = @"
+@echo off
+setlocal
+start /wait "" msiexec.exe /x "%~dp0$MsiFileName" /qn /norestart
+exit /b 0
+"@
+            Set-Content -LiteralPath $uninstallBatPath -Value $uninstallBat -Encoding ASCII -ErrorAction Stop
+        }
+
+        if (-not (Connect-CMSite -SiteCode $SiteCode)) { throw "CM site connection failed." }
+
+        $dtName = $AppName
+
+        $clause = New-CMDetectionClauseWindowsInstaller `
+            -ProductCode $ProductCode `
+            -Value `
+            -ExpressionOperator IsEquals `
+            -ExpectedValue $SoftwareVersion
+
+        Write-Host "Adding Script Deployment Type: $dtName"
+        Add-CMScriptDeploymentType `
+            -ApplicationName $AppName `
+            -DeploymentTypeName $dtName `
+            -ContentLocation $ContentPath `
+            -InstallCommand "install.bat" `
+            -UninstallCommand "uninstall.bat" `
+            -InstallationBehaviorType InstallForSystem `
+            -LogonRequirementType WhetherOrNotUserLoggedOn `
+            -EstimatedRuntimeMins $EstimatedRuntimeMins `
+            -MaximumRuntimeMins $MaximumRuntimeMins `
+            -AddDetectionClause @($clause) `
+            -ContentFallback `
+            -SlowNetworkDeploymentMode Download `
+            -ErrorAction Stop | Out-Null
+
+        Remove-CMApplicationRevisionHistoryByCIId -CI_ID ([UInt32]$cmApp.CI_ID) -KeepLatest 1
+
+        Write-Host "Created MECM application     : $AppName"
+    }
+    finally {
+        Set-Location $orig -ErrorAction SilentlyContinue
+    }
+}
+
+function Get-ChromeNetworkAppRoot {
+    param([Parameter(Mandatory)][string]$FileServerPath)
+
+    $appsRoot   = Join-Path $FileServerPath "Applications"
+    $vendorPath = Join-Path $appsRoot $VendorFolder
+    $appPath    = Join-Path $vendorPath $AppFolder
+
+    Initialize-Folder -Path $appsRoot
+    Initialize-Folder -Path $vendorPath
+    Initialize-Folder -Path $appPath
+
+    return $appPath
+}
+
+# --- Latest-only mode ---
 if ($GetLatestVersionOnly) {
     try {
-        $version = Get-ChromeStableVersion -Quiet
-        Write-Output $version
+        $ProgressPreference = 'SilentlyContinue'
+        $v = Get-ChromeStableVersion -Quiet
+        if (-not $v) { exit 1 }
+        Write-Output $v
         exit 0
     }
     catch {
-        Write-Error "Failed to retrieve Chrome version: $($_.Exception.Message)"
         exit 1
     }
 }
 
 # --- Main ---
-$originalLocation = Get-Location
-
 try {
+    $startLocation = Get-Location
+
+    Write-Host ""
+    Write-Host ("=" * 60)
+    Write-Host "Google Chrome Enterprise (x64) Auto-Packager starting"
+    Write-Host ("=" * 60)
+    Write-Host ""
+    Write-Host ("RunAsUser                    : {0}\{1}" -f $env:USERDOMAIN,$env:USERNAME)
+    Write-Host ("Machine                      : {0}" -f $env:COMPUTERNAME)
+    Write-Host "Start location               : $startLocation"
+    Write-Host "SiteCode                     : $SiteCode"
+    Write-Host "FileServerPath               : $FileServerPath"
+    Write-Host "BaseDownloadRoot             : $BaseDownloadRoot"
+    Write-Host "MsiDownloadUrl               : $MsiDownloadUrl"
+    Write-Host "ChromeVersionApiUrl          : $ChromeVersionApiUrl"
+    Write-Host ""
+
     if (-not (Test-IsAdmin)) {
-        Write-Error "This script must be run as Administrator."
+        Write-Error "Run PowerShell as Administrator."
         exit 1
     }
 
-    Set-Location C: -ErrorAction Stop
+    Initialize-Folder -Path $BaseDownloadRoot
 
-    Write-Host ""
-    Write-Host ("=" * 60)
-    Write-Host "Google Chrome Enterprise Auto-Packager starting"
-    Write-Host ("=" * 60)
-    Write-Host ""
-    Write-Host ("RunAsUser         : {0}\{1}" -f $env:USERDOMAIN, $env:USERNAME)
-    Write-Host ("Machine           : {0}"     -f $env:COMPUTERNAME)
-    Write-Host "SiteCode          : $SiteCode"
-    Write-Host "BaseDownloadRoot  : $BaseDownloadRoot"
-    Write-Host "NetworkRootPath   : $NetworkRootPath"
-    Write-Host ""
-
-    Ensure-Folder -Path $BaseDownloadRoot
-
-    if (-not (Test-NetworkShareAccess -Path $NetworkRootPath)) {
-        throw "Network root path not accessible: $NetworkRootPath"
+    if (-not (Test-NetworkShareAccess -Path $FileServerPath)) {
+        throw "Network root path not accessible: $FileServerPath"
     }
 
-    Set-Location C: -ErrorAction Stop
+    $networkAppRoot = Get-ChromeNetworkAppRoot -FileServerPath $FileServerPath
 
-    # 1. Download MSI (always resolves to latest stable)
+    # Always download MSI (URL serves latest stable release)
     $localMsi = Join-Path $BaseDownloadRoot $MsiFileName
+
     Write-Host "Downloading Chrome Enterprise MSI..."
     curl.exe -L --fail --silent --show-error -o $localMsi $MsiDownloadUrl
     if ($LASTEXITCODE -ne 0) { throw "MSI download failed: $MsiDownloadUrl" }
-    Write-Host "Downloaded: $localMsi"
 
-    # 2. Extract MSI properties
-    Write-Host "Reading MSI properties..."
     $props = Get-MsiPropertyMap -MsiPath $localMsi
-    $productName    = $props["ProductName"]
+
     $productVersion = $props["ProductVersion"]
     $productCode    = $props["ProductCode"]
 
     if ([string]::IsNullOrWhiteSpace($productVersion)) { throw "MSI ProductVersion missing." }
     if ([string]::IsNullOrWhiteSpace($productCode))    { throw "MSI ProductCode missing." }
 
-    Write-Host "ProductName    : $productName"
-    Write-Host "ProductVersion : $productVersion"
-    Write-Host "ProductCode    : $productCode"
+    $contentPath = Join-Path $networkAppRoot $productVersion
+
+    Initialize-Folder -Path $contentPath
+
+    $netMsi = Join-Path $contentPath $MsiFileName
+
+    Write-Host "Version                      : $productVersion"
+    Write-Host "ProductCode                  : $productCode"
+    Write-Host "Local MSI                    : $localMsi"
+    Write-Host "ContentPath                  : $contentPath"
+    Write-Host "Network MSI                  : $netMsi"
     Write-Host ""
 
-    # 3. Create versioned content folder
-    $contentPath = Join-Path $NetworkRootPath $productVersion
-    Ensure-Folder -Path $contentPath
-
-    # 4. Copy MSI
-    $netMsi = Join-Path $contentPath $MsiFileName
     if (-not (Test-Path -LiteralPath $netMsi)) {
         Write-Host "Copying MSI to network..."
         Copy-Item -LiteralPath $localMsi -Destination $netMsi -Force -ErrorAction Stop
-    } else {
-        Write-Host "Network MSI already exists. Skipping copy."
+    }
+    else {
+        Write-Host "Network MSI exists. Skipping copy."
     }
 
-    # 5. Write install.bat and uninstall.bat
-    $installBatPath   = Join-Path $contentPath "install.bat"
-    $uninstallBatPath = Join-Path $contentPath "uninstall.bat"
+    $appName   = "Google Chrome Enterprise $productVersion"
+    $publisher = "Google LLC"
 
-    if (-not (Test-Path -LiteralPath $installBatPath)) {
-        $installBat = @"
-@echo off
-setlocal
-start /wait "" msiexec.exe /i "%~dp0$MsiFileName" /qn /norestart
-exit /b 0
-"@
-        Set-Content -LiteralPath $installBatPath -Value $installBat -Encoding ASCII -ErrorAction Stop
-    }
-
-    if (-not (Test-Path -LiteralPath $uninstallBatPath)) {
-        $uninstallBat = @"
-@echo off
-setlocal
-start /wait "" msiexec.exe /x "%~dp0$MsiFileName" /qn /norestart
-exit /b 0
-"@
-        Set-Content -LiteralPath $uninstallBatPath -Value $uninstallBat -Encoding ASCII -ErrorAction Stop
-    }
-
-    Write-Host "install.bat and uninstall.bat ready."
-
-    # 6. Connect to Configuration Manager
-    $appName = "Google Chrome Enterprise $productVersion"
-    Write-Host "CM Application Name : $appName"
+    Write-Host ""
+    Write-Host "CM Application Name          : $appName"
+    Write-Host "CM SoftwareVersion           : $productVersion"
     Write-Host ""
 
-    if (-not (Connect-CMSite -SiteCode $SiteCode)) {
-        throw "Cannot proceed without CM connection."
-    }
-
-    # 7. Check for existing application
-    $existingApp = Get-CMApplication -Name $appName -ErrorAction SilentlyContinue
-    if ($existingApp) {
-        Write-Warning "Application '$appName' already exists (CI_ID: $($existingApp.CI_ID)). Exiting."
-        exit 1
-    }
-
-    # 8. Create application
-    Write-Host "Creating application '$appName'..." -ForegroundColor Yellow
-    $cmApp = New-CMApplication `
-        -Name $appName `
-        -Publisher $Publisher `
+    New-MECMChromeApplication `
+        -AppName $appName `
         -SoftwareVersion $productVersion `
-        -LocalizedApplicationName $appName `
-        -Description $Comment `
-        -AutoInstall $true `
-        -ErrorAction Stop
-
-    Write-Host "Application CI_ID: $($cmApp.CI_ID)"
-
-    # 9. MSI detection (ProductCode + exact version)
-    $clause = New-CMDetectionClauseWindowsInstaller `
+        -ContentPath $contentPath `
+        -MsiFileName $MsiFileName `
         -ProductCode $productCode `
-        -Value `
-        -ExpressionOperator IsEquals `
-        -ExpectedValue $productVersion
+        -Publisher $publisher
 
-    # 10. Add Script Deployment Type
-    Write-Host "Adding deployment type '$appName'..."
-    Add-CMScriptDeploymentType `
-        -ApplicationName $appName `
-        -DeploymentTypeName $appName `
-        -ContentLocation $contentPath `
-        -InstallCommand "install.bat" `
-        -UninstallCommand "uninstall.bat" `
-        -InstallationBehaviorType InstallForSystem `
-        -LogonRequirementType WhetherOrNotUserLoggedOn `
-        -UserInteractionMode Hidden `
-        -EstimatedRuntimeMins $EstimatedRuntimeMins `
-        -MaximumRuntimeMins $MaximumRuntimeMins `
-        -AddDetectionClause @($clause) `
-        -ContentFallback $true `
-        -SlowNetworkDeploymentMode Download `
-        -RebootBehavior NoAction `
-        -ErrorAction Stop | Out-Null
-
-    # 11. Revision history cleanup
-    Remove-CMApplicationRevisionHistoryByCIId -CI_ID ([UInt32]$cmApp.CI_ID) -KeepLatest 1
-
-    Write-Host "Google Chrome Enterprise $productVersion packaged successfully." -ForegroundColor Green
+    Write-Host ""
+    Write-Host "Script execution complete."
 }
 catch {
-    Write-Error "Script failed: $($_.Exception.Message)"
+    Write-Error "SCRIPT FAILED: $($_.Exception.Message)"
     exit 1
 }
 finally {
-    Set-Location $originalLocation -ErrorAction SilentlyContinue
-    Write-Host "Restored initial location to: ${originalLocation}"
+    Set-Location $startLocation -ErrorAction SilentlyContinue
 }

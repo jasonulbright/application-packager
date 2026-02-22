@@ -1,73 +1,77 @@
-﻿<#
+<#
 Vendor: Tableau
 App: Tableau Desktop (x64)
 CMName: Tableau 20
 
 .SYNOPSIS
-    Automates downloading the latest Tableau Desktop installer (x64) and creating an MECM application.
+    Packages Tableau Desktop (x64) for MECM.
 
 .DESCRIPTION
-    Creates an MECM application for Tableau Desktop, using registry-based detection
-    and batch file installation. Temporarily installs the product to extract registry data (DisplayName, DisplayVersion, Publisher, InstallLocation)
-    and file version from the detection executable. Application and deployment type names use the registry DisplayName.
-    Stores installers and batch files in \\fileshare\sccm$\Applications\Tableau\<Product>\<Version>.
-    MECM settings: 30-minute max runtime, 10-minute estimated runtime, system installation, no user logon requirement.
-    Checks for existing files locally and on network share to skip redundant downloads/copies.
-    Uses Add-CMScriptDeploymentType for the detection clause.
+    Downloads the latest Tableau Desktop x64 installer from the official
+    Tableau download server, stages content to a versioned network location,
+    temporarily installs the product to extract registry metadata and file
+    versions, and creates an MECM Application with file-based version detection.
+    Detection uses tableau.exe version from the registry-discovered install location.
 
-.NOTES
-    - Run with admin privileges for registry access, installation, and MECM operations.
-    - Requires PowerShell 5.1 and Configuration Manager module.
-    - Temporarily installs and uninstalls product to extract registry data and file versions.
-    - No residual files or registry entries are left after uninstallation.
-    - Assumes installations always succeed in a clean packaging environment.
+.PARAMETER SiteCode
+    ConfigMgr site code PSDrive name (e.g., "MCM").
+    The PSDrive is assumed to already exist in the session.
+
+.PARAMETER Comment
+    Free-form change/WO text stored on the CM Application Description field.
+
+.PARAMETER FileServerPath
+    UNC root that contains your Applications folder (example: \\fileserver\sccm$).
+    Content is staged under: <FileServerPath>\Applications\Tableau\Desktop\<Version>
+
+.PARAMETER GetLatestVersionOnly
+    Outputs only the latest available Tableau Desktop version string and exits.
+
+.REQUIREMENTS
+    - PowerShell 5.1
+    - ConfigMgr Admin Console installed (ConfigurationManager PowerShell module available)
+    - RBAC permissions to create Applications and Deployment Types
+    - Local administrator
+    - Write access to FileServerPath
 #>
 
 param(
-    [string]$SiteCode       = "MCM",
-    [string]$Comment        = "WO#00000001234567",
+    [string]$SiteCode = "MCM",
+    [string]$Comment = "WO#00000001234567",
     [string]$FileServerPath = "\\fileserver\sccm$",
     [switch]$GetLatestVersionOnly
 )
 
-# --- Configuration Variables ---
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-# Base URL for Tableau software downloads
+# --- Configuration ---
 $BaseDownloadUrl = "https://downloads.tableau.com/tssoftware/"
-
-# URL to Tableau's release notes page
 $ReleaseNotesUrl = "https://www.tableau.com/support/releases"
 
-# Download and local temp directories
-$BaseDownloadRoot = Join-Path $env:USERPROFILE "Downloads\Tableau_installers"
-$LocalTempRoot = "C:\temp"
-$TableauRootNetworkPath = Join-Path $FileServerPath "Applications\Tableau"
+$VendorFolder = "Tableau"
+$AppFolder    = "Desktop"
 
-# Define the Tableau product and its metadata
-$TableauProducts = @(
-    @{
-        Name = "Tableau {0}" # e.g., "Tableau 2025.2.3"
-        Subfolder = "Desktop"
-        FileNamePattern = "TableauDesktop-64bit-{0}.exe"
-        ProgramsAndFeaturesNamePrefix = "Tableau 20"
-        DetectionFile = "tableau.exe"
-        InstallBatContent = '"%~dp0TableauDesktop-64bit-{0}.exe" /install /quiet /norestart ACCEPTEULA=1 REMOVEINSTALLEDAPP=1 SENDTELEMETRY=0'
-        UninstallBatContent = '"%~dp0TableauDesktop-64bit-{0}.exe" /uninstall /quiet /norestart'
-        RegistryKey = "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
-    }
-)
+$InstallerPrefix   = "TableauDesktop-64bit"
+$DetectionFileName = "tableau.exe"
+$RegistryPrefix    = "Tableau 20"
+
+$InstallArgs   = "/install /quiet /norestart ACCEPTEULA=1 REMOVEINSTALLEDAPP=1 SENDTELEMETRY=0"
+$UninstallArgs = "/uninstall /quiet /norestart"
+
+$BaseDownloadRoot = Join-Path $env:USERPROFILE "Downloads\_AutoPackager\TableauDesktop"
+
+$EstimatedRuntimeMins = 10
+$MaximumRuntimeMins   = 30
 
 # --- Functions ---
-
 function Test-IsAdmin {
     try {
-        $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+        $identity  = [Security.Principal.WindowsIdentity]::GetCurrent()
         $principal = New-Object Security.Principal.WindowsPrincipal($identity)
         return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     }
     catch {
-        Write-Warning "Failed to check admin privileges: $($_.Exception.Message)"
+        Write-Warning "Admin check failed: $($_.Exception.Message)"
         return $false
     }
 }
@@ -76,6 +80,20 @@ function Connect-CMSite {
     param([Parameter(Mandatory)][string]$SiteCode)
 
     try {
+        if (-not (Get-Module -Name ConfigurationManager -ErrorAction SilentlyContinue)) {
+            $cmModulePath = Join-Path $env:SMS_ADMIN_UI_PATH "..\ConfigurationManager.psd1"
+            if (Test-Path -LiteralPath $cmModulePath) {
+                Import-Module $cmModulePath -ErrorAction Stop
+            }
+            else {
+                Import-Module ConfigurationManager -ErrorAction Stop
+            }
+        }
+
+        if (-not (Get-PSDrive -Name $SiteCode -ErrorAction SilentlyContinue)) {
+            throw "Configuration Manager PSDrive '$SiteCode' is not available."
+        }
+
         Set-Location "${SiteCode}:" -ErrorAction Stop
         Write-Host "Connected to CM site: $SiteCode"
         return $true
@@ -86,74 +104,102 @@ function Connect-CMSite {
     }
 }
 
-function Compare-TableauVersion {
-    param (
-        [string]$Version1,
-        [string]$Version2
-    )
-    $v1Parts = $Version1 -split '-' | ForEach-Object { [int]$_ }
-    $v2Parts = $Version2 -split '-' | ForEach-Object { [int]$_ }
-    if ($v1Parts.Count -lt 3) { $v1Parts += 0 }
-    if ($v2Parts.Count -lt 3) { $v2Parts += 0 }
-    if ($v1Parts[0] -gt $v2Parts[0]) { return 1 }
-    if ($v1Parts[0] -lt $v2Parts[0]) { return -1 }
-    if ($v1Parts[1] -gt $v2Parts[1]) { return 1 }
-    if ($v1Parts[1] -lt $v2Parts[1]) { return -1 }
-    if ($v1Parts[2] -gt $v2Parts[2]) { return 1 }
-    if ($v1Parts[2] -lt $v2Parts[2]) { return -1 }
-    return 0
+function Initialize-Folder {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $origLocation = Get-Location
+    try {
+        Set-Location C: -ErrorAction Stop
+        if (-not (Test-Path -LiteralPath $Path)) {
+            New-Item -ItemType Directory -Path $Path -Force | Out-Null
+        }
+    }
+    finally {
+        Set-Location $origLocation -ErrorAction SilentlyContinue
+    }
+}
+
+function Test-NetworkShareAccess {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $origLocation = Get-Location
+    try {
+        Set-Location C: -ErrorAction Stop
+
+        if (-not (Test-Path -LiteralPath $Path -ErrorAction SilentlyContinue)) {
+            Write-Error "Network path does not exist or is inaccessible: $Path"
+            return $false
+        }
+
+        try {
+            $tmp = Join-Path $Path ("_write_test_{0}.txt" -f (Get-Random))
+            Set-Content -LiteralPath $tmp -Value "test" -Encoding ASCII -ErrorAction Stop
+            Remove-Item -LiteralPath $tmp -ErrorAction Stop
+            return $true
+        }
+        catch {
+            Write-Error "Network share is not writable: $Path ($($_.Exception.Message))"
+            return $false
+        }
+    }
+    finally {
+        Set-Location $origLocation -ErrorAction SilentlyContinue
+    }
 }
 
 function Get-LatestTableauVersion {
     param([switch]$Quiet)
 
-    $originalLocation = Get-Location
-    if (-not $Quiet) { Write-Host "Current location before getting latest version: ${originalLocation}" }
+    if (-not $Quiet) {
+        Write-Host "Tableau release notes URL     : $ReleaseNotesUrl"
+    }
+
     try {
-        Set-Location $PSScriptRoot -ErrorAction Stop
-        if (-not $Quiet) { Write-Host "Set location to script directory for version check: ${PSScriptRoot}" }
-        if (-not $Quiet) { Write-Host "Attempting to find the latest Tableau version from: $ReleaseNotesUrl" }
         $HtmlContent = (curl.exe -L --fail --silent --show-error $ReleaseNotesUrl) -join "`n"
         if ($LASTEXITCODE -ne 0) { throw "Failed to fetch release notes: $ReleaseNotesUrl" }
-        $versionPattern = '\b(20\d{2})[.-](\d+)(?:[.-](\d+))?\b'
-        $matches = [regex]::Matches($HtmlContent, $versionPattern)
 
-        if ($matches.Count -eq 0) {
-            Write-Error "No version matches found in release notes."
-            return $null
+        $versionPattern = '\b(20\d{2})[.-](\d+)(?:[.-](\d+))?\b'
+        $regexMatches = [regex]::Matches($HtmlContent, $versionPattern)
+
+        if ($regexMatches.Count -eq 0) {
+            throw "No version matches found in release notes."
         }
 
-        $versions = foreach ($m in $matches) {
-            $year = $m.Groups[1].Value
+        $versions = foreach ($m in $regexMatches) {
+            $year  = $m.Groups[1].Value
             $minor = $m.Groups[2].Value
             $patch = $m.Groups[3].Value
             if (-not $patch) { $patch = "0" }
-            "{0}-{1}-{2}" -f $year, $minor, $patch
+            "{0}.{1}.{2}" -f $year, $minor, $patch
         }
 
         $versions = $versions | Select-Object -Unique
 
-        $latest = $versions | Sort-Object -Descending -Property @{ Expression = { ($_ -split '-')[0] -as [int] } },
-                                                 @{ Expression = { ($_ -split '-')[1] -as [int] } },
-                                                 @{ Expression = { ($_ -split '-')[2] -as [int] } } |
-                  Select-Object -First 1
+        $latest = $versions | Sort-Object -Descending -Property @{
+                Expression = { [int](($_ -split '\.')[0]) }
+            }, @{
+                Expression = { [int](($_ -split '\.')[1]) }
+            }, @{
+                Expression = { [int](($_ -split '\.')[2]) }
+            } | Select-Object -First 1
 
-        if (-not $Quiet) { Write-Host "Latest Tableau version found (dash format): $latest" }
+        if (-not $latest) {
+            throw "Could not determine latest Tableau version."
+        }
+
+        if (-not $Quiet) {
+            Write-Host "Latest Tableau version        : $latest"
+        }
         return $latest
     }
     catch {
-        Write-Error "Error determining latest Tableau version: $($_.Exception.Message)"
+        Write-Error "Failed to get Tableau version: $($_.Exception.Message)"
         return $null
-    }
-    finally {
-        Set-Location $originalLocation -ErrorAction SilentlyContinue
     }
 }
 
 function Get-InstalledAppRegistryInfo {
-    param(
-        [Parameter(Mandatory)] [string]$DisplayNamePrefix
-    )
+    param([Parameter(Mandatory)][string]$DisplayNamePrefix)
 
     $uninstallPaths = @(
         "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
@@ -174,9 +220,8 @@ function Get-InstalledAppRegistryInfo {
 }
 
 function Get-FileVersion {
-    param(
-        [Parameter(Mandatory)] [string]$FilePath
-    )
+    param([Parameter(Mandatory)][string]$FilePath)
+
     if (-not (Test-Path -LiteralPath $FilePath)) { return $null }
     try {
         return (Get-Item -LiteralPath $FilePath).VersionInfo.FileVersion
@@ -186,255 +231,272 @@ function Get-FileVersion {
     }
 }
 
-function New-ContentFolder {
-    param(
-        [Parameter(Mandatory)] [string]$Path
-    )
-    if (-not (Test-Path -LiteralPath $Path)) {
-        New-Item -ItemType Directory -Path $Path -Force | Out-Null
-    }
-}
-
-function Write-InstallUninstallBats {
-    param(
-        [Parameter(Mandatory)] [string]$FolderPath,
-        [Parameter(Mandatory)] [string]$InstallContent,
-        [Parameter(Mandatory)] [string]$UninstallContent
-    )
-
-    $installBat = Join-Path $FolderPath "install.bat"
-    $uninstallBat = Join-Path $FolderPath "uninstall.bat"
-
-    Set-Content -LiteralPath $installBat -Value "@echo off`r`nsetlocal`r`n$InstallContent`r`nexit /b 0`r`n" -Encoding ASCII
-    Set-Content -LiteralPath $uninstallBat -Value "@echo off`r`nsetlocal`r`n$UninstallContent`r`nexit /b 0`r`n" -Encoding ASCII
-}
-
-function Download-InstallerIfNeeded {
-    param(
-        [Parameter(Mandatory)] [string]$DownloadUrl,
-        [Parameter(Mandatory)] [string]$LocalFilePath
-    )
-
-    if (Test-Path -LiteralPath $LocalFilePath) {
-        Write-Host "Installer already exists locally: $LocalFilePath"
-        return
-    }
-
-    Write-Host "Downloading installer from: $DownloadUrl"
-    curl.exe -L --fail --silent --show-error -o $LocalFilePath $DownloadUrl
-    if ($LASTEXITCODE -ne 0) { throw "Download failed: $DownloadUrl" }
-}
-
-function Copy-InstallerToNetworkIfNeeded {
-    param(
-        [Parameter(Mandatory)] [string]$LocalFilePath,
-        [Parameter(Mandatory)] [string]$NetworkFilePath
-    )
-
-    if (Test-Path -LiteralPath $NetworkFilePath) {
-        Write-Host "Installer already exists on network share: $NetworkFilePath"
-        return
-    }
-
-    Copy-Item -LiteralPath $LocalFilePath -Destination $NetworkFilePath -Force -ErrorAction Stop
-}
-
-function Install-ForMetadataExtraction {
-    param(
-        [Parameter(Mandatory)] [string]$InstallerPath,
-        [Parameter(Mandatory)] [string]$InstallArgs
-    )
-
-    Write-Host "Installing temporarily for metadata extraction: $InstallerPath"
-    Start-Process -FilePath $InstallerPath -ArgumentList $InstallArgs -Wait -NoNewWindow
-}
-
-function Uninstall-AfterMetadataExtraction {
-    param(
-        [Parameter(Mandatory)] [string]$InstallerPath,
-        [Parameter(Mandatory)] [string]$UninstallArgs
-    )
-
-    Write-Host "Uninstalling after metadata extraction: $InstallerPath"
-    Start-Process -FilePath $InstallerPath -ArgumentList $UninstallArgs -Wait -NoNewWindow
-}
-
 function Remove-CMApplicationRevisionHistoryByCIId {
     param(
         [Parameter(Mandatory)][UInt32]$CI_ID,
         [UInt32]$KeepLatest = 1
     )
+
     $history = Get-CMApplicationRevisionHistory -Id $CI_ID -ErrorAction SilentlyContinue
     if (-not $history) { return }
+
     $revs = @()
     foreach ($h in @($history)) {
-        if ($h.PSObject.Properties.Name -contains 'Revision')  { $revs += [UInt32]$h.Revision;   continue }
+        if ($h.PSObject.Properties.Name -contains 'Revision') { $revs += [UInt32]$h.Revision; continue }
         if ($h.PSObject.Properties.Name -contains 'CIVersion') { $revs += [UInt32]$h.CIVersion; continue }
     }
+
     $revs = $revs | Sort-Object -Unique -Descending
     if ($revs.Count -le $KeepLatest) { return }
+
     foreach ($rev in ($revs | Select-Object -Skip $KeepLatest)) {
         Remove-CMApplicationRevisionHistory -Id $CI_ID -Revision $rev -Force -ErrorAction Stop
     }
 }
 
-function New-MECMApplicationForTableau {
+function New-MECMTableauDesktopApplication {
     param(
-        [Parameter(Mandatory)] [string]$AppName,
-        [Parameter(Mandatory)] [string]$Publisher,
-        [Parameter(Mandatory)] [string]$SoftwareVersion,
-        [Parameter(Mandatory)] [string]$ContentLocation,
-        [Parameter(Mandatory)] [string]$InstallCommand,
-        [Parameter(Mandatory)] [string]$UninstallCommand,
-        [Parameter(Mandatory)] [string]$DetectionExePath,
-        [Parameter(Mandatory)] [string]$DetectionExeVersion
+        [Parameter(Mandatory)][string]$AppName,
+        [Parameter(Mandatory)][string]$SoftwareVersion,
+        [Parameter(Mandatory)][string]$ContentPath,
+        [Parameter(Mandatory)][string]$InstallerFileName,
+        [Parameter(Mandatory)][string]$Publisher,
+        [Parameter(Mandatory)][string]$DetectionExePath,
+        [Parameter(Mandatory)][string]$DetectionExeVersion
     )
 
-    if (-not (Connect-CMSite -SiteCode $SiteCode)) {
-        throw "Unable to connect to CM site drive."
+    $orig = Get-Location
+
+    try {
+        if (-not (Test-IsAdmin)) { throw "Run PowerShell as Administrator." }
+
+        if (-not (Connect-CMSite -SiteCode $SiteCode)) { throw "CM site connection failed." }
+
+        $existing = Get-CMApplication -Name $AppName -ErrorAction SilentlyContinue
+        if ($existing) {
+            Write-Warning "Application already exists: $AppName"
+            return
+        }
+
+        Write-Host "Creating CM Application      : $AppName"
+        $cmApp = New-CMApplication `
+            -Name $AppName `
+            -Publisher $Publisher `
+            -SoftwareVersion $SoftwareVersion `
+            -Description $Comment `
+            -AutoInstall $true `
+            -ErrorAction Stop
+
+        Write-Host "Application CI_ID            : $($cmApp.CI_ID)"
+
+        Set-Location C: -ErrorAction Stop
+
+        $installBatPath   = Join-Path $ContentPath "install.bat"
+        $uninstallBatPath = Join-Path $ContentPath "uninstall.bat"
+
+        if (-not (Test-Path -LiteralPath $installBatPath)) {
+            $installBat = @"
+@echo off
+setlocal
+start /wait "" "%~dp0$InstallerFileName" $InstallArgs
+exit /b 0
+"@
+            Set-Content -LiteralPath $installBatPath -Value $installBat -Encoding ASCII -ErrorAction Stop
+        }
+
+        if (-not (Test-Path -LiteralPath $uninstallBatPath)) {
+            $uninstallBat = @"
+@echo off
+setlocal
+start /wait "" "%~dp0$InstallerFileName" $UninstallArgs
+exit /b 0
+"@
+            Set-Content -LiteralPath $uninstallBatPath -Value $uninstallBat -Encoding ASCII -ErrorAction Stop
+        }
+
+        if (-not (Connect-CMSite -SiteCode $SiteCode)) { throw "CM site connection failed." }
+
+        $dtName = $AppName
+
+        $clause = New-CMDetectionClauseFile `
+            -Path (Split-Path -Path $DetectionExePath -Parent) `
+            -FileName (Split-Path -Path $DetectionExePath -Leaf) `
+            -Value `
+            -PropertyType Version `
+            -ExpressionOperator GreaterEquals `
+            -ExpectedValue $DetectionExeVersion
+
+        Write-Host "Adding Script Deployment Type: $dtName"
+        Add-CMScriptDeploymentType `
+            -ApplicationName $AppName `
+            -DeploymentTypeName $dtName `
+            -ContentLocation $ContentPath `
+            -InstallCommand "install.bat" `
+            -UninstallCommand "uninstall.bat" `
+            -InstallationBehaviorType InstallForSystem `
+            -LogonRequirementType WhetherOrNotUserLoggedOn `
+            -EstimatedRuntimeMins $EstimatedRuntimeMins `
+            -MaximumRuntimeMins $MaximumRuntimeMins `
+            -AddDetectionClause @($clause) `
+            -ContentFallback `
+            -SlowNetworkDeploymentMode Download `
+            -ErrorAction Stop | Out-Null
+
+        Remove-CMApplicationRevisionHistoryByCIId -CI_ID ([UInt32]$cmApp.CI_ID) -KeepLatest 1
+
+        Write-Host "Created MECM application     : $AppName"
     }
-
-    $existingApp = Get-CMApplication -Name $AppName -ErrorAction SilentlyContinue
-    if ($existingApp) {
-        Write-Warning "Application already exists: $AppName"
-        return
+    finally {
+        Set-Location $orig -ErrorAction SilentlyContinue
     }
+}
 
-    $cmApp = New-CMApplication -Name $AppName -Publisher $Publisher -SoftwareVersion $SoftwareVersion -Description $Comment -LocalizedApplicationName $AppName -ErrorAction Stop
+function Get-TableauDesktopNetworkAppRoot {
+    param([Parameter(Mandatory)][string]$FileServerPath)
 
-    $detectionClause = New-CMDetectionClauseFile `
-        -Path (Split-Path -Path $DetectionExePath -Parent) `
-        -FileName (Split-Path -Path $DetectionExePath -Leaf) `
-        -PropertyType Version `
-        -ExpressionOperator GreaterEquals `
-        -ExpectedValue $DetectionExeVersion `
-        -Value
+    $appsRoot   = Join-Path $FileServerPath "Applications"
+    $vendorPath = Join-Path $appsRoot $VendorFolder
+    $appPath    = Join-Path $vendorPath $AppFolder
 
-    Add-CMScriptDeploymentType `
-        -ApplicationName $AppName `
-        -DeploymentTypeName $AppName `
-        -InstallCommand $InstallCommand `
-        -UninstallCommand $UninstallCommand `
-        -ContentLocation $ContentLocation `
-        -InstallationBehaviorType InstallForSystem `
-        -LogonRequirementType WhetherOrNotUserLoggedOn `
-        -EstimatedRuntimeMins 10 `
-        -MaximumRuntimeMins 30 `
-        -AddDetectionClause $detectionClause `
-        -ErrorAction Stop | Out-Null
-    Remove-CMApplicationRevisionHistoryByCIId -CI_ID ([UInt32]$cmApp.CI_ID) -KeepLatest 1
+    Initialize-Folder -Path $appsRoot
+    Initialize-Folder -Path $vendorPath
+    Initialize-Folder -Path $appPath
 
-    Write-Host "Created MECM application: $AppName"
+    return $appPath
 }
 
 # --- Latest-only mode ---
 if ($GetLatestVersionOnly) {
     try {
+        $ProgressPreference = 'SilentlyContinue'
         $v = Get-LatestTableauVersion -Quiet
         if (-not $v) { exit 1 }
-        Write-Output ($v -replace '-', '.')
+        Write-Output $v
         exit 0
     }
-    catch { exit 1 }
+    catch {
+        exit 1
+    }
 }
 
-# --- Main Script ---
-
+# --- Main ---
 try {
-    $originalLocation = Get-Location
+    $startLocation = Get-Location
+
+    Write-Host ""
+    Write-Host ("=" * 60)
+    Write-Host "Tableau Desktop (x64) Auto-Packager starting"
+    Write-Host ("=" * 60)
+    Write-Host ""
+    Write-Host ("RunAsUser                    : {0}\{1}" -f $env:USERDOMAIN,$env:USERNAME)
+    Write-Host ("Machine                      : {0}" -f $env:COMPUTERNAME)
+    Write-Host "Start location               : $startLocation"
+    Write-Host "SiteCode                     : $SiteCode"
+    Write-Host "FileServerPath               : $FileServerPath"
+    Write-Host "BaseDownloadRoot             : $BaseDownloadRoot"
+    Write-Host "ReleaseNotesUrl              : $ReleaseNotesUrl"
+    Write-Host ""
+
     if (-not (Test-IsAdmin)) {
-        Write-Error "This script must be run with admin privileges. Please run PowerShell as Administrator."
+        Write-Error "Run PowerShell as Administrator."
         exit 1
     }
 
-    Set-Location $PSScriptRoot -ErrorAction Stop
+    Initialize-Folder -Path $BaseDownloadRoot
 
-    $LatestTableauVersion = Get-LatestTableauVersion
-    if (-not $LatestTableauVersion) {
-        Write-Error "Exiting script because the latest Tableau version could not be determined."
+    if (-not (Test-NetworkShareAccess -Path $FileServerPath)) {
+        throw "Network root path not accessible: $FileServerPath"
+    }
+
+    $networkAppRoot = Get-TableauDesktopNetworkAppRoot -FileServerPath $FileServerPath
+
+    $version = Get-LatestTableauVersion
+    if (-not $version) {
+        throw "Could not resolve Tableau Desktop version."
+    }
+
+    $installerFileName = "${InstallerPrefix}-${version}.exe"
+    $localExe    = Join-Path $BaseDownloadRoot $installerFileName
+    $contentPath = Join-Path $networkAppRoot $version
+
+    Initialize-Folder -Path $contentPath
+
+    $netExe = Join-Path $contentPath $installerFileName
+
+    Write-Host "Version                      : $version"
+    Write-Host "Local installer              : $localExe"
+    Write-Host "ContentPath                  : $contentPath"
+    Write-Host "Network installer            : $netExe"
+    Write-Host ""
+
+    if (-not (Test-Path -LiteralPath $localExe)) {
+        Write-Host "Downloading installer..."
+        $downloadUrl = "${BaseDownloadUrl}${installerFileName}"
+        curl.exe -L --fail --silent --show-error -o $localExe $downloadUrl
+        if ($LASTEXITCODE -ne 0) { throw "Download failed: $downloadUrl" }
+    }
+    else {
+        Write-Host "Local installer exists. Skipping download."
+    }
+
+    if (-not (Test-Path -LiteralPath $netExe)) {
+        Write-Host "Copying installer to network..."
+        Copy-Item -LiteralPath $localExe -Destination $netExe -Force -ErrorAction Stop
+    }
+    else {
+        Write-Host "Network installer exists. Skipping copy."
+    }
+
+    # --- Temporary install for metadata extraction ---
+    Write-Host ""
+    Write-Host "Installing temporarily for metadata extraction..."
+    Start-Process -FilePath $localExe -ArgumentList $InstallArgs -Wait -NoNewWindow
+
+    $regInfo = Get-InstalledAppRegistryInfo -DisplayNamePrefix $RegistryPrefix
+    if (-not $regInfo) {
+        Write-Error "Could not find installed application in registry: $RegistryPrefix"
+        Write-Host "Uninstalling after failed metadata extraction..."
+        Start-Process -FilePath $localExe -ArgumentList $UninstallArgs -Wait -NoNewWindow
         exit 1
     }
 
-    $LatestTableauVersionDotted = $LatestTableauVersion -replace '-', '.'
+    $displayName     = $regInfo.DisplayName
+    $displayVersion  = $regInfo.DisplayVersion
+    $publisher       = $regInfo.Publisher
+    $installLocation = $regInfo.InstallLocation
 
-    foreach ($product in $TableauProducts) {
-
-        $ProductName = $product.Name -f $LatestTableauVersionDotted
-        $Subfolder = $product.Subfolder
-        $InstallerFileName = $product.FileNamePattern -f $LatestTableauVersionDotted
-        $ProgramsAndFeaturesNamePrefix = $product.ProgramsAndFeaturesNamePrefix
-        $DetectionFile = $product.DetectionFile
-        $InstallBatContent = $product.InstallBatContent -f $LatestTableauVersionDotted
-        $UninstallBatContent = $product.UninstallBatContent -f $LatestTableauVersionDotted
-
-        Write-Host ""
-        Write-Host ("=" * 60)
-        Write-Host "Processing: $ProductName"
-        Write-Host ("=" * 60)
-
-        $LocalDownloadPath = Join-Path $BaseDownloadRoot $Subfolder
-        $LocalInstallerPath = Join-Path $LocalDownloadPath $InstallerFileName
-
-        $NetworkProductRoot = Join-Path $TableauRootNetworkPath $Subfolder
-        $NetworkVersionPath = Join-Path $NetworkProductRoot $LatestTableauVersionDotted
-        $NetworkInstallerPath = Join-Path $NetworkVersionPath $InstallerFileName
-
-        New-ContentFolder -Path $LocalDownloadPath
-        New-ContentFolder -Path $LocalTempRoot
-        New-ContentFolder -Path $NetworkProductRoot
-        New-ContentFolder -Path $NetworkVersionPath
-
-        $DownloadUrl = "{0}{1}" -f $BaseDownloadUrl, $InstallerFileName
-
-        Download-InstallerIfNeeded -DownloadUrl $DownloadUrl -LocalFilePath $LocalInstallerPath
-        Copy-InstallerToNetworkIfNeeded -LocalFilePath $LocalInstallerPath -NetworkFilePath $NetworkInstallerPath
-
-        Write-InstallUninstallBats -FolderPath $NetworkVersionPath -InstallContent $InstallBatContent -UninstallContent $UninstallBatContent
-
-        # Temporary install for metadata extraction (uses same args as BAT wrapper)
-        Install-ForMetadataExtraction -InstallerPath $LocalInstallerPath -InstallArgs "/install /quiet /norestart ACCEPTEULA=1 REMOVEINSTALLEDAPP=1 SENDTELEMETRY=0"
-
-        $regInfo = Get-InstalledAppRegistryInfo -DisplayNamePrefix $ProgramsAndFeaturesNamePrefix
-        if (-not $regInfo) {
-            Write-Error "Could not find installed application in registry after install: $ProgramsAndFeaturesNamePrefix"
-            Uninstall-AfterMetadataExtraction -InstallerPath $LocalInstallerPath -UninstallArgs "/uninstall /quiet /norestart"
-            exit 1
-        }
-
-        $displayName = $regInfo.DisplayName
-        $displayVersion = $regInfo.DisplayVersion
-        $publisher = $regInfo.Publisher
-        $installLocation = $regInfo.InstallLocation
-
-        if (-not $installLocation) {
-            $installLocation = "C:\Program Files\Tableau"
-        }
-
-        $detectionExe = Join-Path $installLocation $DetectionFile
-        $detectionExeVersion = Get-FileVersion -FilePath $detectionExe
-
-        if (-not $detectionExeVersion) {
-            Write-Warning "Could not determine file version for detection file: $detectionExe"
-            $detectionExeVersion = $displayVersion
-        }
-
-        Uninstall-AfterMetadataExtraction -InstallerPath $LocalInstallerPath -UninstallArgs "/uninstall /quiet /norestart"
-
-        $installCommand = "install.bat"
-        $uninstallCommand = "uninstall.bat"
-
-        if (-not $publisher) { $publisher = "Tableau" }
-
-        New-MECMApplicationForTableau `
-            -AppName $displayName `
-            -Publisher $publisher `
-            -SoftwareVersion $displayVersion `
-            -ContentLocation $NetworkVersionPath `
-            -InstallCommand $installCommand `
-            -UninstallCommand $uninstallCommand `
-            -DetectionExePath $detectionExe `
-            -DetectionExeVersion $detectionExeVersion
+    if (-not $installLocation) {
+        $installLocation = "C:\Program Files\Tableau"
     }
+
+    $detectionExe        = Join-Path $installLocation $DetectionFileName
+    $detectionExeVersion = Get-FileVersion -FilePath $detectionExe
+
+    if (-not $detectionExeVersion) {
+        Write-Warning "Could not determine file version for: $detectionExe"
+        $detectionExeVersion = $displayVersion
+    }
+
+    Write-Host "Uninstalling after metadata extraction..."
+    Start-Process -FilePath $localExe -ArgumentList $UninstallArgs -Wait -NoNewWindow
+
+    if (-not $publisher) { $publisher = "Tableau" }
+
+    Write-Host ""
+    Write-Host "CM Application Name          : $displayName"
+    Write-Host "CM SoftwareVersion           : $displayVersion"
+    Write-Host "Detection exe                : $detectionExe"
+    Write-Host "Detection exe version        : $detectionExeVersion"
+    Write-Host ""
+
+    New-MECMTableauDesktopApplication `
+        -AppName $displayName `
+        -SoftwareVersion $displayVersion `
+        -ContentPath $contentPath `
+        -InstallerFileName $installerFileName `
+        -Publisher $publisher `
+        -DetectionExePath $detectionExe `
+        -DetectionExeVersion $detectionExeVersion
 
     Write-Host ""
     Write-Host "Script execution complete."
@@ -444,5 +506,5 @@ catch {
     exit 1
 }
 finally {
-    Set-Location $originalLocation -ErrorAction SilentlyContinue
+    Set-Location $startLocation -ErrorAction SilentlyContinue
 }
