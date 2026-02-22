@@ -486,12 +486,13 @@ function Invoke-PackagerRun {
 
     $stamp = (Get-Date).ToString("yyyyMMdd-HHmmss")
     $base  = [IO.Path]::GetFileNameWithoutExtension($PackagerPath)
-    $outLog = Join-Path $LogFolder ("{0}-{1}.out.log" -f $base, $stamp)
-    $errLog = Join-Path $LogFolder ("{0}-{1}.err.log" -f $base, $stamp)
+    $outLog         = Join-Path $LogFolder ("{0}-{1}.out.log" -f $base, $stamp)
+    $errLog         = Join-Path $LogFolder ("{0}-{1}.err.log" -f $base, $stamp)
+    $structuredLog  = Join-Path $LogFolder ("{0}-{1}.structured.log" -f $base, $stamp)
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = "powershell.exe"
-    $argsBase = ('-NoProfile -ExecutionPolicy Bypass -File "{0}" -SiteCode "{1}" -Comment "{2}"' -f $PackagerPath, $SiteCode, $Comment)
+    $argsBase = ('-NoProfile -ExecutionPolicy Bypass -File "{0}" -SiteCode "{1}" -Comment "{2}" -LogPath "{3}"' -f $PackagerPath, $SiteCode, $Comment, $structuredLog)
     if (Test-PackagerSupportsFileServerPath -PackagerPath $PackagerPath) {
         $argsBase = ($argsBase + (' -FileServerPath "{0}"' -f $FileServerPath))
     }
@@ -513,10 +514,11 @@ function Invoke-PackagerRun {
     Set-Content -LiteralPath $errLog -Value $stderr -Encoding UTF8
 
     return [pscustomobject]@{
-        ExitCode = $p.ExitCode
-        OutLog   = $outLog
-        ErrLog   = $errLog
-        StdErr   = $stderr
+        ExitCode      = $p.ExitCode
+        OutLog        = $outLog
+        ErrLog        = $errLog
+        StructuredLog = $structuredLog
+        StdErr        = $stderr
     }
 }
 
@@ -1447,10 +1449,23 @@ $btnRun.Add_Click({
                 }
                 else {
                     $row["Status"] = "Error"
-                    $msg = $res.StdErr
-                    if ([string]::IsNullOrWhiteSpace($msg)) { $msg = "Exit code $($res.ExitCode)." }
-                    Add-LogLine -TextBox $txtLog -Message ("Error: {0}" -f ($msg.Trim()))
-                    Add-LogLine -TextBox $txtLog -Message ("Logs: {0} / {1}" -f (Split-Path -Leaf $res.OutLog), (Split-Path -Leaf $res.ErrLog))
+
+                    $stderrLines = @($res.StdErr -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+
+                    if ($stderrLines.Count -gt 0) {
+                        $linesToShow = [Math]::Min($stderrLines.Count, 10)
+                        for ($i = 0; $i -lt $linesToShow; $i++) {
+                            Add-LogLine -TextBox $txtLog -Message ("  stderr: {0}" -f $stderrLines[$i])
+                        }
+                        if ($stderrLines.Count -gt $linesToShow) {
+                            Add-LogLine -TextBox $txtLog -Message ("  ... and {0} more line(s) in: {1}" -f ($stderrLines.Count - $linesToShow), (Split-Path -Leaf $res.ErrLog))
+                        }
+                    }
+                    else {
+                        Add-LogLine -TextBox $txtLog -Message ("Error: Exit code {0}, no stderr output." -f $res.ExitCode)
+                    }
+
+                    Add-LogLine -TextBox $txtLog -Message ("Logs: {0}" -f (Split-Path -Leaf $res.OutLog))
                 }
             }
             catch {

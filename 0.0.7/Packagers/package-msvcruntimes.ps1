@@ -48,10 +48,14 @@ param(
     [string]$SiteCode = "MCM",
     [string]$Comment = "WO#00000001234567",
     [string]$FileServerPath = "\\fileserver\sccm$",
+    [string]$LogPath,
     [switch]$GetLatestVersionOnly
 )
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+. "$PSScriptRoot\AppPackagerCommon.ps1"
+Initialize-Logging -LogPath $LogPath
 
 # --- Configuration ---
 $UrlX86 = "https://aka.ms/vc14/vc_redist.x86.exe"
@@ -81,7 +85,7 @@ function Test-IsAdmin {
         return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     }
     catch {
-        Write-Warning "Admin check failed: $($_.Exception.Message)"
+        Write-Log "Admin check failed: $($_.Exception.Message)" -Level WARN
         return $false
     }
 }
@@ -105,11 +109,11 @@ function Connect-CMSite {
         }
 
         Set-Location "${SiteCode}:" -ErrorAction Stop
-        Write-Host "Connected to CM site: $SiteCode"
+        Write-Log "Connected to CM site: $SiteCode"
         return $true
     }
     catch {
-        Write-Error "Failed to connect to CM site: $($_.Exception.Message)"
+        Write-Log "Failed to connect to CM site: $($_.Exception.Message)" -Level ERROR
         return $false
     }
 }
@@ -137,7 +141,7 @@ function Test-NetworkShareAccess {
         Set-Location C: -ErrorAction Stop
 
         if (-not (Test-Path -LiteralPath $Path -ErrorAction SilentlyContinue)) {
-            Write-Error "Network path does not exist or is inaccessible: $Path"
+            Write-Log "Network path does not exist or is inaccessible: $Path" -Level ERROR
             return $false
         }
 
@@ -148,7 +152,7 @@ function Test-NetworkShareAccess {
             return $true
         }
         catch {
-            Write-Error "Network share is not writable: $Path ($($_.Exception.Message))"
+            Write-Log "Network share is not writable: $Path ($($_.Exception.Message))" -Level ERROR
             return $false
         }
     }
@@ -172,10 +176,8 @@ function Get-ExeFileVersion {
     if (-not [string]::IsNullOrWhiteSpace($fv)) { $fv = $fv.Trim() }
     if (-not [string]::IsNullOrWhiteSpace($pv)) { $pv = $pv.Trim() }
 
-    if (-not $Quiet) {
-        Write-Host "EXE FileVersion              : $fv"
-        Write-Host "EXE ProductVersion           : $pv"
-    }
+    Write-Log "EXE FileVersion              : $fv" -Quiet:$Quiet
+    Write-Log "EXE ProductVersion           : $pv" -Quiet:$Quiet
 
     if ($fv -match '^\d+\.\d+\.\d+\.\d+$') { return $fv }
     if ($pv -match '^\d+\.\d+\.\d+\.\d+$') { return $pv }
@@ -238,11 +240,11 @@ function New-MECMMsvcRedistApplication {
 
         $existing = Get-CMApplication -Name $AppName -ErrorAction SilentlyContinue
         if ($existing) {
-            Write-Warning "Application already exists: $AppName"
+            Write-Log "Application already exists: $AppName" -Level WARN
             return
         }
 
-        Write-Host "Creating CM Application      : $AppName"
+        Write-Log "Creating CM Application      : $AppName"
         $cmApp = New-CMApplication `
             -Name $AppName `
             -Publisher $Publisher `
@@ -251,33 +253,51 @@ function New-MECMMsvcRedistApplication {
             -AutoInstall $true `
             -ErrorAction Stop
 
-        Write-Host "Application CI_ID            : $($cmApp.CI_ID)"
+        Write-Log "Application CI_ID            : $($cmApp.CI_ID)"
 
         Set-Location C: -ErrorAction Stop
 
         $installBatPath   = Join-Path $ContentPath "install.bat"
+        $installPs1Path   = Join-Path $ContentPath "install.ps1"
         $uninstallBatPath = Join-Path $ContentPath "uninstall.bat"
+        $uninstallPs1Path = Join-Path $ContentPath "uninstall.ps1"
 
         if (-not (Test-Path -LiteralPath $installBatPath)) {
             $installBat = @"
 @echo off
-setlocal
-"%~dp0$FileNameX86" /install /quiet /norestart /log "%~dp0x86.install.log"
-"%~dp0$FileNameX64" /install /quiet /norestart /log "%~dp0x64.install.log"
-exit /b 0
+PowerShell.exe -NonInteractive -ExecutionPolicy Bypass -File "%~dp0install.ps1"
+exit /b %ERRORLEVEL%
 "@
             Set-Content -LiteralPath $installBatPath -Value $installBat -Encoding ASCII -ErrorAction Stop
+        }
+
+        if (-not (Test-Path -LiteralPath $installPs1Path)) {
+            $installPs1 = @"
+`$proc1 = Start-Process "`$PSScriptRoot\$FileNameX86" -ArgumentList "/install /quiet /norestart /log ``"`$PSScriptRoot\x86.install.log``"" -Wait -PassThru -NoNewWindow
+if (`$proc1.ExitCode -ne 0) { exit `$proc1.ExitCode }
+`$proc2 = Start-Process "`$PSScriptRoot\$FileNameX64" -ArgumentList "/install /quiet /norestart /log ``"`$PSScriptRoot\x64.install.log``"" -Wait -PassThru -NoNewWindow
+exit `$proc2.ExitCode
+"@
+            Set-Content -LiteralPath $installPs1Path -Value $installPs1 -Encoding UTF8 -ErrorAction Stop
         }
 
         if (-not (Test-Path -LiteralPath $uninstallBatPath)) {
             $uninstallBat = @"
 @echo off
-setlocal
-"%~dp0$FileNameX86" /uninstall /quiet /norestart /log "%~dp0x86.uninstall.log"
-"%~dp0$FileNameX64" /uninstall /quiet /norestart /log "%~dp0x64.uninstall.log"
-exit /b 0
+PowerShell.exe -NonInteractive -ExecutionPolicy Bypass -File "%~dp0uninstall.ps1"
+exit /b %ERRORLEVEL%
 "@
             Set-Content -LiteralPath $uninstallBatPath -Value $uninstallBat -Encoding ASCII -ErrorAction Stop
+        }
+
+        if (-not (Test-Path -LiteralPath $uninstallPs1Path)) {
+            $uninstallPs1 = @"
+`$proc1 = Start-Process "`$PSScriptRoot\$FileNameX86" -ArgumentList "/uninstall /quiet /norestart /log ``"`$PSScriptRoot\x86.uninstall.log``"" -Wait -PassThru -NoNewWindow
+if (`$proc1.ExitCode -ne 0) { exit `$proc1.ExitCode }
+`$proc2 = Start-Process "`$PSScriptRoot\$FileNameX64" -ArgumentList "/uninstall /quiet /norestart /log ``"`$PSScriptRoot\x64.uninstall.log``"" -Wait -PassThru -NoNewWindow
+exit `$proc2.ExitCode
+"@
+            Set-Content -LiteralPath $uninstallPs1Path -Value $uninstallPs1 -Encoding UTF8 -ErrorAction Stop
         }
 
         if (-not (Connect-CMSite -SiteCode $SiteCode)) { throw "CM site connection failed." }
@@ -302,9 +322,9 @@ exit /b 0
             -ExpectedValue $RegExpected `
             -ExpressionOperator IsEquals
 
-        Write-Host "Adding Script Deployment Type: $dtName"
-        Write-Host "Detection (AND)              : HKLM\$RegKeyX86\$RegValueName == $RegExpected"
-        Write-Host "Detection (AND)              : HKLM\$RegKeyX64\$RegValueName == $RegExpected"
+        Write-Log "Adding Script Deployment Type: $dtName"
+        Write-Log "Detection (AND)              : HKLM\$RegKeyX86\$RegValueName == $RegExpected"
+        Write-Log "Detection (AND)              : HKLM\$RegKeyX64\$RegValueName == $RegExpected"
 
         Add-CMScriptDeploymentType `
             -ApplicationName $AppName `
@@ -324,7 +344,7 @@ exit /b 0
 
         Remove-CMApplicationRevisionHistoryByCIId -CI_ID ([UInt32]$cmApp.CI_ID) -KeepLatest 1
 
-        Write-Host "Created MECM application     : $AppName"
+        Write-Log "Created MECM application     : $AppName"
     }
     finally {
         Set-Location $orig -ErrorAction SilentlyContinue
@@ -353,8 +373,7 @@ if ($GetLatestVersionOnly) {
 
         $localX64 = Join-Path $BaseDownloadRoot $FileNameX64
 
-        curl.exe -L --fail --silent --show-error -o $localX64 $UrlX64
-        if ($LASTEXITCODE -ne 0) { throw "Download failed: $UrlX64" }
+        Invoke-DownloadWithRetry -Url $UrlX64 -OutFile $localX64 -Quiet
 
         $quadVersion = Get-ExeFileVersion -Path $localX64 -Quiet
         $shortVersion = Get-ShortVersionFromQuad -QuadVersion $quadVersion
@@ -363,7 +382,7 @@ if ($GetLatestVersionOnly) {
         exit 0
     }
     catch {
-        Write-Error $_.Exception.Message
+        Write-Log $_.Exception.Message -Level ERROR
         exit 1
     }
 }
@@ -372,23 +391,23 @@ if ($GetLatestVersionOnly) {
 try {
     $startLocation = Get-Location
 
-    Write-Host ""
-    Write-Host ("=" * 60)
-    Write-Host "MSVC 2015-2022 Redistributable (x86+x64) Auto-Packager starting"
-    Write-Host ("=" * 60)
-    Write-Host ""
-    Write-Host ("RunAsUser                    : {0}\{1}" -f $env:USERDOMAIN,$env:USERNAME)
-    Write-Host ("Machine                      : {0}" -f $env:COMPUTERNAME)
-    Write-Host "Start location               : $startLocation"
-    Write-Host "SiteCode                     : $SiteCode"
-    Write-Host "FileServerPath               : $FileServerPath"
-    Write-Host "BaseDownloadRoot             : $BaseDownloadRoot"
-    Write-Host "UrlX86                       : $UrlX86"
-    Write-Host "UrlX64                       : $UrlX64"
-    Write-Host ""
+    Write-Log ""
+    Write-Log ("=" * 60)
+    Write-Log "MSVC 2015-2022 Redistributable (x86+x64) Auto-Packager starting"
+    Write-Log ("=" * 60)
+    Write-Log ""
+    Write-Log ("RunAsUser                    : {0}\{1}" -f $env:USERDOMAIN,$env:USERNAME)
+    Write-Log ("Machine                      : {0}" -f $env:COMPUTERNAME)
+    Write-Log "Start location               : $startLocation"
+    Write-Log "SiteCode                     : $SiteCode"
+    Write-Log "FileServerPath               : $FileServerPath"
+    Write-Log "BaseDownloadRoot             : $BaseDownloadRoot"
+    Write-Log "UrlX86                       : $UrlX86"
+    Write-Log "UrlX64                       : $UrlX64"
+    Write-Log ""
 
     if (-not (Test-IsAdmin)) {
-        Write-Error "Run PowerShell as Administrator."
+        Write-Log "Run PowerShell as Administrator." -Level ERROR
         exit 1
     }
 
@@ -404,13 +423,11 @@ try {
     $localX86 = Join-Path $BaseDownloadRoot $FileNameX86
     $localX64 = Join-Path $BaseDownloadRoot $FileNameX64
 
-    Write-Host "Downloading x86 installer..."
-    curl.exe -L --fail --silent --show-error -o $localX86 $UrlX86
-    if ($LASTEXITCODE -ne 0) { throw "Download failed: $UrlX86" }
+    Write-Log "Downloading x86 installer..."
+    Invoke-DownloadWithRetry -Url $UrlX86 -OutFile $localX86
 
-    Write-Host "Downloading x64 installer..."
-    curl.exe -L --fail --silent --show-error -o $localX64 $UrlX64
-    if ($LASTEXITCODE -ne 0) { throw "Download failed: $UrlX64" }
+    Write-Log "Downloading x64 installer..."
+    Invoke-DownloadWithRetry -Url $UrlX64 -OutFile $localX64
 
     # Version from x64 installer VersionInfo
     $quadVersion  = Get-ExeFileVersion -Path $localX64
@@ -424,39 +441,39 @@ try {
     $netX86 = Join-Path $contentPath $FileNameX86
     $netX64 = Join-Path $contentPath $FileNameX64
 
-    Write-Host "Version (short)              : $shortVersion"
-    Write-Host "Version (quad)               : $quadVersion"
-    Write-Host "Registry expected            : $regExpected"
-    Write-Host "Local x86                    : $localX86"
-    Write-Host "Local x64                    : $localX64"
-    Write-Host "ContentPath                  : $contentPath"
-    Write-Host "Network x86                  : $netX86"
-    Write-Host "Network x64                  : $netX64"
-    Write-Host ""
+    Write-Log "Version (short)              : $shortVersion"
+    Write-Log "Version (quad)               : $quadVersion"
+    Write-Log "Registry expected            : $regExpected"
+    Write-Log "Local x86                    : $localX86"
+    Write-Log "Local x64                    : $localX64"
+    Write-Log "ContentPath                  : $contentPath"
+    Write-Log "Network x86                  : $netX86"
+    Write-Log "Network x64                  : $netX64"
+    Write-Log ""
 
     if (-not (Test-Path -LiteralPath $netX86)) {
-        Write-Host "Copying x86 installer to network..."
+        Write-Log "Copying x86 installer to network..."
         Copy-Item -LiteralPath $localX86 -Destination $netX86 -Force -ErrorAction Stop
     }
     else {
-        Write-Host "Network x86 exists. Skipping copy."
+        Write-Log "Network x86 exists. Skipping copy."
     }
 
     if (-not (Test-Path -LiteralPath $netX64)) {
-        Write-Host "Copying x64 installer to network..."
+        Write-Log "Copying x64 installer to network..."
         Copy-Item -LiteralPath $localX64 -Destination $netX64 -Force -ErrorAction Stop
     }
     else {
-        Write-Host "Network x64 exists. Skipping copy."
+        Write-Log "Network x64 exists. Skipping copy."
     }
 
     $appName   = "Microsoft Visual C++ 2015-2022 Redistributable (x86+x64) - $shortVersion"
     $publisher = "Microsoft Corporation"
 
-    Write-Host ""
-    Write-Host "CM Application Name          : $appName"
-    Write-Host "CM SoftwareVersion           : $shortVersion"
-    Write-Host ""
+    Write-Log ""
+    Write-Log "CM Application Name          : $appName"
+    Write-Log "CM SoftwareVersion           : $shortVersion"
+    Write-Log ""
 
     New-MECMMsvcRedistApplication `
         -AppName $appName `
@@ -465,11 +482,11 @@ try {
         -ContentPath $contentPath `
         -Publisher $publisher
 
-    Write-Host ""
-    Write-Host "Script execution complete."
+    Write-Log ""
+    Write-Log "Script execution complete."
 }
 catch {
-    Write-Error "SCRIPT FAILED: $($_.Exception.Message)"
+    Write-Log "SCRIPT FAILED: $($_.Exception.Message)" -Level ERROR
     exit 1
 }
 finally {

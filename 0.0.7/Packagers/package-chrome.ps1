@@ -46,10 +46,14 @@ param(
     [string]$SiteCode = "MCM",
     [string]$Comment = "WO#00000001234567",
     [string]$FileServerPath = "\\fileserver\sccm$",
+    [string]$LogPath,
     [switch]$GetLatestVersionOnly
 )
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+. "$PSScriptRoot\AppPackagerCommon.ps1"
+Initialize-Logging -LogPath $LogPath
 
 # --- Configuration ---
 $ChromeVersionApiUrl = "https://versionhistory.googleapis.com/v1/chrome/platforms/win64/channels/stable/versions?order_by=version+desc&pageSize=1"
@@ -72,7 +76,7 @@ function Test-IsAdmin {
         return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     }
     catch {
-        Write-Warning "Admin check failed: $($_.Exception.Message)"
+        Write-Log "Admin check failed: $($_.Exception.Message)" -Level WARN
         return $false
     }
 }
@@ -96,11 +100,11 @@ function Connect-CMSite {
         }
 
         Set-Location "${SiteCode}:" -ErrorAction Stop
-        Write-Host "Connected to CM site: $SiteCode"
+        Write-Log "Connected to CM site: $SiteCode"
         return $true
     }
     catch {
-        Write-Error "Failed to connect to CM site: $($_.Exception.Message)"
+        Write-Log "Failed to connect to CM site: $($_.Exception.Message)" -Level ERROR
         return $false
     }
 }
@@ -128,7 +132,7 @@ function Test-NetworkShareAccess {
         Set-Location C: -ErrorAction Stop
 
         if (-not (Test-Path -LiteralPath $Path -ErrorAction SilentlyContinue)) {
-            Write-Error "Network path does not exist or is inaccessible: $Path"
+            Write-Log "Network path does not exist or is inaccessible: $Path" -Level ERROR
             return $false
         }
 
@@ -139,7 +143,7 @@ function Test-NetworkShareAccess {
             return $true
         }
         catch {
-            Write-Error "Network share is not writable: $Path ($($_.Exception.Message))"
+            Write-Log "Network share is not writable: $Path ($($_.Exception.Message))" -Level ERROR
             return $false
         }
     }
@@ -151,9 +155,7 @@ function Test-NetworkShareAccess {
 function Get-ChromeStableVersion {
     param([switch]$Quiet)
 
-    if (-not $Quiet) {
-        Write-Host "Chrome version API URL        : $ChromeVersionApiUrl"
-    }
+    Write-Log "Chrome version API URL        : $ChromeVersionApiUrl" -Quiet:$Quiet
 
     try {
         $json = (curl.exe -L --fail --silent --show-error $ChromeVersionApiUrl) -join ''
@@ -165,13 +167,11 @@ function Get-ChromeStableVersion {
             throw "Could not parse Chrome stable version from API response."
         }
 
-        if (-not $Quiet) {
-            Write-Host "Latest Chrome stable version : $version"
-        }
+        Write-Log "Latest Chrome stable version : $version" -Quiet:$Quiet
         return $version
     }
     catch {
-        Write-Error "Failed to get Chrome version: $($_.Exception.Message)"
+        Write-Log "Failed to get Chrome version: $($_.Exception.Message)" -Level ERROR
         return $null
     }
 }
@@ -261,11 +261,11 @@ function New-MECMChromeApplication {
 
         $existing = Get-CMApplication -Name $AppName -ErrorAction SilentlyContinue
         if ($existing) {
-            Write-Warning "Application already exists: $AppName"
+            Write-Log "Application already exists: $AppName" -Level WARN
             return
         }
 
-        Write-Host "Creating CM Application      : $AppName"
+        Write-Log "Creating CM Application      : $AppName"
         $cmApp = New-CMApplication `
             -Name $AppName `
             -Publisher $Publisher `
@@ -274,31 +274,47 @@ function New-MECMChromeApplication {
             -AutoInstall $true `
             -ErrorAction Stop
 
-        Write-Host "Application CI_ID            : $($cmApp.CI_ID)"
+        Write-Log "Application CI_ID            : $($cmApp.CI_ID)"
 
         Set-Location C: -ErrorAction Stop
 
         $installBatPath   = Join-Path $ContentPath "install.bat"
+        $installPs1Path   = Join-Path $ContentPath "install.ps1"
         $uninstallBatPath = Join-Path $ContentPath "uninstall.bat"
+        $uninstallPs1Path = Join-Path $ContentPath "uninstall.ps1"
 
         if (-not (Test-Path -LiteralPath $installBatPath)) {
             $installBat = @"
 @echo off
-setlocal
-start /wait "" msiexec.exe /i "%~dp0$MsiFileName" /qn /norestart
-exit /b 0
+PowerShell.exe -NonInteractive -ExecutionPolicy Bypass -File "%~dp0install.ps1"
+exit /b %ERRORLEVEL%
 "@
             Set-Content -LiteralPath $installBatPath -Value $installBat -Encoding ASCII -ErrorAction Stop
+        }
+
+        if (-not (Test-Path -LiteralPath $installPs1Path)) {
+            $installPs1 = @"
+`$proc = Start-Process msiexec.exe -ArgumentList "/i `"`$PSScriptRoot\$MsiFileName`" /qn /norestart" -Wait -PassThru -NoNewWindow
+exit `$proc.ExitCode
+"@
+            Set-Content -LiteralPath $installPs1Path -Value $installPs1 -Encoding UTF8 -ErrorAction Stop
         }
 
         if (-not (Test-Path -LiteralPath $uninstallBatPath)) {
             $uninstallBat = @"
 @echo off
-setlocal
-start /wait "" msiexec.exe /x "%~dp0$MsiFileName" /qn /norestart
-exit /b 0
+PowerShell.exe -NonInteractive -ExecutionPolicy Bypass -File "%~dp0uninstall.ps1"
+exit /b %ERRORLEVEL%
 "@
             Set-Content -LiteralPath $uninstallBatPath -Value $uninstallBat -Encoding ASCII -ErrorAction Stop
+        }
+
+        if (-not (Test-Path -LiteralPath $uninstallPs1Path)) {
+            $uninstallPs1 = @"
+`$proc = Start-Process msiexec.exe -ArgumentList "/x `"`$PSScriptRoot\$MsiFileName`" /qn /norestart" -Wait -PassThru -NoNewWindow
+exit `$proc.ExitCode
+"@
+            Set-Content -LiteralPath $uninstallPs1Path -Value $uninstallPs1 -Encoding UTF8 -ErrorAction Stop
         }
 
         if (-not (Connect-CMSite -SiteCode $SiteCode)) { throw "CM site connection failed." }
@@ -311,7 +327,7 @@ exit /b 0
             -ExpressionOperator IsEquals `
             -ExpectedValue $SoftwareVersion
 
-        Write-Host "Adding Script Deployment Type: $dtName"
+        Write-Log "Adding Script Deployment Type: $dtName"
         Add-CMScriptDeploymentType `
             -ApplicationName $AppName `
             -DeploymentTypeName $dtName `
@@ -329,7 +345,7 @@ exit /b 0
 
         Remove-CMApplicationRevisionHistoryByCIId -CI_ID ([UInt32]$cmApp.CI_ID) -KeepLatest 1
 
-        Write-Host "Created MECM application     : $AppName"
+        Write-Log "Created MECM application     : $AppName"
     }
     finally {
         Set-Location $orig -ErrorAction SilentlyContinue
@@ -368,23 +384,23 @@ if ($GetLatestVersionOnly) {
 try {
     $startLocation = Get-Location
 
-    Write-Host ""
-    Write-Host ("=" * 60)
-    Write-Host "Google Chrome Enterprise (x64) Auto-Packager starting"
-    Write-Host ("=" * 60)
-    Write-Host ""
-    Write-Host ("RunAsUser                    : {0}\{1}" -f $env:USERDOMAIN,$env:USERNAME)
-    Write-Host ("Machine                      : {0}" -f $env:COMPUTERNAME)
-    Write-Host "Start location               : $startLocation"
-    Write-Host "SiteCode                     : $SiteCode"
-    Write-Host "FileServerPath               : $FileServerPath"
-    Write-Host "BaseDownloadRoot             : $BaseDownloadRoot"
-    Write-Host "MsiDownloadUrl               : $MsiDownloadUrl"
-    Write-Host "ChromeVersionApiUrl          : $ChromeVersionApiUrl"
-    Write-Host ""
+    Write-Log ""
+    Write-Log ("=" * 60)
+    Write-Log "Google Chrome Enterprise (x64) Auto-Packager starting"
+    Write-Log ("=" * 60)
+    Write-Log ""
+    Write-Log ("RunAsUser                    : {0}\{1}" -f $env:USERDOMAIN,$env:USERNAME)
+    Write-Log ("Machine                      : {0}" -f $env:COMPUTERNAME)
+    Write-Log "Start location               : $startLocation"
+    Write-Log "SiteCode                     : $SiteCode"
+    Write-Log "FileServerPath               : $FileServerPath"
+    Write-Log "BaseDownloadRoot             : $BaseDownloadRoot"
+    Write-Log "MsiDownloadUrl               : $MsiDownloadUrl"
+    Write-Log "ChromeVersionApiUrl          : $ChromeVersionApiUrl"
+    Write-Log ""
 
     if (-not (Test-IsAdmin)) {
-        Write-Error "Run PowerShell as Administrator."
+        Write-Log "Run PowerShell as Administrator." -Level ERROR
         exit 1
     }
 
@@ -399,9 +415,8 @@ try {
     # Always download MSI (URL serves latest stable release)
     $localMsi = Join-Path $BaseDownloadRoot $MsiFileName
 
-    Write-Host "Downloading Chrome Enterprise MSI..."
-    curl.exe -L --fail --silent --show-error -o $localMsi $MsiDownloadUrl
-    if ($LASTEXITCODE -ne 0) { throw "MSI download failed: $MsiDownloadUrl" }
+    Write-Log "Downloading Chrome Enterprise MSI..."
+    Invoke-DownloadWithRetry -Url $MsiDownloadUrl -OutFile $localMsi
 
     $props = Get-MsiPropertyMap -MsiPath $localMsi
 
@@ -417,28 +432,28 @@ try {
 
     $netMsi = Join-Path $contentPath $MsiFileName
 
-    Write-Host "Version                      : $productVersion"
-    Write-Host "ProductCode                  : $productCode"
-    Write-Host "Local MSI                    : $localMsi"
-    Write-Host "ContentPath                  : $contentPath"
-    Write-Host "Network MSI                  : $netMsi"
-    Write-Host ""
+    Write-Log "Version                      : $productVersion"
+    Write-Log "ProductCode                  : $productCode"
+    Write-Log "Local MSI                    : $localMsi"
+    Write-Log "ContentPath                  : $contentPath"
+    Write-Log "Network MSI                  : $netMsi"
+    Write-Log ""
 
     if (-not (Test-Path -LiteralPath $netMsi)) {
-        Write-Host "Copying MSI to network..."
+        Write-Log "Copying MSI to network..."
         Copy-Item -LiteralPath $localMsi -Destination $netMsi -Force -ErrorAction Stop
     }
     else {
-        Write-Host "Network MSI exists. Skipping copy."
+        Write-Log "Network MSI exists. Skipping copy."
     }
 
     $appName   = "Google Chrome Enterprise $productVersion"
     $publisher = "Google LLC"
 
-    Write-Host ""
-    Write-Host "CM Application Name          : $appName"
-    Write-Host "CM SoftwareVersion           : $productVersion"
-    Write-Host ""
+    Write-Log ""
+    Write-Log "CM Application Name          : $appName"
+    Write-Log "CM SoftwareVersion           : $productVersion"
+    Write-Log ""
 
     New-MECMChromeApplication `
         -AppName $appName `
@@ -448,11 +463,11 @@ try {
         -ProductCode $productCode `
         -Publisher $publisher
 
-    Write-Host ""
-    Write-Host "Script execution complete."
+    Write-Log ""
+    Write-Log "Script execution complete."
 }
 catch {
-    Write-Error "SCRIPT FAILED: $($_.Exception.Message)"
+    Write-Log "SCRIPT FAILED: $($_.Exception.Message)" -Level ERROR
     exit 1
 }
 finally {

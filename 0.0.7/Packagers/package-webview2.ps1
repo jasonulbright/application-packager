@@ -39,10 +39,14 @@ param(
     [string]$SiteCode = "MCM",
     [string]$Comment = "WO#00000001234567",
     [string]$FileServerPath = "\\fileserver\sccm$",
+    [string]$LogPath,
     [switch]$GetLatestVersionOnly
 )
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+. "$PSScriptRoot\AppPackagerCommon.ps1"
+Initialize-Logging -LogPath $LogPath
 
 # --- Configuration ---
 $WebView2ExeUrl  = "https://go.microsoft.com/fwlink/?linkid=2124701"
@@ -65,7 +69,7 @@ function Test-IsAdmin {
         return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     }
     catch {
-        Write-Warning "Admin check failed: $($_.Exception.Message)"
+        Write-Log "Admin check failed: $($_.Exception.Message)" -Level WARN
         return $false
     }
 }
@@ -89,11 +93,11 @@ function Connect-CMSite {
         }
 
         Set-Location "${SiteCode}:" -ErrorAction Stop
-        Write-Host "Connected to CM site: $SiteCode"
+        Write-Log "Connected to CM site: $SiteCode"
         return $true
     }
     catch {
-        Write-Error "Failed to connect to CM site: $($_.Exception.Message)"
+        Write-Log "Failed to connect to CM site: $($_.Exception.Message)" -Level ERROR
         return $false
     }
 }
@@ -121,7 +125,7 @@ function Test-NetworkShareAccess {
         Set-Location C: -ErrorAction Stop
 
         if (-not (Test-Path -LiteralPath $Path -ErrorAction SilentlyContinue)) {
-            Write-Error "Network path does not exist or is inaccessible: $Path"
+            Write-Log "Network path does not exist or is inaccessible: $Path" -Level ERROR
             return $false
         }
 
@@ -132,7 +136,7 @@ function Test-NetworkShareAccess {
             return $true
         }
         catch {
-            Write-Error "Network share is not writable: $Path ($($_.Exception.Message))"
+            Write-Log "Network share is not writable: $Path ($($_.Exception.Message))" -Level ERROR
             return $false
         }
     }
@@ -144,9 +148,7 @@ function Test-NetworkShareAccess {
 function Get-LatestWebView2Version {
     param([switch]$Quiet)
 
-    if (-not $Quiet) {
-        Write-Host "WebView2 version API         : $EdgeVersionUrl"
-    }
+    Write-Log "WebView2 version API         : $EdgeVersionUrl" -Quiet:$Quiet
 
     try {
         $json = (curl.exe -L --fail --silent --show-error $EdgeVersionUrl) -join ''
@@ -163,13 +165,11 @@ function Get-LatestWebView2Version {
             throw "Could not determine latest WebView2 version."
         }
 
-        if (-not $Quiet) {
-            Write-Host "Latest WebView2 version      : $latestVersion"
-        }
+        Write-Log "Latest WebView2 version      : $latestVersion" -Quiet:$Quiet
         return $latestVersion
     }
     catch {
-        Write-Error "Failed to get WebView2 version: $($_.Exception.Message)"
+        Write-Log "Failed to get WebView2 version: $($_.Exception.Message)" -Level ERROR
         return $null
     }
 }
@@ -215,11 +215,11 @@ function New-MECMWebView2Application {
 
         $existing = Get-CMApplication -Name $AppName -ErrorAction SilentlyContinue
         if ($existing) {
-            Write-Warning "Application already exists: $AppName"
+            Write-Log "Application already exists: $AppName" -Level WARN
             return
         }
 
-        Write-Host "Creating CM Application      : $AppName"
+        Write-Log "Creating CM Application      : $AppName"
         $cmApp = New-CMApplication `
             -Name $AppName `
             -Publisher $Publisher `
@@ -228,31 +228,47 @@ function New-MECMWebView2Application {
             -AutoInstall $true `
             -ErrorAction Stop
 
-        Write-Host "Application CI_ID            : $($cmApp.CI_ID)"
+        Write-Log "Application CI_ID            : $($cmApp.CI_ID)"
 
         Set-Location C: -ErrorAction Stop
 
         $installBatPath   = Join-Path $ContentPath "install.bat"
+        $installPs1Path   = Join-Path $ContentPath "install.ps1"
         $uninstallBatPath = Join-Path $ContentPath "uninstall.bat"
+        $uninstallPs1Path = Join-Path $ContentPath "uninstall.ps1"
 
         if (-not (Test-Path -LiteralPath $installBatPath)) {
             $installBat = @"
 @echo off
-setlocal
-start /wait "" "%~dp0$ExeFileName" /silent /install
-exit /b 0
+PowerShell.exe -NonInteractive -ExecutionPolicy Bypass -File "%~dp0install.ps1"
+exit /b %ERRORLEVEL%
 "@
             Set-Content -LiteralPath $installBatPath -Value $installBat -Encoding ASCII -ErrorAction Stop
+        }
+
+        if (-not (Test-Path -LiteralPath $installPs1Path)) {
+            $installPs1 = @"
+`$proc = Start-Process "`$PSScriptRoot\$ExeFileName" -ArgumentList "/silent /install" -Wait -PassThru -NoNewWindow
+exit `$proc.ExitCode
+"@
+            Set-Content -LiteralPath $installPs1Path -Value $installPs1 -Encoding UTF8 -ErrorAction Stop
         }
 
         if (-not (Test-Path -LiteralPath $uninstallBatPath)) {
             $uninstallBat = @"
 @echo off
-setlocal
-start /wait "" "%~dp0$ExeFileName" /silent /uninstall
-exit /b 0
+PowerShell.exe -NonInteractive -ExecutionPolicy Bypass -File "%~dp0uninstall.ps1"
+exit /b %ERRORLEVEL%
 "@
             Set-Content -LiteralPath $uninstallBatPath -Value $uninstallBat -Encoding ASCII -ErrorAction Stop
+        }
+
+        if (-not (Test-Path -LiteralPath $uninstallPs1Path)) {
+            $uninstallPs1 = @"
+`$proc = Start-Process "`$PSScriptRoot\$ExeFileName" -ArgumentList "/silent /uninstall" -Wait -PassThru -NoNewWindow
+exit `$proc.ExitCode
+"@
+            Set-Content -LiteralPath $uninstallPs1Path -Value $uninstallPs1 -Encoding UTF8 -ErrorAction Stop
         }
 
         if (-not (Connect-CMSite -SiteCode $SiteCode)) { throw "CM site connection failed." }
@@ -270,7 +286,7 @@ exit /b 0
             -ExpressionOperator GreaterEquals `
             -ExpectedValue $SoftwareVersion
 
-        Write-Host "Adding Script Deployment Type: $dtName"
+        Write-Log "Adding Script Deployment Type: $dtName"
         Add-CMScriptDeploymentType `
             -ApplicationName $AppName `
             -DeploymentTypeName $dtName `
@@ -288,7 +304,7 @@ exit /b 0
 
         Remove-CMApplicationRevisionHistoryByCIId -CI_ID ([UInt32]$cmApp.CI_ID) -KeepLatest 1
 
-        Write-Host "Created MECM application     : $AppName"
+        Write-Log "Created MECM application     : $AppName"
     }
     finally {
         Set-Location $orig -ErrorAction SilentlyContinue
@@ -327,22 +343,22 @@ if ($GetLatestVersionOnly) {
 try {
     $startLocation = Get-Location
 
-    Write-Host ""
-    Write-Host ("=" * 60)
-    Write-Host "WebView2 Runtime (x64) Auto-Packager starting"
-    Write-Host ("=" * 60)
-    Write-Host ""
-    Write-Host ("RunAsUser                    : {0}\{1}" -f $env:USERDOMAIN,$env:USERNAME)
-    Write-Host ("Machine                      : {0}" -f $env:COMPUTERNAME)
-    Write-Host "Start location               : $startLocation"
-    Write-Host "SiteCode                     : $SiteCode"
-    Write-Host "FileServerPath               : $FileServerPath"
-    Write-Host "BaseDownloadRoot             : $BaseDownloadRoot"
-    Write-Host "EdgeVersionUrl               : $EdgeVersionUrl"
-    Write-Host ""
+    Write-Log ""
+    Write-Log ("=" * 60)
+    Write-Log "WebView2 Runtime (x64) Auto-Packager starting"
+    Write-Log ("=" * 60)
+    Write-Log ""
+    Write-Log ("RunAsUser                    : {0}\{1}" -f $env:USERDOMAIN,$env:USERNAME)
+    Write-Log ("Machine                      : {0}" -f $env:COMPUTERNAME)
+    Write-Log "Start location               : $startLocation"
+    Write-Log "SiteCode                     : $SiteCode"
+    Write-Log "FileServerPath               : $FileServerPath"
+    Write-Log "BaseDownloadRoot             : $BaseDownloadRoot"
+    Write-Log "EdgeVersionUrl               : $EdgeVersionUrl"
+    Write-Log ""
 
     if (-not (Test-IsAdmin)) {
-        Write-Error "Run PowerShell as Administrator."
+        Write-Log "Run PowerShell as Administrator." -Level ERROR
         exit 1
     }
 
@@ -366,36 +382,35 @@ try {
 
     $netExe = Join-Path $contentPath $ExeFileName
 
-    Write-Host "Version                      : $version"
-    Write-Host "Local installer              : $localExe"
-    Write-Host "ContentPath                  : $contentPath"
-    Write-Host "Network installer            : $netExe"
-    Write-Host ""
+    Write-Log "Version                      : $version"
+    Write-Log "Local installer              : $localExe"
+    Write-Log "ContentPath                  : $contentPath"
+    Write-Log "Network installer            : $netExe"
+    Write-Log ""
 
     if (-not (Test-Path -LiteralPath $localExe)) {
-        Write-Host "Downloading installer..."
-        curl.exe -L --fail --silent --show-error -o $localExe $WebView2ExeUrl
-        if ($LASTEXITCODE -ne 0) { throw "Download failed: $WebView2ExeUrl" }
+        Write-Log "Downloading installer..."
+        Invoke-DownloadWithRetry -Url $WebView2ExeUrl -OutFile $localExe
     }
     else {
-        Write-Host "Local installer exists. Skipping download."
+        Write-Log "Local installer exists. Skipping download."
     }
 
     if (-not (Test-Path -LiteralPath $netExe)) {
-        Write-Host "Copying installer to network..."
+        Write-Log "Copying installer to network..."
         Copy-Item -LiteralPath $localExe -Destination $netExe -Force -ErrorAction Stop
     }
     else {
-        Write-Host "Network installer exists. Skipping copy."
+        Write-Log "Network installer exists. Skipping copy."
     }
 
     $appName   = "Microsoft Edge WebView2 Runtime - $version"
     $publisher = "Microsoft Corporation"
 
-    Write-Host ""
-    Write-Host "CM Application Name          : $appName"
-    Write-Host "CM SoftwareVersion           : $version"
-    Write-Host ""
+    Write-Log ""
+    Write-Log "CM Application Name          : $appName"
+    Write-Log "CM SoftwareVersion           : $version"
+    Write-Log ""
 
     New-MECMWebView2Application `
         -AppName $appName `
@@ -404,11 +419,11 @@ try {
         -ExeFileName $ExeFileName `
         -Publisher $publisher
 
-    Write-Host ""
-    Write-Host "Script execution complete."
+    Write-Log ""
+    Write-Log "Script execution complete."
 }
 catch {
-    Write-Error "SCRIPT FAILED: $($_.Exception.Message)"
+    Write-Log "SCRIPT FAILED: $($_.Exception.Message)" -Level ERROR
     exit 1
 }
 finally {
