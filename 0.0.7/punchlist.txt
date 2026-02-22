@@ -1,0 +1,170 @@
+* implement revision history cleanup for each script
+
+safety checks:
+
+if (-not $GetLatestVersionOnly) {
+
+    $app = Get-CMApplication -Name $AppName -Fast -ErrorAction SilentlyContinue
+
+    if ($app -and $app.NumberOfRevisions -gt 1) {
+
+        Remove-CMApplicationRevisionHistory -InputObject $app -Force
+
+    }
+
+}
+
+ 
+
+less safe:
+
+$app = Get-CMApplication -Name $AppName -Fast -ErrorAction SilentlyContinue
+
+if ($app -and $app.NumberOfRevisions -gt 1) {
+
+    Remove-CMApplicationRevisionHistory -InputObject $app -Force
+
+}
+
+^^ modify as appropriate, like statements should be used until we standardize header app names to match packaged app names and possibly still used then
+
+ 
+
+* add network share folder creation checks for all scripts
+
+function Ensure-ContentRootFolders {
+
+    param(
+
+        [Parameter(Mandatory)][string]$FileServerPath,
+
+        [Parameter(Mandatory)][string]$Vendor,
+
+        [Parameter(Mandatory)][string]$App
+
+    )
+
+ 
+
+    $vendorPath = Join-Path $FileServerPath $Vendor
+
+    if (-not (Test-Path -LiteralPath $vendorPath)) {
+
+        New-Item -Path $vendorPath -ItemType Directory -Force | Out-Null
+
+    }
+
+ 
+
+    $appPath = Join-Path $vendorPath $App
+
+    if (-not (Test-Path -LiteralPath $appPath)) {
+
+        New-Item -Path $appPath -ItemType Directory -Force | Out-Null
+
+    }
+
+ 
+
+    return $appPath
+
+}
+
+^^Usage:
+
+$appRoot = Ensure-ContentRootFolders -FileServerPath $FileServerPath -Vendor $Vendor -App $App
+
+# $appRoot = \\fileserver\sccm$\Vendor\App
+
+# then your existing version-folder creation continues from $appRoot
+
+ 
+
+* add $fsparam to each package script
+
+add param
+
+[string]$FileServerPath = \\fileserver\sccm$
+
+replace hardcoded share root
+
+from
+
+\\fileserver\sccm$
+
+to
+
+$FileServerPath
+
+change
+
+$NetworkRoot=\\fileserver\sccm$\Applications
+
+to
+
+$NetworkRoot = Join-Path $FileServerPath "Applications"
+
+ 
+
+* ensure comments param exists for each script
+
+ 
+
+* fix vscode version detection
+
+ 
+
+* fix vmware tools version detection
+
+ 
+
+* validate 7-zip functionality
+
+ 
+
+* fix msvc redists: ms released a new version (ending 9) and has renamed the arp entry to remove "2015-2022"
+
+ 
+
+>>CREATE PACKAGERS<<
+
+ 
+
+* Firefox
+
+* teams
+
+* zoom
+
+* webex
+
+* m365 apps 4 enterprise
+
+* jabra
+
+* adobe reader
+
+function Ensure-ContentRootFolders {
+    param(
+        [Parameter(Mandatory)][string]$FileServerPath,
+        [Parameter(Mandatory)][string]$Vendor,
+        [Parameter(Mandatory)][string]$App
+    )
+
+    $vendorPath = Join-Path $FileServerPath $Vendor
+    if (-not (Test-Path -LiteralPath $vendorPath)) {
+        New-Item -Path $vendorPath -ItemType Directory -Force | Out-Null
+    }
+
+    $appPath = Join-Path $vendorPath $App
+    if (-not (Test-Path -LiteralPath $appPath)) {
+        New-Item -Path $appPath -ItemType Directory -Force | Out-Null
+    }
+
+    return $appPath
+}
+Usage (example):
+
+$appRoot = Ensure-ContentRootFolders -FileServerPath $FileServerPath -Vendor $Vendor -App $App
+# $appRoot = \\fileserver\sccm$\Vendor\App
+# then your existing version-folder creation continues from $appRoot
