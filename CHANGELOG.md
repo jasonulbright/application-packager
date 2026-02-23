@@ -2,7 +2,7 @@
 
 All notable changes to AppPackager are documented in this file.
 
-## [0.0.9] - 2026-02-23 11:45 PM
+## [0.0.9] - 2026-02-23 6:45 PM
 
 ### Added
 - Preferences dialog (`File > Preferences`) — modal dialog with 5 fields (Site Code, File Share Root, Download Root, Est. Runtime, Max Runtime); persisted to `AppPackager.preferences.json` alongside the GUI script; validates numeric fields with `[int]::TryParse` fallback
