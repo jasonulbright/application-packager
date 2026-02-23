@@ -2,6 +2,27 @@
 
 All notable changes to AppPackager are documented in this file.
 
+## [0.0.9] - 2026-02-23 11:45 PM
+
+### Added
+- Preferences dialog (`File > Preferences`) — modal dialog with 5 fields (Site Code, File Share Root, Download Root, Est. Runtime, Max Runtime); persisted to `AppPackager.preferences.json` alongside the GUI script; validates numeric fields with `[int]::TryParse` fallback
+- MenuStrip with `File` menu — "Preferences..." (`Ctrl+,`) opens the Preferences dialog; "Exit" closes the application
+- Tooltips on all interactive controls — Comment field, log pane, DataGridView, Debug Columns checkbox, Select Update Available button, and all 4 action buttons; `AutoPopDelay = 10000`, `InitialDelay = 400`
+
+### Changed
+- Settings that rarely change (Site Code, File Share Root, Download Root, Est/Max Runtime) moved from inline main form fields to the Preferences dialog — reduces main form clutter from 3 configuration rows to a single Comment row
+- Removed the Load/Save named configuration system (`AppPackager.configurations.json`, `Get-ConfigStorePath`, `Read-ConfigStore`, `Write-ConfigStore`, `Set-ConfigurationInputs`, `Save-Configuration`, `Update-ConfigDropdown`) — replaced by the simpler single-preferences model
+- Removed 18 controls from the main form (5 settings labels, 5 settings textboxes, 2 "mins" suffix labels, 2 config labels, 1 config combobox, 1 config textbox, 1 save button, 1 info disclaimer label)
+- "WO / Comment" label renamed to "Comment"
+- Log pane relocated from bottom of window (3 lines) to upper-right beside the logo (~12 visible lines); frees vertical space for the DataGridView
+- Removed "No network or MECM actions occur..." info disclaimer label — redundant with tooltips on every action button
+- All button and context menu handlers now read from `$script:Prefs` instead of textbox controls; Comment remains on the main form as `$txtComment`
+- Simplified `Set-UILayout` — Comment field spans top row below the menu; logo and log share the second row; DataGridView fills remaining space down to the action buttons
+- GUI version bumped from 0.3.0 to 0.4.0; `MinimumSize` height reduced from 640 to 560
+- `-SiteCode` parameter preserved for backward compatibility — overrides the loaded preference for the session when specified on the command line
+
+---
+
 ## [0.0.8] - 2026-02-23
 
 ### Added

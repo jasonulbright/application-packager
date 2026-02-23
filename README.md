@@ -12,7 +12,7 @@ Each packager script operates in two phases:
 
 The GUI (`start-apppackager.ps1`) provides a visual front-end that discovers packager scripts automatically, lets you check latest versions, query MECM for current versions, and stage or package selected applications.
 
-![AppPackager GUI](0.0.8/screenshot_0.0.8.png)
+![AppPackager GUI](0.0.9/screenshot_0.0.9.png)
 
 ## Prerequisites
 
@@ -37,7 +37,7 @@ The GUI (`start-apppackager.ps1`) provides a visual front-end that discovers pac
 
 3. Navigate to the project directory:
    ```powershell
-   cd application-packager\0.0.8
+   cd application-packager\0.0.9
    ```
 
 4. For the Package phase, ensure the ConfigMgr PSDrive is available in your session:
@@ -68,12 +68,13 @@ Or with custom parameters:
 - **Stage Packages** — downloads installers, extracts metadata, generates wrappers and manifests locally
 - **Package Apps** — reads manifests, copies content to network share, creates MECM applications
 
-The GUI supports saving and loading named configurations (site code, file share root, work order/comment, download root, runtime values) so you don't have to re-enter them each session. Window size and position are persisted automatically across sessions.
+Settings that rarely change (Site Code, File Share Root, Download Root, Est/Max Runtime) are managed via **File > Preferences** and persisted to `AppPackager.preferences.json`. The Comment field remains on the main form for per-run entry. Window size and position are persisted automatically across sessions.
 
 Additional grid features:
 - **Right-click context menu** on any row — Open Log Folder, Open Staged Folder, Open Network Share, Copy Latest Version
 - **Select Update Available** button — auto-checks only rows with "Update available" status after a version check
 - **Real-time log streaming** — Stage and Package operations stream packager output line-by-line into the log pane as it runs
+- **Tooltips** on all interactive controls — hover over any field or button for a description of its purpose
 
 ### Command Line
 
@@ -212,7 +213,7 @@ Five detection types are supported: `RegistryKeyValue`, `RegistryKey`, `File`, `
 
 ```
 application-packager/
-  0.0.8/
+  0.0.9/
     start-apppackager.ps1              # WinForms GUI
     apppackager-logo.jpg               # GUI window icon / logo
     apppackager.ico                    # Application icon
@@ -228,7 +229,7 @@ application-packager/
 
 ## Adding a New Packager
 
-1. Create a new file in `0.0.8/Packagers/` named `package-<appname>.ps1`
+1. Create a new file in `0.0.9/Packagers/` named `package-<appname>.ps1`
 
 2. Add metadata tags in the script header (parsed by the GUI):
    ```powershell

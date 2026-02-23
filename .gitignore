@@ -9,3 +9,4 @@ Logs/
 
 # GUI runtime state (dynamically generated)
 AppPackager.windowstate.json
+AppPackager.preferences.json
