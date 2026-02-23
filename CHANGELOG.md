@@ -9,6 +9,14 @@ All notable changes to AppPackager are documented in this file.
 - MenuStrip with `File` menu — "Preferences..." (`Ctrl+,`) opens the Preferences dialog; "Exit" closes the application
 - Tooltips on all interactive controls — Comment field, log pane, DataGridView, Debug Columns checkbox, Select Update Available button, and all 4 action buttons; `AutoPopDelay = 10000`, `InitialDelay = 400`
 
+- 6 M365 ODT-based packager scripts — M365 Apps for Enterprise (x64/x86), M365 Visio (x64/x86), M365 Project (x64/x86); each downloads the Office Deployment Tool, queries the Semi-Annual Enterprise Channel CDN for the current version, downloads offline Office source files, generates install/uninstall XML configs and content wrappers, and writes a stage manifest with file-version detection (WINWORD.EXE, VISIO.EXE, WINPROJ.EXE respectively)
+- `package-vs2026.ps1` — Visual Studio 2026 Enterprise offline layout packager; downloads the VS bootstrapper, creates an offline layout with configurable workloads (`$LayoutArgs`), generates interactive install wrapper (no `--quiet`, uses `--noWeb` for offline); MECM deployment type uses `RequireUserInteraction` and `OnlyWhenUserLoggedOn` so the VS Installer UI is visible to logged-on users
+- `package-ssms.ps1` — SQL Server Management Studio packager; downloads the SSMS bootstrapper (VS Installer backend), creates an offline layout with `--layout`, generates silent install/uninstall wrappers; file-version detection via Ssms.exe
+- Optional manifest override fields in `New-MECMApplicationFromManifest` — `LogonRequirementType` and `RequireUserInteraction` can now be set per-manifest to override the default `WhetherOrNotUserLoggedOn` behavior (used by VS2026 for interactive deployment)
+- `Get-PackagerPreferences` in `AppPackagerCommon.psm1` — reads `packager-preferences.json` from the Packagers folder for universal settings (e.g., `CompanyName` used in ODT config XML)
+- `New-OdtConfigXml` in `AppPackagerCommon.psm1` — generates full ODT configuration XML for download and install phases; supports parameterized `OfficeClientEdition`, `Version`, `ProductIds` array, optional `SourcePath` (download only), and `CompanyName` from preferences; produces complete XML matching production template with `ExcludeApp`, `SharedComputerLicensing`, `FORCEAPPSHUTDOWN`, `MigrateArch`, `RemoveMSI`, `AppSettings`, `Display`, and `Logging` elements
+- `packager-preferences.json` in `Packagers/` — user-editable JSON file for universal packager settings; currently contains `CompanyName` for ODT `AppSettings/Company` value
+
 ### Changed
 - Settings that rarely change (Site Code, File Share Root, Download Root, Est/Max Runtime) moved from inline main form fields to the Preferences dialog — reduces main form clutter from 3 configuration rows to a single Comment row
 - Removed the Load/Save named configuration system (`AppPackager.configurations.json`, `Get-ConfigStorePath`, `Read-ConfigStore`, `Write-ConfigStore`, `Set-ConfigurationInputs`, `Save-Configuration`, `Update-ConfigDropdown`) — replaced by the simpler single-preferences model
@@ -20,6 +28,14 @@ All notable changes to AppPackager are documented in this file.
 - Simplified `Set-UILayout` — Comment field spans top row below the menu; logo and log share the second row; DataGridView fills remaining space down to the action buttons
 - GUI version bumped from 0.3.0 to 0.4.0; `MinimumSize` height reduced from 640 to 560
 - `-SiteCode` parameter preserved for backward compatibility — overrides the loaded preference for the session when specified on the command line
+- VS2026 `$LayoutArgs` changed from 4 specific workloads to `--all` for a full offline layout (~35-50 GB)
+- M365 ODT download URL changed from CDN channel-specific `setup.exe` (3.8 MB Click-to-Run client, not the ODT) to `https://officecdn.microsoft.com/pr/wsus/setup.exe` (7.1 MB, real Office Deployment Tool)
+- M365 version detection changed from `Build` attribute in `VersionDescriptor.xml` to `I640Version` (x64) / `I320Version` (x86) — `Build` is a Windows 7 fallback version, not the current SAEC version
+- SSMS bootstrapper URL changed from `SSMS-Setup-ENU.exe` to `vs_SSMS.exe` (`https://aka.ms/ssms/22/release/vs_SSMS.exe`) and version detection changed from `FileVersion` to `ProductVersion` — `FileVersion` reports the VS Installer engine version, not the SSMS version
+
+### Fixed
+- M365 ODT install.xml — removed `SourcePath="."` attribute from `<Add>` element; ODT silently exits with exit code 0 when given a relative source path; omitting `SourcePath` causes ODT to default to the XML file's directory, matching the production template
+- GUI `Invoke-ProcessWithStreaming` — replaced unbounded `$p.WaitForExit()` with `$p.WaitForExit(15000)` timeout; installers like SSMS and VS2026 spawn grandchild processes that inherit stdout/stderr handles, causing `WaitForExit()` to block indefinitely even after the main process exits and all output is consumed; also guards `$errTask.Result` access to prevent blocking on inherited stderr handles
 
 ---
 

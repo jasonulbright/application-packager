@@ -588,10 +588,16 @@ function Invoke-ProcessWithStreaming {
         Start-Sleep -Milliseconds 50
     }
 
-    $p.WaitForExit()
+    # Use a bounded wait: if stdout EOF was reached the process should be done.
+    # Grandchild processes that inherit handles can block WaitForExit() forever.
+    if (-not $p.WaitForExit(15000)) {
+        # Process still alive after 15 s past stdout EOF - force-collect what we have
+        try { $p.Kill() } catch { }
+        $p.WaitForExit(5000)
+    }
 
     $stdout = ($outLines -join "`r`n")
-    $stderr = $errTask.Result
+    $stderr = if ($errTask.IsCompleted) { $errTask.Result } else { "" }
 
     Set-Content -LiteralPath $OutLog -Value $stdout -Encoding UTF8
     Set-Content -LiteralPath $ErrLog -Value $stderr -Encoding UTF8

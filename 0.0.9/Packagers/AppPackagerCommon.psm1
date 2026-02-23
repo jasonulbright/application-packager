@@ -762,6 +762,13 @@ function New-MECMApplicationFromManifest {
             $dtParams['PostExecutionBehavior'] = $Manifest.PostExecutionBehavior
         }
 
+        if ($Manifest.LogonRequirementType) {
+            $dtParams['LogonRequirementType'] = $Manifest.LogonRequirementType
+        }
+        if ($Manifest.RequireUserInteraction -eq $true) {
+            $dtParams['RequireUserInteraction'] = $true
+        }
+
         if ($detType -eq 'Script') {
             # Script-based detection: pass script text, no clause objects needed
             $lang = if ($Manifest.Detection.ScriptLanguage) { $Manifest.Detection.ScriptLanguage } else { 'PowerShell' }
@@ -818,6 +825,107 @@ function New-MECMApplicationFromManifest {
     finally {
         Set-Location $orig -ErrorAction SilentlyContinue
     }
+}
+
+# ---------------------------------------------------------------------------
+# Packager preferences
+# ---------------------------------------------------------------------------
+
+function Get-PackagerPreferences {
+    <#
+    .SYNOPSIS
+        Reads packager-preferences.json from the Packagers folder.
+    #>
+    $prefsPath = Join-Path $PSScriptRoot "packager-preferences.json"
+    if (-not (Test-Path -LiteralPath $prefsPath)) {
+        Write-Log "Preferences file not found: $prefsPath" -Level WARN
+        return $null
+    }
+    $json = Get-Content -LiteralPath $prefsPath -Raw -Encoding UTF8 -ErrorAction Stop
+    return ($json | ConvertFrom-Json)
+}
+
+# ---------------------------------------------------------------------------
+# ODT config XML generation
+# ---------------------------------------------------------------------------
+
+function New-OdtConfigXml {
+    <#
+    .SYNOPSIS
+        Generates a full ODT configuration XML string for download or install.
+
+    .DESCRIPTION
+        Builds the XML matching the production ODT template with all properties,
+        excluded apps, AppSettings, logging, etc. Used by all M365 packager
+        scripts for both download.xml and install.xml.
+
+    .PARAMETER OfficeClientEdition
+        Architecture: "32" or "64".
+
+    .PARAMETER Version
+        Full M365 version string (e.g. "16.0.19127.20532").
+
+    .PARAMETER ProductIds
+        Array of product IDs (e.g. @('O365ProPlusRetail') or
+        @('O365ProPlusRetail', 'VisioProRetail')).
+
+    .PARAMETER SourcePath
+        SourcePath attribute for the Add element. For download: local content
+        folder path. For install: ".".
+
+    .PARAMETER CompanyName
+        Value for the AppSettings Company name. Omit or pass empty to skip
+        the AppSettings block entirely.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$OfficeClientEdition,
+        [Parameter(Mandatory)][string]$Version,
+        [Parameter(Mandatory)][string[]]$ProductIds,
+        [string]$SourcePath,
+        [string]$CompanyName
+    )
+
+    $addAttrs = @()
+    if ($SourcePath) {
+        $addAttrs += 'SourcePath="{0}"' -f $SourcePath
+    }
+    $addAttrs += 'OfficeClientEdition="{0}"' -f $OfficeClientEdition
+    $addAttrs += 'Channel="SemiAnnual"'
+    $addAttrs += 'OfficeMgmtCOM="TRUE"'
+    $addAttrs += 'Version="{0}"' -f $Version
+    $addAttrs += 'MigrateArch="TRUE"'
+
+    $lines = @('<Configuration>')
+    $lines += '  <Add {0}>' -f ($addAttrs -join ' ')
+
+    foreach ($prodId in $ProductIds) {
+        $lines += '    <Product ID="{0}">' -f $prodId
+        $lines += '      <Language ID="en-us" />'
+        $lines += '      <ExcludeApp ID="Groove" />'
+        $lines += '      <ExcludeApp ID="Lync" />'
+        $lines += '      <ExcludeApp ID="OneDrive" />'
+        $lines += '      <ExcludeApp ID="Teams" />'
+        $lines += '      <ExcludeApp ID="Bing" />'
+        $lines += '    </Product>'
+    }
+
+    $lines += '  </Add>'
+    $lines += '  <Property Name="SharedComputerLicensing" Value="1" />'
+    $lines += '  <Property Name="FORCEAPPSHUTDOWN" Value="TRUE" />'
+    $lines += '  <Property Name="DeviceBasedLicensing" Value="0" />'
+    $lines += '  <Property Name="PinIconsToTaskbar" Value="FALSE" />'
+    $lines += '  <Property Name="SCLCacheOverride" Value="0" />'
+    $lines += '  <RemoveMSI />'
+    if ($CompanyName) {
+        $lines += '  <AppSettings>'
+        $lines += '    <Setup Name="Company" Value="{0}" />' -f $CompanyName
+        $lines += '  </AppSettings>'
+    }
+    $lines += '  <Display Level="None" AcceptEULA="TRUE" />'
+    $lines += '  <Logging Level="Standard" Path="%programdata%\Appdeploy\Office2016" />'
+    $lines += '</Configuration>'
+
+    return ($lines -join "`r`n")
 }
 
 # ---------------------------------------------------------------------------

@@ -39,6 +39,12 @@
         # MECM
         'New-MECMApplicationFromManifest'
         'Remove-CMApplicationRevisionHistoryByCIId'
+
+        # Preferences
+        'Get-PackagerPreferences'
+
+        # ODT config XML
+        'New-OdtConfigXml'
     )
 
     CmdletsToExport   = @()

@@ -109,7 +109,7 @@ All packager scripts accept the same core parameters:
 | `-GetLatestVersionOnly` | Output the latest version string and exit |
 | `-LogPath` | Path to a structured log file (timestamps + severity levels) |
 
-## Supported Applications (26)
+## Supported Applications (34)
 
 | Script | Vendor | Application | Detection Type |
 |---|---|---|---|
@@ -126,14 +126,22 @@ All packager scripts accept the same core parameters:
 | package-git.ps1 | Git | Git for Windows (x64) | Script (git.exe --version) |
 | package-greenshot.ps1 | Greenshot | Greenshot | File existence |
 | package-keepass.ps1 | Dominik Reichl | KeePass | RegistryKeyValue |
+| package-m365apps-x64.ps1 | Microsoft | M365 Apps for Enterprise (x64) | File version (WINWORD.EXE) |
+| package-m365apps-x86.ps1 | Microsoft | M365 Apps for Enterprise (x86) | File version (WINWORD.EXE) |
+| package-m365visio-x64.ps1 | Microsoft | M365 Visio (x64) | File version (VISIO.EXE) |
+| package-m365visio-x86.ps1 | Microsoft | M365 Visio (x86) | File version (VISIO.EXE) |
+| package-m365project-x64.ps1 | Microsoft | M365 Project (x64) | File version (WINPROJ.EXE) |
+| package-m365project-x86.ps1 | Microsoft | M365 Project (x86) | File version (WINPROJ.EXE) |
 | package-msodbcsql18.ps1 | Microsoft | ODBC Driver 18 for SQL Server | RegistryKeyValue |
 | package-msoledb.ps1 | Microsoft | OLE DB Driver for SQL Server | RegistryKeyValue |
 | package-msvcruntimes.ps1 | Microsoft | VC++ 2015-2022 Redistributable (x86+x64) | Compound (AND, 2x RegistryKeyValue) |
 | package-notepadplusplus.ps1 | Notepad++ | Notepad++ (x64) | File version |
 | package-powerbidesktop.ps1 | Microsoft | Power BI Desktop (x64) | File version |
 | package-putty.ps1 | Simon Tatham | PuTTY (x64) | RegistryKeyValue |
+| package-ssms.ps1 | Microsoft | SQL Server Management Studio | File version (Ssms.exe) |
 | package-teams.ps1 | Microsoft | Microsoft Teams Enterprise (x64) | Script (Get-AppxPackage) |
 | package-vmwaretools.ps1 | Broadcom | VMware Tools (x64) | File version |
+| package-vs2026.ps1 | Microsoft | Visual Studio 2026 Enterprise | File version (devenv.exe) |
 | package-vscode.ps1 | Microsoft | Visual Studio Code (x64) | File version |
 | package-webex.ps1 | Cisco | Webex (x64) | RegistryKeyValue |
 | package-webview2.ps1 | Microsoft | WebView2 Evergreen Runtime | File version |
@@ -220,6 +228,7 @@ application-packager/
     Packagers/
       AppPackagerCommon.psm1           # Shared module (logging, wrappers, MECM helpers)
       AppPackagerCommon.psd1           # Module manifest
+      packager-preferences.json        # Universal packager settings (CompanyName, etc.)
       package-7zip.ps1                 # One script per application
       package-chrome.ps1
       ...
@@ -307,3 +316,5 @@ All packager scripts import the shared module which provides:
 | `Write-StageManifest` / `Read-StageManifest` | JSON manifest serialization |
 | `New-MECMApplicationFromManifest` | Creates MECM Application + deployment type from manifest |
 | `Remove-CMApplicationRevisionHistoryByCIId` | Trims old application revisions |
+| `Get-PackagerPreferences` | Reads `packager-preferences.json` for universal settings (e.g., CompanyName) |
+| `New-OdtConfigXml` | Generates full ODT configuration XML for M365 download/install phases |
