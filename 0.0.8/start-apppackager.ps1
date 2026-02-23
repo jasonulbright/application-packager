@@ -162,6 +162,65 @@ function Select-OnlyUpdateAvailable {
     }
 }
 
+function Get-WindowStatePath {
+    Join-Path $PSScriptRoot "AppPackager.windowstate.json"
+}
+
+function Save-WindowState {
+    param([Parameter(Mandatory)][System.Windows.Forms.Form]$Form)
+
+    $state = @{}
+
+    if ($Form.WindowState -eq [System.Windows.Forms.FormWindowState]::Normal) {
+        $state.Left   = $Form.Left
+        $state.Top    = $Form.Top
+        $state.Width  = $Form.Width
+        $state.Height = $Form.Height
+    }
+    else {
+        $state.Left   = $Form.RestoreBounds.Left
+        $state.Top    = $Form.RestoreBounds.Top
+        $state.Width  = $Form.RestoreBounds.Width
+        $state.Height = $Form.RestoreBounds.Height
+    }
+    $state.Maximized = ($Form.WindowState -eq [System.Windows.Forms.FormWindowState]::Maximized)
+
+    try {
+        $json = $state | ConvertTo-Json
+        Set-Content -LiteralPath (Get-WindowStatePath) -Value $json -Encoding UTF8
+    }
+    catch { }
+}
+
+function Restore-WindowState {
+    param([Parameter(Mandatory)][System.Windows.Forms.Form]$Form)
+
+    $path = Get-WindowStatePath
+    if (-not (Test-Path -LiteralPath $path)) { return }
+
+    try {
+        $state = Get-Content -LiteralPath $path -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+
+        $pt = New-Object System.Drawing.Point ([int]$state.Left), ([int]$state.Top)
+        $screen = [System.Windows.Forms.Screen]::FromPoint($pt)
+        $wa = $screen.WorkingArea
+
+        $left   = [Math]::Max($wa.Left, [Math]::Min([int]$state.Left, ($wa.Right - 200)))
+        $top    = [Math]::Max($wa.Top,  [Math]::Min([int]$state.Top,  ($wa.Bottom - 100)))
+        $width  = [Math]::Max($Form.MinimumSize.Width,  [Math]::Min([int]$state.Width,  $wa.Width))
+        $height = [Math]::Max($Form.MinimumSize.Height, [Math]::Min([int]$state.Height, $wa.Height))
+
+        $Form.StartPosition = [System.Windows.Forms.FormStartPosition]::Manual
+        $Form.Location = New-Object System.Drawing.Point $left, $top
+        $Form.Size     = New-Object System.Drawing.Size $width, $height
+
+        if ($state.Maximized -eq $true) {
+            $Form.WindowState = [System.Windows.Forms.FormWindowState]::Maximized
+        }
+    }
+    catch { }
+}
+
 function New-Mdl2IconBitmap {
     param(
         [Parameter(Mandatory)][int]$CodePoint,
@@ -346,6 +405,29 @@ function Test-PackagerSupportsFileServerPath {
     catch {
         return $false
     }
+}
+
+function Get-PackagerFolderInfo {
+    param([Parameter(Mandatory)][string]$ScriptPath)
+
+    $info = @{ DownloadSubfolder = $null; VendorFolder = $null; AppFolder = $null }
+    try {
+        $lines = Get-Content -LiteralPath $ScriptPath -TotalCount 120 -ErrorAction Stop
+        foreach ($line in $lines) {
+            if (-not $info.DownloadSubfolder -and $line -match '\$BaseDownloadRoot\s*=\s*Join-Path\s+\$DownloadRoot\s+"([^"]+)"') {
+                $info.DownloadSubfolder = $matches[1]
+            }
+            if (-not $info.VendorFolder -and $line -match '^\s*\$VendorFolder\s*=\s*"([^"]+)"') {
+                $info.VendorFolder = $matches[1]
+            }
+            if (-not $info.AppFolder -and $line -match '^\s*\$AppFolder\s*=\s*"([^"]+)"') {
+                $info.AppFolder = $matches[1]
+            }
+        }
+    }
+    catch { }
+
+    return $info
 }
 
 function Invoke-PackagerGetLatestVersion {
@@ -678,19 +760,20 @@ $form.MinimumSize = New-Object System.Drawing.Size(980, 640)
 $form.AutoScaleMode = [System.Windows.Forms.AutoScaleMode]::Dpi
 $form.Font = New-Object System.Drawing.Font("Segoe UI", 10)
 $form.BackColor = [System.Drawing.Color]::White
-$script:AppIconBitmap = $null
-$script:AppIconHandle = [IntPtr]::Zero
-
+$icoPath = Join-Path $PSScriptRoot "apppackager.ico"
 $logoPath = Join-Path $PSScriptRoot "apppackager-logo.jpg"
 if (-not (Test-Path -LiteralPath $logoPath)) {
     $logoPath = Join-Path $PSScriptRoot "apppackager-logo.png"
 }
 
+# Form icon: prefer .ico (multi-resolution), fall back to bitmap conversion
 try {
-    if (Test-Path -LiteralPath $logoPath) {
-        $script:AppIconBitmap = New-Object System.Drawing.Bitmap $logoPath
-        $script:AppIconHandle = $script:AppIconBitmap.GetHicon()
-        $form.Icon = [System.Drawing.Icon]::FromHandle($script:AppIconHandle)
+    if (Test-Path -LiteralPath $icoPath) {
+        $form.Icon = New-Object System.Drawing.Icon $icoPath
+    }
+    elseif (Test-Path -LiteralPath $logoPath) {
+        $bmp = New-Object System.Drawing.Bitmap $logoPath
+        $form.Icon = [System.Drawing.Icon]::FromHandle($bmp.GetHicon())
     }
     else {
         $form.Icon = [System.Drawing.SystemIcons]::Application
@@ -1135,6 +1218,118 @@ $grid.Add_CurrentCellDirtyStateChanged({
     }
 })
 
+# -----------------------------
+# Right-click context menu
+# -----------------------------
+$gridContextMenu = New-Object System.Windows.Forms.ContextMenuStrip
+$script:ContextMenuRowIndex = -1
+
+$menuOpenLogFolder     = New-Object System.Windows.Forms.ToolStripMenuItem "Open Log Folder"
+$menuOpenStagedFolder  = New-Object System.Windows.Forms.ToolStripMenuItem "Open Staged Folder"
+$menuOpenNetworkShare  = New-Object System.Windows.Forms.ToolStripMenuItem "Open Network Share"
+$menuSep1              = New-Object System.Windows.Forms.ToolStripSeparator
+$menuCopyLatestVersion = New-Object System.Windows.Forms.ToolStripMenuItem "Copy Latest Version"
+
+$gridContextMenu.Items.AddRange(@($menuOpenLogFolder, $menuOpenStagedFolder, $menuOpenNetworkShare, $menuSep1, $menuCopyLatestVersion))
+
+$grid.Add_CellMouseClick({
+    param($s, $e)
+    if ($e.Button -eq [System.Windows.Forms.MouseButtons]::Right -and $e.RowIndex -ge 0) {
+        $script:ContextMenuRowIndex = $e.RowIndex
+        $grid.ClearSelection()
+        $grid.Rows[$e.RowIndex].Selected = $true
+
+        $row = $dt.Rows[$e.RowIndex]
+        $menuCopyLatestVersion.Enabled = (-not [string]::IsNullOrWhiteSpace([string]$row["LatestVersion"]))
+
+        $gridContextMenu.Show($grid, $grid.PointToClient([System.Windows.Forms.Cursor]::Position))
+    }
+})
+
+$menuOpenLogFolder.Add_Click({
+    $logFolder = Join-Path $PSScriptRoot "Logs"
+    if (-not (Test-Path -LiteralPath $logFolder)) {
+        New-Item -ItemType Directory -Path $logFolder -Force | Out-Null
+    }
+    Start-Process "explorer.exe" -ArgumentList $logFolder
+})
+
+$menuOpenStagedFolder.Add_Click({
+    if ($script:ContextMenuRowIndex -lt 0) { return }
+    $row = $dt.Rows[$script:ContextMenuRowIndex]
+    $dlRoot = $txtDownloadRoot.Text.Trim()
+
+    if ([string]::IsNullOrWhiteSpace($dlRoot)) {
+        Add-LogLine -TextBox $txtLog -Message "Download Root is not set."
+        return
+    }
+
+    $info = Get-PackagerFolderInfo -ScriptPath ([string]$row["FullPath"])
+    if ($info.DownloadSubfolder) {
+        $targetPath = Join-Path $dlRoot $info.DownloadSubfolder
+
+        # Try version-specific subfolder first
+        $version = [string]$row["LatestVersion"]
+        if (-not [string]::IsNullOrWhiteSpace($version)) {
+            $versionPath = Join-Path $targetPath $version
+            if (Test-Path -LiteralPath $versionPath) {
+                Start-Process "explorer.exe" -ArgumentList $versionPath
+                return
+            }
+        }
+
+        if (Test-Path -LiteralPath $targetPath) {
+            Start-Process "explorer.exe" -ArgumentList $targetPath
+            return
+        }
+    }
+
+    if (Test-Path -LiteralPath $dlRoot) {
+        Start-Process "explorer.exe" -ArgumentList $dlRoot
+    }
+    else {
+        Add-LogLine -TextBox $txtLog -Message ("Folder not found: {0}" -f $dlRoot)
+    }
+})
+
+$menuOpenNetworkShare.Add_Click({
+    if ($script:ContextMenuRowIndex -lt 0) { return }
+    $row = $dt.Rows[$script:ContextMenuRowIndex]
+    $fsPath = $txtFSPath.Text.Trim()
+
+    if ([string]::IsNullOrWhiteSpace($fsPath)) {
+        Add-LogLine -TextBox $txtLog -Message "File Share Root is not set."
+        return
+    }
+
+    $info = Get-PackagerFolderInfo -ScriptPath ([string]$row["FullPath"])
+    if ($info.VendorFolder -and $info.AppFolder) {
+        $targetPath = Join-Path (Join-Path (Join-Path $fsPath "Applications") $info.VendorFolder) $info.AppFolder
+        if (Test-Path -LiteralPath $targetPath) {
+            Start-Process "explorer.exe" -ArgumentList $targetPath
+            return
+        }
+    }
+
+    $appsRoot = Join-Path $fsPath "Applications"
+    if (Test-Path -LiteralPath $appsRoot) {
+        Start-Process "explorer.exe" -ArgumentList $appsRoot
+    }
+    else {
+        Add-LogLine -TextBox $txtLog -Message ("Network path not accessible: {0}" -f $appsRoot)
+    }
+})
+
+$menuCopyLatestVersion.Add_Click({
+    if ($script:ContextMenuRowIndex -lt 0) { return }
+    $row = $dt.Rows[$script:ContextMenuRowIndex]
+    $version = [string]$row["LatestVersion"]
+    if (-not [string]::IsNullOrWhiteSpace($version)) {
+        [System.Windows.Forms.Clipboard]::SetText($version)
+        Add-LogLine -TextBox $txtLog -Message ("Copied version to clipboard: {0}" -f $version)
+    }
+})
+
 # Debug toggle
 $chkDebug = New-Object System.Windows.Forms.CheckBox
 $chkDebug.Text = "Show Debug Columns"
@@ -1142,6 +1337,27 @@ $chkDebug.AutoSize = $true
 $chkDebug.Location = New-Object System.Drawing.Point(20, 510)
 $chkDebug.Anchor = "Top,Left"
 $form.Controls.Add($chkDebug)
+
+$btnSelectUpdates = New-Object System.Windows.Forms.Button
+$btnSelectUpdates.Text = "Select Update Available"
+$btnSelectUpdates.AutoSize = $true
+$btnSelectUpdates.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+$btnSelectUpdates.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(180, 180, 180)
+$btnSelectUpdates.FlatAppearance.BorderSize = 1
+$btnSelectUpdates.BackColor = [System.Drawing.Color]::White
+$btnSelectUpdates.ForeColor = [System.Drawing.Color]::FromArgb(60, 60, 60)
+$btnSelectUpdates.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$btnSelectUpdates.Cursor = [System.Windows.Forms.Cursors]::Hand
+$btnSelectUpdates.Height = 26
+$btnSelectUpdates.Anchor = "Bottom,Left"
+$form.Controls.Add($btnSelectUpdates)
+
+$btnSelectUpdates.Add_Click({
+    $grid.EndEdit()
+    Select-OnlyUpdateAvailable -DataTable $dt
+    $grid.Refresh()
+    Add-LogLine -TextBox $txtLog -Message "Selected rows with 'Update available' status."
+})
 
 # Unicode emoji code points
 $emojiSearch  = [char]::ConvertFromUtf32(0x1F50D)  # search
@@ -1380,6 +1596,7 @@ function Set-UILayout {
     $btnPackage.SetBounds(($padding + (3 * ($btnWidth + $gap))), $btnY, $btnWidth, $btnHeight)
 
     $chkDebug.Location = New-Object System.Drawing.Point($padding, ($btnY - 34))
+    $btnSelectUpdates.Location = New-Object System.Drawing.Point(($chkDebug.Right + 20), ($btnY - 36))
 
     $grid.SetBounds($padding, $gridTop, ($form.ClientSize.Width - (2 * $padding)), ($chkDebug.Top - 10 - $gridTop))
 
@@ -1826,6 +2043,12 @@ $form.Add_Shown({
     }
 
     $statusLabel.Text = ("Loaded {0} packager(s). Ready." -f $dt.Rows.Count)
+})
+
+Restore-WindowState -Form $form
+
+$form.Add_FormClosing({
+    Save-WindowState -Form $form
 })
 
 [void]$form.ShowDialog()

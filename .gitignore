@@ -6,3 +6,6 @@ punchlist.md
 
 # Staging test logs
 Logs/
+
+# GUI runtime state (dynamically generated)
+AppPackager.windowstate.json

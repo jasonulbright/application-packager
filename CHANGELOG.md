@@ -23,6 +23,9 @@ All notable changes to AppPackager are documented in this file.
 - GUI "Est. Runtime" and "Max Runtime" fields (with "mins" suffix labels) — override the MECM deployment type runtime values passed during Package
 - GUI "Stage Packages" button (orange) — runs selected scripts with `-StageOnly` to download installers, discover ARP metadata, and write stage manifests
 - GUI "Package Apps" button (purple) — runs selected scripts with `-PackageOnly` to read manifests, copy content to network, and create MECM applications
+- GUI right-click context menu on grid rows — "Open Log Folder" (opens `Logs/` in Explorer), "Open Staged Folder" (resolves app-specific download subfolder from script, opens versioned folder if available), "Open Network Share" (resolves `VendorFolder/AppFolder` from script, opens UNC path), "Copy Latest Version" (clipboard); uses `Get-PackagerFolderInfo` helper to parse `$BaseDownloadRoot`, `$VendorFolder`, `$AppFolder` from packager script headers
+- GUI "Select Update Available" button — flat-styled button next to the "Show Debug Columns" checkbox; calls existing `Select-OnlyUpdateAvailable` to auto-check only rows with status "Update available"
+- GUI window size/position persistence — saves `Left`, `Top`, `Width`, `Height`, and `Maximized` state to `AppPackager.windowstate.json` on form close; restores on next launch with screen bounds validation (ensures title bar remains visible, respects minimum size); uses `RestoreBounds` when maximized to preserve normal-size dimensions
 - `.PARAMETER` documentation for `DownloadRoot`, `EstimatedRuntimeMins`, `MaximumRuntimeMins`, `StageOnly`, and `PackageOnly` on the gold standard (`package-7zip.ps1`)
 
 ### Changed
@@ -53,6 +56,7 @@ All notable changes to AppPackager are documented in this file.
 - Replaced the 5-line description panel with a single condensed italic info line to accommodate the additional configuration fields without increasing window size
 - GUI layout reorganized: action bar now has 4 buttons instead of 3; button width calculation adjusted from `/3` to `/4`
 - GUI version bumped from 0.1.0 to 0.3.0
+- GUI layout updated to position "Select Update Available" button adjacent to debug columns checkbox via `Set-UILayout`
 
 ### Fixed
 - `Write-Log` now accepts empty strings via `[AllowEmptyString()]` attribute — `Write-Log ""` for blank log lines was rejected by PowerShell's mandatory parameter validation
@@ -61,11 +65,19 @@ All notable changes to AppPackager are documented in this file.
 - Content wrapper `.ps1` files written with `-Encoding ASCII` instead of `-Encoding UTF8` — PowerShell 5.1's `UTF8` encoding always prepends a BOM (`EF BB BF`), which appeared as `∩╗┐` at position 0
 - Stage manifest `Detection.DisplayVersion` now stores the raw MSI `ProductVersion` (e.g., `26.00.00.0`) instead of the normalized display version (`26.00`) — the MECM `IsEquals` detection clause must match the actual 4-part registry value
 
+### Changed
+- Form icon loading now prefers `apppackager.ico` (multi-resolution `.ico` loaded directly via `System.Drawing.Icon`) over the previous JPG-to-bitmap-to-`GetHicon()` conversion; falls back to JPG/PNG bitmap, then `SystemIcons.Application`
+
+### New Packager Scripts
+- `package-putty.ps1` — PuTTY (x64) MSI from `the.earth.li/~sgtatham/putty/latest/w64/`; version scraped from directory listing; ARP detection derived from MSI properties (ProductCode registry key, ProductVersion as DisplayVersion); `New-MsiWrapperContent` + `Write-ContentWrappers`
+- `package-filezilla.ps1` — FileZilla Client (x64) NSIS EXE from `download.filezilla-project.org`; version extracted from HTML meta description tag on download page (no AES decryption needed); requires browser-like User-Agent header; fixed ARP registry key `FileZilla Client` (not GUID-based); custom install/uninstall wrappers with NSIS `/S` switch
+- `package-keepass.ps1` — KeePass 2.x MSI from SourceForge; version from `keepass.info/update/version2x.txt`; ARP detection derived from MSI properties; 32-bit .NET app (`Is64Bit = $false` for WOW6432Node registry); SourceForge download requires `-L --max-redirs 10` for mirror redirects
+
 ### Deprecated
 - **Tableau Desktop/Prep/Reader:** Deprecated and moved to `Archive/deprecated/`. Salesforce removed public download access at `downloads.tableau.com/tssoftware/` (returns 404 for all versions). The original pre-refactored scripts used the identical URL pattern. Scripts were structurally complete and passing all verification checks but could not stage due to the upstream change.
 
 ### Staging Validation
-23 of 23 active products staged and validated successfully.
+26 of 26 active products staged and validated successfully.
 
 ---
 

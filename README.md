@@ -68,7 +68,11 @@ Or with custom parameters:
 - **Stage Packages** — downloads installers, extracts metadata, generates wrappers and manifests locally
 - **Package Apps** — reads manifests, copies content to network share, creates MECM applications
 
-The GUI supports saving and loading named configurations (site code, file share root, work order/comment, download root, runtime values) so you don't have to re-enter them each session.
+The GUI supports saving and loading named configurations (site code, file share root, work order/comment, download root, runtime values) so you don't have to re-enter them each session. Window size and position are persisted automatically across sessions.
+
+Additional grid features:
+- **Right-click context menu** on any row — Open Log Folder, Open Staged Folder, Open Network Share, Copy Latest Version
+- **Select Update Available** button — auto-checks only rows with "Update available" status after a version check
 
 ### Command Line
 
@@ -103,7 +107,7 @@ All packager scripts accept the same core parameters:
 | `-GetLatestVersionOnly` | Output the latest version string and exit |
 | `-LogPath` | Path to a structured log file (timestamps + severity levels) |
 
-## Supported Applications (23)
+## Supported Applications (26)
 
 | Script | Vendor | Application | Detection Type |
 |---|---|---|---|
@@ -115,14 +119,17 @@ All packager scripts accept the same core parameters:
 | package-Dotnet9x64.ps1 | Microsoft | .NET Desktop Runtime 9 (x64) | File existence |
 | package-Dotnet10x64.ps1 | Microsoft | .NET Desktop Runtime 10 (x64) | File existence |
 | package-edge.ps1 | Microsoft | Microsoft Edge (x64) | Compound (OR, 2x File version) |
+| package-filezilla.ps1 | FileZilla Project | FileZilla Client (x64) | RegistryKeyValue |
 | package-firefox.ps1 | Mozilla | Mozilla Firefox (x64) | File version |
 | package-git.ps1 | Git | Git for Windows (x64) | Script (git.exe --version) |
 | package-greenshot.ps1 | Greenshot | Greenshot | File existence |
+| package-keepass.ps1 | Dominik Reichl | KeePass | RegistryKeyValue |
 | package-msodbcsql18.ps1 | Microsoft | ODBC Driver 18 for SQL Server | RegistryKeyValue |
 | package-msoledb.ps1 | Microsoft | OLE DB Driver for SQL Server | RegistryKeyValue |
 | package-msvcruntimes.ps1 | Microsoft | VC++ 2015-2022 Redistributable (x86+x64) | Compound (AND, 2x RegistryKeyValue) |
 | package-notepadplusplus.ps1 | Notepad++ | Notepad++ (x64) | File version |
 | package-powerbidesktop.ps1 | Microsoft | Power BI Desktop (x64) | File version |
+| package-putty.ps1 | Simon Tatham | PuTTY (x64) | RegistryKeyValue |
 | package-teams.ps1 | Microsoft | Microsoft Teams Enterprise (x64) | Script (Get-AppxPackage) |
 | package-vmwaretools.ps1 | Broadcom | VMware Tools (x64) | File version |
 | package-vscode.ps1 | Microsoft | Visual Studio Code (x64) | File version |
