@@ -73,6 +73,7 @@ The GUI supports saving and loading named configurations (site code, file share 
 Additional grid features:
 - **Right-click context menu** on any row — Open Log Folder, Open Staged Folder, Open Network Share, Copy Latest Version
 - **Select Update Available** button — auto-checks only rows with "Update available" status after a version check
+- **Real-time log streaming** — Stage and Package operations stream packager output line-by-line into the log pane as it runs
 
 ### Command Line
 

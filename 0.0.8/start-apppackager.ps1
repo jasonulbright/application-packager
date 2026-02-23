@@ -573,6 +573,67 @@ function Get-MecmCurrentVersionByCMName {
     }
 }
 
+function Invoke-ProcessWithStreaming {
+    param(
+        [Parameter(Mandatory)][System.Diagnostics.ProcessStartInfo]$StartInfo,
+        [Parameter(Mandatory)][string]$OutLog,
+        [Parameter(Mandatory)][string]$ErrLog,
+        [string]$StructuredLog = '',
+        [System.Windows.Forms.TextBox]$LogTextBox = $null
+    )
+
+    $p = New-Object System.Diagnostics.Process
+    $p.StartInfo = $StartInfo
+
+    $null = $p.Start()
+
+    $outLines = New-Object System.Collections.Generic.List[string]
+
+    # Read stderr asynchronously (collected, not streamed)
+    $errTask = $p.StandardError.ReadToEndAsync()
+
+    # Read stdout line-by-line for real-time display
+    $reader   = $p.StandardOutput
+    $lineTask = $reader.ReadLineAsync()
+
+    while ($true) {
+        if ($lineTask.IsCompleted) {
+            $line = $lineTask.Result
+            if ($null -eq $line) { break }
+
+            $outLines.Add($line)
+
+            if ($LogTextBox) {
+                $displayLine = $line -replace '^\[[\d: -]+\] \[\w+\s*\] ', ''
+                if ($displayLine.Trim()) {
+                    Add-LogLine -TextBox $LogTextBox -Message ("  {0}" -f $displayLine)
+                }
+            }
+
+            $lineTask = $reader.ReadLineAsync()
+        }
+
+        [System.Windows.Forms.Application]::DoEvents()
+        Start-Sleep -Milliseconds 50
+    }
+
+    $p.WaitForExit()
+
+    $stdout = ($outLines -join "`r`n")
+    $stderr = $errTask.Result
+
+    Set-Content -LiteralPath $OutLog -Value $stdout -Encoding UTF8
+    Set-Content -LiteralPath $ErrLog -Value $stderr -Encoding UTF8
+
+    return [pscustomobject]@{
+        ExitCode      = $p.ExitCode
+        OutLog        = $OutLog
+        ErrLog        = $ErrLog
+        StructuredLog = $StructuredLog
+        StdErr        = $stderr
+    }
+}
+
 function Invoke-PackagerRun {
     param(
         [Parameter(Mandatory)][string]$PackagerPath,
@@ -582,7 +643,8 @@ function Invoke-PackagerRun {
         [Parameter(Mandatory)][string]$LogFolder,
         [string]$DownloadRoot = $null,
         [int]$EstimatedRuntimeMins = 0,
-        [int]$MaximumRuntimeMins = 0
+        [int]$MaximumRuntimeMins = 0,
+        [System.Windows.Forms.TextBox]$LogTextBox = $null
     )
 
     if (-not (Test-Path -LiteralPath $LogFolder)) {
@@ -616,31 +678,15 @@ function Invoke-PackagerRun {
     $psi.UseShellExecute = $false
     $psi.CreateNoWindow  = $true
 
-    $p = New-Object System.Diagnostics.Process
-    $p.StartInfo = $psi
-
-    $null = $p.Start()
-    $stderr = $p.StandardError.ReadToEnd()
-    $stdout = $p.StandardOutput.ReadToEnd()
-    $p.WaitForExit()
-
-    Set-Content -LiteralPath $outLog -Value $stdout -Encoding UTF8
-    Set-Content -LiteralPath $errLog -Value $stderr -Encoding UTF8
-
-    return [pscustomobject]@{
-        ExitCode      = $p.ExitCode
-        OutLog        = $outLog
-        ErrLog        = $errLog
-        StructuredLog = $structuredLog
-        StdErr        = $stderr
-    }
+    return Invoke-ProcessWithStreaming -StartInfo $psi -OutLog $outLog -ErrLog $errLog -StructuredLog $structuredLog -LogTextBox $LogTextBox
 }
 
 function Invoke-PackagerStage {
     param(
         [Parameter(Mandatory)][string]$PackagerPath,
         [Parameter(Mandatory)][string]$LogFolder,
-        [string]$DownloadRoot = $null
+        [string]$DownloadRoot = $null,
+        [System.Windows.Forms.TextBox]$LogTextBox = $null
     )
 
     if (-not (Test-Path -LiteralPath $LogFolder)) {
@@ -665,24 +711,7 @@ function Invoke-PackagerStage {
     $psi.UseShellExecute = $false
     $psi.CreateNoWindow  = $true
 
-    $p = New-Object System.Diagnostics.Process
-    $p.StartInfo = $psi
-
-    $null = $p.Start()
-    $stderr = $p.StandardError.ReadToEnd()
-    $stdout = $p.StandardOutput.ReadToEnd()
-    $p.WaitForExit()
-
-    Set-Content -LiteralPath $outLog -Value $stdout -Encoding UTF8
-    Set-Content -LiteralPath $errLog -Value $stderr -Encoding UTF8
-
-    return [pscustomobject]@{
-        ExitCode      = $p.ExitCode
-        OutLog        = $outLog
-        ErrLog        = $errLog
-        StructuredLog = $structuredLog
-        StdErr        = $stderr
-    }
+    return Invoke-ProcessWithStreaming -StartInfo $psi -OutLog $outLog -ErrLog $errLog -StructuredLog $structuredLog -LogTextBox $LogTextBox
 }
 
 function Invoke-PackagerPackage {
@@ -694,7 +723,8 @@ function Invoke-PackagerPackage {
         [Parameter(Mandatory)][string]$LogFolder,
         [string]$DownloadRoot = $null,
         [int]$EstimatedRuntimeMins = 0,
-        [int]$MaximumRuntimeMins = 0
+        [int]$MaximumRuntimeMins = 0,
+        [System.Windows.Forms.TextBox]$LogTextBox = $null
     )
 
     if (-not (Test-Path -LiteralPath $LogFolder)) {
@@ -728,24 +758,7 @@ function Invoke-PackagerPackage {
     $psi.UseShellExecute = $false
     $psi.CreateNoWindow  = $true
 
-    $p = New-Object System.Diagnostics.Process
-    $p.StartInfo = $psi
-
-    $null = $p.Start()
-    $stderr = $p.StandardError.ReadToEnd()
-    $stdout = $p.StandardOutput.ReadToEnd()
-    $p.WaitForExit()
-
-    Set-Content -LiteralPath $outLog -Value $stdout -Encoding UTF8
-    Set-Content -LiteralPath $errLog -Value $stderr -Encoding UTF8
-
-    return [pscustomobject]@{
-        ExitCode      = $p.ExitCode
-        OutLog        = $outLog
-        ErrLog        = $errLog
-        StructuredLog = $structuredLog
-        StdErr        = $stderr
-    }
+    return Invoke-ProcessWithStreaming -StartInfo $psi -OutLog $outLog -ErrLog $errLog -StructuredLog $structuredLog -LogTextBox $LogTextBox
 }
 
 # -----------------------------
@@ -1871,7 +1884,8 @@ $btnStage.Add_Click({
                 $res = Invoke-PackagerStage `
                     -PackagerPath $path `
                     -LogFolder $logFolder `
-                    -DownloadRoot $dlRootValue
+                    -DownloadRoot $dlRootValue `
+                    -LogTextBox $txtLog
 
                 if ($res.ExitCode -eq 0) {
                     $row["Status"] = "Staged"
@@ -1980,7 +1994,8 @@ $btnPackage.Add_Click({
                     -LogFolder $logFolder `
                     -DownloadRoot $dlRootValue `
                     -EstimatedRuntimeMins $estVal `
-                    -MaximumRuntimeMins $maxVal
+                    -MaximumRuntimeMins $maxVal `
+                    -LogTextBox $txtLog
 
                 if ($res.ExitCode -eq 0) {
                     $row["Status"] = "Packaged"
