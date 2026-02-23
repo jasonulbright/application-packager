@@ -613,3 +613,69 @@ Describe 'Stage manifest with fixed ARP key detection' {
         $manifest.Detection.Operator | Should -Be 'IsEquals'
     }
 }
+
+# ============================================================================
+# Write-StageManifest — File Existence with version-specific path (R pattern)
+# ============================================================================
+
+Describe 'Stage manifest with version-specific file detection path' {
+    It 'round-trips File Existence detection with R-style versioned path' {
+        $path = Join-Path $TestDrive 'r-manifest.json'
+
+        $data = @{
+            AppName         = 'R for Windows - 4.5.2 (x64)'
+            Publisher       = 'The R Foundation'
+            SoftwareVersion = '4.5.2'
+            InstallerFile   = 'R-4.5.2-win.exe'
+            Detection       = @{
+                Type         = 'File'
+                FilePath     = 'C:\Program Files\R\R-4.5.2\bin'
+                FileName     = 'R.exe'
+                PropertyType = 'Existence'
+                Is64Bit      = $true
+            }
+        }
+
+        Write-StageManifest -Path $path -ManifestData $data
+        $manifest = Read-StageManifest -Path $path
+
+        $manifest.AppName         | Should -Be 'R for Windows - 4.5.2 (x64)'
+        $manifest.Detection.Type  | Should -Be 'File'
+        $manifest.Detection.FilePath     | Should -Be 'C:\Program Files\R\R-4.5.2\bin'
+        $manifest.Detection.FileName     | Should -Be 'R.exe'
+        $manifest.Detection.PropertyType | Should -Be 'Existence'
+    }
+}
+
+# ============================================================================
+# Write-StageManifest — RegistryKeyValue with '+' in version (RStudio pattern)
+# ============================================================================
+
+Describe 'Stage manifest with plus sign in version string' {
+    It 'round-trips RegistryKeyValue detection preserving + in ExpectedValue' {
+        $path = Join-Path $TestDrive 'rstudio-manifest.json'
+
+        $data = @{
+            AppName         = 'RStudio Desktop - 2026.01.1+403 (x64)'
+            Publisher       = 'Posit Software, PBC'
+            SoftwareVersion = '2026.01.1+403'
+            InstallerFile   = 'RStudio-2026.01.1-403.exe'
+            Detection       = @{
+                Type                = 'RegistryKeyValue'
+                RegistryKeyRelative = 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\RStudio'
+                ValueName           = 'DisplayVersion'
+                ExpectedValue       = '2026.01.1+403'
+                Operator            = 'IsEquals'
+                Is64Bit             = $true
+            }
+        }
+
+        Write-StageManifest -Path $path -ManifestData $data
+        $manifest = Read-StageManifest -Path $path
+
+        $manifest.SoftwareVersion              | Should -Be '2026.01.1+403'
+        $manifest.Detection.ExpectedValue      | Should -Be '2026.01.1+403'
+        $manifest.Detection.RegistryKeyRelative | Should -Match 'RStudio'
+        $manifest.Detection.Operator           | Should -Be 'IsEquals'
+    }
+}

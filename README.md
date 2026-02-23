@@ -109,7 +109,7 @@ All packager scripts accept the same core parameters:
 | `-GetLatestVersionOnly` | Output the latest version string and exit |
 | `-LogPath` | Path to a structured log file (timestamps + severity levels) |
 
-## Supported Applications (36)
+## Supported Applications (38)
 
 | Script | Vendor | Application | Detection Type |
 |---|---|---|---|
@@ -138,6 +138,8 @@ All packager scripts accept the same core parameters:
 | package-notepadplusplus.ps1 | Notepad++ | Notepad++ (x64) | File version |
 | package-powerbidesktop.ps1 | Microsoft | Power BI Desktop (x64) | File version |
 | package-putty.ps1 | Simon Tatham | PuTTY (x64) | RegistryKeyValue |
+| package-r.ps1 | The R Foundation | R for Windows (x64) | File existence |
+| package-rstudio.ps1 | Posit Software, PBC | RStudio Desktop (x64) | RegistryKeyValue |
 | package-ssms.ps1 | Microsoft | SQL Server Management Studio | File version (Ssms.exe) |
 | package-teams.ps1 | Microsoft | Microsoft Teams Enterprise (x64) | Script (Get-AppxPackage) |
 | package-vmwaretools.ps1 | Broadcom | VMware Tools (x64) | File version |
