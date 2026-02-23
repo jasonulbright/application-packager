@@ -109,7 +109,7 @@ All packager scripts accept the same core parameters:
 | `-GetLatestVersionOnly` | Output the latest version string and exit |
 | `-LogPath` | Path to a structured log file (timestamps + severity levels) |
 
-## Supported Applications (34)
+## Supported Applications (36)
 
 | Script | Vendor | Application | Detection Type |
 |---|---|---|---|
@@ -142,11 +142,13 @@ All packager scripts accept the same core parameters:
 | package-teams.ps1 | Microsoft | Microsoft Teams Enterprise (x64) | Script (Get-AppxPackage) |
 | package-vmwaretools.ps1 | Broadcom | VMware Tools (x64) | File version |
 | package-vs2026.ps1 | Microsoft | Visual Studio 2026 Enterprise | File version (devenv.exe) |
+| package-vlc.ps1 | VideoLAN | VLC Media Player (x64) | RegistryKeyValue |
 | package-vscode.ps1 | Microsoft | Visual Studio Code (x64) | File version |
 | package-webex.ps1 | Cisco | Webex (x64) | RegistryKeyValue |
 | package-webview2.ps1 | Microsoft | WebView2 Evergreen Runtime | File version |
 | package-winscp.ps1 | WinSCP | WinSCP | RegistryKeyValue |
 | package-wireshark.ps1 | Wireshark Foundation | Wireshark (x64) | RegistryKeyValue |
+| package-zoom.ps1 | Zoom Video Communications | Zoom Workplace (x64) | File existence (per-user) |
 
 ## Content Staging Layout
 

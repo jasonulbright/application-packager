@@ -762,6 +762,9 @@ function New-MECMApplicationFromManifest {
             $dtParams['PostExecutionBehavior'] = $Manifest.PostExecutionBehavior
         }
 
+        if ($Manifest.InstallationBehaviorType) {
+            $dtParams['InstallationBehaviorType'] = $Manifest.InstallationBehaviorType
+        }
         if ($Manifest.LogonRequirementType) {
             $dtParams['LogonRequirementType'] = $Manifest.LogonRequirementType
         }
