@@ -77,6 +77,7 @@ function Read-Preferences {
         DownloadRoot         = "C:\temp\ap"
         EstimatedRuntimeMins = 15
         MaximumRuntimeMins   = 30
+        CompanyName          = ""
     }
 
     $path = Get-PreferencesPath
@@ -92,6 +93,7 @@ function Read-Preferences {
         if ($null -ne $data.DownloadRoot)          { $defaults.DownloadRoot         = [string]$data.DownloadRoot }
         if ($null -ne $data.EstimatedRuntimeMins)  { $defaults.EstimatedRuntimeMins = [int]$data.EstimatedRuntimeMins }
         if ($null -ne $data.MaximumRuntimeMins)    { $defaults.MaximumRuntimeMins   = [int]$data.MaximumRuntimeMins }
+        if ($null -ne $data.CompanyName)            { $defaults.CompanyName          = [string]$data.CompanyName }
     }
     catch { }
 
@@ -104,10 +106,37 @@ function Save-Preferences {
     $path = Get-PreferencesPath
     $json = $Prefs | ConvertTo-Json
     Set-Content -LiteralPath $path -Value $json -Encoding UTF8
+
+    # Sync CompanyName to packager-preferences.json (read by Get-PackagerPreferences in shared module)
+    $pkgPrefsPath = Join-Path (Join-Path $PSScriptRoot "Packagers") "packager-preferences.json"
+    try {
+        $pkgPrefs = @{}
+        if (Test-Path -LiteralPath $pkgPrefsPath) {
+            $existing = Get-Content -LiteralPath $pkgPrefsPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+            foreach ($prop in $existing.PSObject.Properties) {
+                $pkgPrefs[$prop.Name] = $prop.Value
+            }
+        }
+        $pkgPrefs["CompanyName"] = $Prefs.CompanyName
+        $pkgPrefs | ConvertTo-Json | Set-Content -LiteralPath $pkgPrefsPath -Encoding UTF8
+    }
+    catch { }
 }
 
 # Load preferences once at startup
 $script:Prefs = Read-Preferences
+
+# Seed CompanyName from packager-preferences.json if not yet in GUI prefs
+if ([string]::IsNullOrWhiteSpace($script:Prefs.CompanyName)) {
+    $pkgPrefsPath = Join-Path (Join-Path $PSScriptRoot "Packagers") "packager-preferences.json"
+    if (Test-Path -LiteralPath $pkgPrefsPath) {
+        try {
+            $pkgData = Get-Content -LiteralPath $pkgPrefsPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+            if ($pkgData.CompanyName) { $script:Prefs.CompanyName = [string]$pkgData.CompanyName }
+        }
+        catch { }
+    }
+}
 
 # Command-line -SiteCode override for this session
 if ($PSBoundParameters.ContainsKey('SiteCode')) {
@@ -750,7 +779,7 @@ function Show-PreferencesDialog {
     $dlg.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterParent
     $dlg.MaximizeBox = $false
     $dlg.MinimizeBox = $false
-    $dlg.Size = New-Object System.Drawing.Size(460, 310)
+    $dlg.Size = New-Object System.Drawing.Size(460, 346)
     $dlg.Font = New-Object System.Drawing.Font("Segoe UI", 10)
     $dlg.BackColor = [System.Drawing.Color]::White
 
@@ -870,6 +899,24 @@ function Show-PreferencesDialog {
     $lblMaxMinsD.Location = New-Object System.Drawing.Point(($fieldX + 56), ($y + 4))
     $dlg.Controls.Add($lblMaxMinsD)
 
+    $y += $rowH
+
+    # Company Name
+    $lblCN = New-Object System.Windows.Forms.Label
+    $lblCN.Text = "Company Name:"
+    $lblCN.AutoSize = $true
+    $lblCN.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+    $lblCN.Location = New-Object System.Drawing.Point($pad, ($y + 3))
+    $dlg.Controls.Add($lblCN)
+
+    $txtCN = New-Object System.Windows.Forms.TextBox
+    $txtCN.Text = $script:Prefs.CompanyName
+    $txtCN.MaxLength = 100
+    $txtCN.Width = $fieldW
+    $txtCN.Location = New-Object System.Drawing.Point($fieldX, $y)
+    $dlg.Controls.Add($txtCN)
+    $dlgTip.SetToolTip($txtCN, "Organization name embedded in Office deployment XML and other packager configs")
+
     $y += $rowH + 16
 
     # OK / Cancel
@@ -901,6 +948,7 @@ function Show-PreferencesDialog {
         $script:Prefs.DownloadRoot         = $txtDL.Text.Trim()
         $script:Prefs.EstimatedRuntimeMins = $estVal
         $script:Prefs.MaximumRuntimeMins   = $maxVal
+        $script:Prefs.CompanyName          = $txtCN.Text.Trim()
 
         Save-Preferences -Prefs $script:Prefs
         $dlg.Dispose()

@@ -5,7 +5,7 @@ All notable changes to AppPackager are documented in this file.
 ## [0.0.9] - 2026-02-23 6:45 PM
 
 ### Added
-- Preferences dialog (`File > Preferences`) — modal dialog with 5 fields (Site Code, File Share Root, Download Root, Est. Runtime, Max Runtime); persisted to `AppPackager.preferences.json` alongside the GUI script; validates numeric fields with `[int]::TryParse` fallback
+- Preferences dialog (`File > Preferences`) — modal dialog with 6 fields (Site Code, File Share Root, Download Root, Est. Runtime, Max Runtime, Company Name); persisted to `AppPackager.preferences.json` alongside the GUI script; validates numeric fields with `[int]::TryParse` fallback; Company Name syncs bidirectionally with `packager-preferences.json` (seeded from existing value on first launch, written back on save)
 - MenuStrip with `File` menu — "Preferences..." (`Ctrl+,`) opens the Preferences dialog; "Exit" closes the application
 - Tooltips on all interactive controls — Comment field, log pane, DataGridView, Debug Columns checkbox, Select Update Available button, and all 4 action buttons; `AutoPopDelay = 10000`, `InitialDelay = 400`
 

@@ -68,7 +68,7 @@ Or with custom parameters:
 - **Stage Packages** — downloads installers, extracts metadata, generates wrappers and manifests locally
 - **Package Apps** — reads manifests, copies content to network share, creates MECM applications
 
-Settings that rarely change (Site Code, File Share Root, Download Root, Est/Max Runtime) are managed via **File > Preferences** and persisted to `AppPackager.preferences.json`. The Comment field remains on the main form for per-run entry. Window size and position are persisted automatically across sessions.
+Settings that rarely change (Site Code, File Share Root, Download Root, Est/Max Runtime, Company Name) are managed via **File > Preferences** and persisted to `AppPackager.preferences.json`. Company Name is also synced to `packager-preferences.json` for use by ODT-based packagers. The Comment field remains on the main form for per-run entry. Window size and position are persisted automatically across sessions.
 
 Additional grid features:
 - **Right-click context menu** on any row — Open Log Folder, Open Staged Folder, Open Network Share, Copy Latest Version
