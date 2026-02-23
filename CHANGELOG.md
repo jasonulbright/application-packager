@@ -2,7 +2,7 @@
 
 All notable changes to AppPackager are documented in this file.
 
-## [0.0.8] - 2026-02-22
+## [0.0.8] - 2026-02-23
 
 ### Added
 - `AppPackagerCommon.psm1` + `AppPackagerCommon.psd1` — promoted shared helpers from dot-sourced `.ps1` to a proper PowerShell module with manifest (version 0.0.8, explicit `FunctionsToExport`)
@@ -61,11 +61,11 @@ All notable changes to AppPackager are documented in this file.
 - Content wrapper `.ps1` files written with `-Encoding ASCII` instead of `-Encoding UTF8` — PowerShell 5.1's `UTF8` encoding always prepends a BOM (`EF BB BF`), which appeared as `∩╗┐` at position 0
 - Stage manifest `Detection.DisplayVersion` now stores the raw MSI `ProductVersion` (e.g., `26.00.00.0`) instead of the normalized display version (`26.00`) — the MECM `IsEquals` detection clause must match the actual 4-part registry value
 
-### Known Issues
-- **Tableau Desktop/Prep/Reader:** `downloads.tableau.com/tssoftware/` returns 404 for all tested versions — upstream Salesforce infrastructure change. The three Tableau packager scripts are structurally complete but cannot stage until a new download source is identified or Tableau restores public access. The original (pre-refactored) scripts used the identical URL pattern.
+### Deprecated
+- **Tableau Desktop/Prep/Reader:** Deprecated and moved to `Archive/deprecated/`. Salesforce removed public download access at `downloads.tableau.com/tssoftware/` (returns 404 for all versions). The original pre-refactored scripts used the identical URL pattern. Scripts were structurally complete and passing all verification checks but could not stage due to the upstream change.
 
 ### Staging Validation
-23 of 26 products staged and validated successfully. Tableau x3 blocked by upstream download URL change (see Known Issues).
+23 of 23 active products staged and validated successfully.
 
 ---
 
