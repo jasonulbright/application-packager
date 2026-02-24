@@ -475,7 +475,7 @@ function Invoke-PackagerGetLatestVersion {
 
     $version = ([string]$lines[0]).Trim()
 
-    if ($version -notmatch '^\d+(\.\d+){1,3}(\+\d+)?$') {
+    if ($version -notmatch '^\d+(\.\d+){1,3}([+-]\d+)?$') {
         throw ("Unexpected version string: '{0}'" -f $version)
     }
 
@@ -488,9 +488,9 @@ function Compare-SemVer {
         [Parameter(Mandatory)][string]$B
     )
     try {
-        # Strip build metadata suffix (e.g., +403) before parsing
-        $va = [version]($A -replace '\+.*$', '')
-        $vb = [version]($B -replace '\+.*$', '')
+        # Strip build metadata suffix (e.g., +403 or -5) before parsing
+        $va = [version]($A -replace '[+-].*$', '')
+        $vb = [version]($B -replace '[+-].*$', '')
         return $va.CompareTo($vb)
     }
     catch {

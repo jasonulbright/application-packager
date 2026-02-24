@@ -109,12 +109,13 @@ All packager scripts accept the same core parameters:
 | `-GetLatestVersionOnly` | Output the latest version string and exit |
 | `-LogPath` | Path to a structured log file (timestamps + severity levels) |
 
-## Supported Applications (38)
+## Supported Applications (41)
 
 | Script | Vendor | Application | Detection Type |
 |---|---|---|---|
 | package-7zip.ps1 | Igor Pavlov | 7-Zip (x64) | RegistryKeyValue |
 | package-adobereader.ps1 | Adobe Inc. | Adobe Acrobat Reader DC (x64) | File version |
+| package-anaconda.ps1 | Anaconda, Inc. | Anaconda Distribution (x64) | File existence |
 | package-aspnethostingbundle8.ps1 | Microsoft | ASP.NET Core Hosting Bundle 8 | RegistryKey existence |
 | package-chrome.ps1 | Google | Google Chrome Enterprise (x64) | RegistryKeyValue |
 | package-dotnet8.ps1 | Microsoft | .NET Desktop Runtime 8 (x64) | Compound (AND, 2x File existence) |
@@ -137,7 +138,9 @@ All packager scripts accept the same core parameters:
 | package-msvcruntimes.ps1 | Microsoft | VC++ 2015-2022 Redistributable (x86+x64) | Compound (AND, 2x RegistryKeyValue) |
 | package-notepadplusplus.ps1 | Notepad++ | Notepad++ (x64) | File version |
 | package-powerbidesktop.ps1 | Microsoft | Power BI Desktop (x64) | File version |
+| package-positron.ps1 | Posit Software, PBC | Positron (x64) | File existence |
 | package-putty.ps1 | Simon Tatham | PuTTY (x64) | RegistryKeyValue |
+| package-python.ps1 | Python Software Foundation | Python (x64) | File existence |
 | package-r.ps1 | The R Foundation | R for Windows (x64) | File existence |
 | package-rstudio.ps1 | Posit Software, PBC | RStudio Desktop (x64) | RegistryKeyValue |
 | package-ssms.ps1 | Microsoft | SQL Server Management Studio | File version (Ssms.exe) |

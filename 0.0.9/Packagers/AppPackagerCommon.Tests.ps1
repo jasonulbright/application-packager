@@ -679,3 +679,97 @@ Describe 'Stage manifest with plus sign in version string' {
         $manifest.Detection.Operator           | Should -Be 'IsEquals'
     }
 }
+
+# ============================================================================
+# Write-StageManifest — File Existence with dash-build version (Positron)
+# ============================================================================
+
+Describe 'Stage manifest with dash-build version string' {
+    It 'round-trips File Existence detection with Positron-style version' {
+        $path = Join-Path $TestDrive 'positron-manifest.json'
+
+        $data = @{
+            AppName         = 'Positron - 2026.02.1-5 (x64)'
+            Publisher       = 'Posit Software, PBC'
+            SoftwareVersion = '2026.02.1-5'
+            InstallerFile   = 'Positron-2026.02.1-5-Setup-x64.exe'
+            Detection       = @{
+                Type         = 'File'
+                FilePath     = 'C:\Program Files\Positron'
+                FileName     = 'Positron.exe'
+                PropertyType = 'Existence'
+                Is64Bit      = $true
+            }
+        }
+
+        Write-StageManifest -Path $path -ManifestData $data
+        $manifest = Read-StageManifest -Path $path
+
+        $manifest.SoftwareVersion        | Should -Be '2026.02.1-5'
+        $manifest.Detection.Type         | Should -Be 'File'
+        $manifest.Detection.FilePath     | Should -Be 'C:\Program Files\Positron'
+        $manifest.Detection.FileName     | Should -Be 'Positron.exe'
+    }
+}
+
+# ============================================================================
+# Write-StageManifest — File Existence with version-specific folder (Python)
+# ============================================================================
+
+Describe 'Stage manifest with Python-style version-specific install path' {
+    It 'round-trips File Existence detection with Python314 folder path' {
+        $path = Join-Path $TestDrive 'python-manifest.json'
+
+        $data = @{
+            AppName         = 'Python - 3.14.3 (x64)'
+            Publisher       = 'Python Software Foundation'
+            SoftwareVersion = '3.14.3'
+            InstallerFile   = 'python-3.14.3-amd64.exe'
+            Detection       = @{
+                Type         = 'File'
+                FilePath     = 'C:\Program Files\Python314'
+                FileName     = 'python.exe'
+                PropertyType = 'Existence'
+                Is64Bit      = $true
+            }
+        }
+
+        Write-StageManifest -Path $path -ManifestData $data
+        $manifest = Read-StageManifest -Path $path
+
+        $manifest.SoftwareVersion        | Should -Be '3.14.3'
+        $manifest.Detection.FilePath     | Should -Be 'C:\Program Files\Python314'
+        $manifest.Detection.FileName     | Should -Be 'python.exe'
+    }
+}
+
+# ============================================================================
+# Write-StageManifest — File Existence with ProgramData path (Anaconda)
+# ============================================================================
+
+Describe 'Stage manifest with ProgramData detection path' {
+    It 'round-trips File Existence detection with Anaconda ProgramData path' {
+        $path = Join-Path $TestDrive 'anaconda-manifest.json'
+
+        $data = @{
+            AppName         = 'Anaconda Distribution - 2025.12-2 (x64)'
+            Publisher       = 'Anaconda, Inc.'
+            SoftwareVersion = '2025.12-2'
+            InstallerFile   = 'Anaconda3-2025.12-2-Windows-x86_64.exe'
+            Detection       = @{
+                Type         = 'File'
+                FilePath     = 'C:\ProgramData\anaconda3'
+                FileName     = 'python.exe'
+                PropertyType = 'Existence'
+                Is64Bit      = $true
+            }
+        }
+
+        Write-StageManifest -Path $path -ManifestData $data
+        $manifest = Read-StageManifest -Path $path
+
+        $manifest.SoftwareVersion        | Should -Be '2025.12-2'
+        $manifest.Detection.FilePath     | Should -Be 'C:\ProgramData\anaconda3'
+        $manifest.Detection.FileName     | Should -Be 'python.exe'
+    }
+}
