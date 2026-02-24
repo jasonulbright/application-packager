@@ -89,7 +89,7 @@ if ($StageOnly -and $PackageOnly) {
 }
 
 # --- Configuration ---
-$VersionApiUrl = "https://endoflife.date/api/libreoffice.json"
+$CdnStableUrl = "https://download.documentfoundation.org/libreoffice/stable/"
 
 $VendorFolder = "The Document Foundation"
 $AppFolder    = "LibreOffice (x64)"
@@ -102,19 +102,24 @@ $BaseDownloadRoot = Join-Path $DownloadRoot "LibreOffice"
 function Get-LatestLibreOfficeVersion {
     param([switch]$Quiet)
 
-    Write-Log "LibreOffice version API      : $VersionApiUrl" -Quiet:$Quiet
+    # Scrape the CDN stable directory listing for the actual latest downloadable
+    # version. The endoflife.date API returns 4-part versions (e.g. 26.2.1.1)
+    # that do not match the CDN folder names (e.g. 26.2.0).
+    Write-Log "LibreOffice CDN stable       : $CdnStableUrl" -Quiet:$Quiet
 
     try {
-        $json = (curl.exe -L --fail --silent --show-error $VersionApiUrl) -join ''
-        if ($LASTEXITCODE -ne 0) { throw "Failed to query endoflife.date API." }
+        $html = (curl.exe -L --fail --silent --show-error $CdnStableUrl) -join ''
+        if ($LASTEXITCODE -ne 0) { throw "Failed to query LibreOffice CDN." }
 
-        $data = ConvertFrom-Json $json
-        # First entry is the latest stable release cycle
-        $latest = $data[0].latest
-        if ([string]::IsNullOrWhiteSpace($latest)) {
-            throw "Could not parse latest version from endoflife.date API response."
+        # Extract version folder names (e.g., "26.2.0/") from href attributes
+        $versions = [regex]::Matches($html, 'href="(\d+\.\d+\.\d+)/"') |
+            ForEach-Object { $_.Groups[1].Value } |
+            Sort-Object { [version]$_ } -Descending
+        if (-not $versions -or $versions.Count -eq 0) {
+            throw "No version folders found on LibreOffice CDN."
         }
 
+        $latest = $versions[0]
         Write-Log "Latest LibreOffice version   : $latest" -Quiet:$Quiet
         return $latest
     }
@@ -360,7 +365,7 @@ try {
     Write-Log "SiteCode                     : $SiteCode"
     Write-Log "FileServerPath               : $FileServerPath"
     Write-Log "BaseDownloadRoot             : $BaseDownloadRoot"
-    Write-Log "VersionApiUrl                : $VersionApiUrl"
+    Write-Log "CdnStableUrl                 : $CdnStableUrl"
     Write-Log ""
 
     if ($StageOnly) {
