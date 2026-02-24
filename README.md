@@ -12,7 +12,7 @@ Each packager script operates in two phases:
 
 The GUI (`start-apppackager.ps1`) provides a visual front-end that discovers packager scripts automatically, lets you check latest versions, query MECM for current versions, and stage or package selected applications.
 
-![AppPackager GUI](1.0/screenshot_1.0.png)
+![AppPackager GUI](screenshot.png)
 
 ## Prerequisites
 
