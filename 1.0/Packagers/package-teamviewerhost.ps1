@@ -120,15 +120,22 @@ function Get-LatestTeamViewerHostVersion {
         }
 
         $fileInfo = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($localExe)
+        # TeamViewer Host EXE has empty string version properties but populated
+        # numeric parts (FileMajorPart, FileMinorPart, FileBuildPart)
         $version = $fileInfo.ProductVersion
         if ([string]::IsNullOrWhiteSpace($version)) {
             $version = $fileInfo.FileVersion
         }
         if ([string]::IsNullOrWhiteSpace($version)) {
-            throw "Cannot read version from TeamViewer Host EXE."
+            $major = $fileInfo.FileMajorPart
+            $minor = $fileInfo.FileMinorPart
+            $build = $fileInfo.FileBuildPart
+            if ($major -eq 0 -and $minor -eq 0 -and $build -eq 0) {
+                throw "Cannot read version from TeamViewer Host EXE."
+            }
+            $version = "{0}.{1}.{2}" -f $major, $minor, $build
         }
 
-        # Trim any trailing whitespace or extra segments
         $version = $version.Trim()
 
         Write-Log "Latest TeamViewer Host ver   : $version" -Quiet:$Quiet
@@ -178,7 +185,13 @@ function Invoke-StageTeamViewerHost {
         $version = $fileInfo.FileVersion
     }
     if ([string]::IsNullOrWhiteSpace($version)) {
-        throw "Cannot read version from TeamViewer Host EXE."
+        $major = $fileInfo.FileMajorPart
+        $minor = $fileInfo.FileMinorPart
+        $build = $fileInfo.FileBuildPart
+        if ($major -eq 0 -and $minor -eq 0 -and $build -eq 0) {
+            throw "Cannot read version from TeamViewer Host EXE."
+        }
+        $version = "{0}.{1}.{2}" -f $major, $minor, $build
     }
     $version = $version.Trim()
 
