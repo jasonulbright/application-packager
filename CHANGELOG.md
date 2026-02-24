@@ -33,6 +33,9 @@ All notable changes to AppPackager are documented in this file.
 - GUI version bumped from 0.4.0 to 1.0.0
 
 ### Fixed
+- LibreOffice version detection — endoflife.date API returns 4-part prerelease versions (e.g. `26.2.1.1`) that don't exist on the CDN `/stable/` path; switched to scraping the CDN directory listing for the actual latest downloadable version
+- Chocolatey API — `Packages()?$filter=` OData endpoint returns empty feeds for Foxit Reader and TreeSize Free; switched both to `FindPackagesById()` which reliably returns latest version
+- TeamViewer Host version detection — setup EXE has empty string version properties but populated `FileMajorPart`/`FileMinorPart`/`FileBuildPart` numeric fields; added fallback to build version string from numeric parts
 - GUI "Check Latest" hang — `Invoke-PackagerGetLatestVersion` used synchronous `ReadToEnd()` which blocked indefinitely when M365 ODT packagers spawned `expand.exe` / `curl.exe` as grandchild processes that inherited the stdout pipe handle; rewritten to use `ReadToEndAsync()` with a 30-second process timeout and 5-second task timeout
 
 ---
