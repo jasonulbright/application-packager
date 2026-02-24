@@ -2,6 +2,26 @@
 
 All notable changes to AppPackager are documented in this file.
 
+## [1.0] - 2026-02-24
+
+### Added
+- **Vendor URL debug column** — new "Vendor URL (Debug)" column in the DataGridView, visible when the Debug Columns checkbox is checked; shows the vendor's product page URL for each packager
+- **Ctrl+Click to open vendor page** — Ctrl+Left-click any non-checkbox cell to open the vendor's product page in the default browser; URL sourced from the new `VendorUrl:` metadata tag in each packager script header
+- **Row hover tooltips** — hovering over any grid row displays the packager's `.SYNOPSIS` description from the script header; uses DataGridView's built-in `CellToolTipTextNeeded` event (replaces the former static grid tooltip)
+- `VendorUrl:` metadata tag added to all 62 packager script headers — parsed by `Get-PackagerMetadata` alongside existing `Vendor:`, `App:`, and `CMName:` tags
+- `Description` field added to `Get-PackagerMetadata` — parses the first non-blank line after `.SYNOPSIS` in the script's comment-based help block
+
+### Changed
+- `Invoke-PackagerGetLatestVersion` rewritten with async I/O — replaced synchronous `ReadToEnd()` calls with `ReadToEndAsync()` tasks and bounded `WaitForExit(30000)` timeout; prevents GUI hang when grandchild processes (e.g., `curl.exe`, `expand.exe` in M365 scripts) inherit stdout/stderr pipe handles
+- Debug Columns checkbox tooltip updated to reflect new VendorURL column: "Show or hide the CMName, Script, and Vendor URL debug columns"
+- Removed static grid tooltip ("Select packagers using the checkboxes...") — conflicted with per-cell tooltip system
+- GUI version bumped from 0.4.0 to 1.0.0
+
+### Fixed
+- GUI "Check Latest" hang — `Invoke-PackagerGetLatestVersion` used synchronous `ReadToEnd()` which blocked indefinitely when M365 ODT packagers spawned `expand.exe` / `curl.exe` as grandchild processes that inherited the stdout pipe handle; rewritten to use `ReadToEndAsync()` with a 30-second process timeout and 5-second task timeout
+
+---
+
 ## [0.0.9] - 2026-02-23 6:45 PM
 
 ### Added

@@ -12,7 +12,7 @@ Each packager script operates in two phases:
 
 The GUI (`start-apppackager.ps1`) provides a visual front-end that discovers packager scripts automatically, lets you check latest versions, query MECM for current versions, and stage or package selected applications.
 
-![AppPackager GUI](0.0.9/screenshot_0.0.9.png)
+![AppPackager GUI](1.0/screenshot_1.0.png)
 
 ## Prerequisites
 
@@ -37,7 +37,7 @@ The GUI (`start-apppackager.ps1`) provides a visual front-end that discovers pac
 
 3. Navigate to the project directory:
    ```powershell
-   cd application-packager\0.0.9
+   cd application-packager\1.0
    ```
 
 4. For the Package phase, ensure the ConfigMgr PSDrive is available in your session:
@@ -72,6 +72,8 @@ Settings that rarely change (Site Code, File Share Root, Download Root, Est/Max 
 
 Additional grid features:
 - **Right-click context menu** on any row — Open Log Folder, Open Staged Folder, Open Network Share, Copy Latest Version
+- **Ctrl+Click** any row to open the vendor's product page in the default browser
+- **Row hover tooltips** — hover over any row to see the application's description from the packager script
 - **Select Update Available** button — auto-checks only rows with "Update available" status after a version check
 - **Real-time log streaming** — Stage and Package operations stream packager output line-by-line into the log pane as it runs
 - **Tooltips** on all interactive controls — hover over any field or button for a description of its purpose
@@ -249,7 +251,7 @@ Five detection types are supported: `RegistryKeyValue`, `RegistryKey`, `File`, `
 
 ```
 application-packager/
-  0.0.9/
+  1.0/
     start-apppackager.ps1              # WinForms GUI
     apppackager-logo.jpg               # GUI window icon / logo
     apppackager.ico                    # Application icon
@@ -266,7 +268,7 @@ application-packager/
 
 ## Adding a New Packager
 
-1. Create a new file in `0.0.9/Packagers/` named `package-<appname>.ps1`
+1. Create a new file in `1.0/Packagers/` named `package-<appname>.ps1`
 
 2. Add metadata tags in the script header (parsed by the GUI):
    ```powershell
@@ -274,6 +276,7 @@ application-packager/
    Vendor: Acme Corp
    App: Acme Widget (x64)
    CMName: Acme Widget
+   VendorUrl: https://acme.example.com/widget
    #>
    ```
 
