@@ -87,7 +87,7 @@ if ($StageOnly -and $PackageOnly) {
 }
 
 # --- Configuration ---
-$ChocolateyApiUrl = "https://community.chocolatey.org/api/v2/Packages()?`$filter=Id%20eq%20%27foxitreader%27%20and%20IsLatestVersion"
+$ChocolateyApiUrl = "https://community.chocolatey.org/api/v2/FindPackagesById()?`$orderby=Version%20desc&`$top=1&id=%27FoxitReader%27"
 
 $VendorFolder = "Foxit Software"
 $AppFolder    = "Foxit PDF Reader"

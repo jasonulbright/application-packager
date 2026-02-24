@@ -88,7 +88,7 @@ if ($StageOnly -and $PackageOnly) {
 # --- Configuration ---
 $ExeDownloadUrl    = "https://www.jam-software.com/treesize_free/TreeSizeFreeSetup.exe"
 $InstallerFileName = "TreeSizeFreeSetup.exe"
-$ChocolateyApiUrl  = "https://community.chocolatey.org/api/v2/Packages()?`$filter=Id%20eq%20%27treesizefree%27%20and%20IsLatestVersion"
+$ChocolateyApiUrl  = "https://community.chocolatey.org/api/v2/FindPackagesById()?`$orderby=Version%20desc&`$top=1&id=%27treesizefree%27"
 
 $VendorFolder = "JAM Software"
 $AppFolder    = "TreeSize Free"
