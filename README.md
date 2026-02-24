@@ -111,14 +111,17 @@ All packager scripts accept the same core parameters:
 | `-GetLatestVersionOnly` | Output the latest version string and exit |
 | `-LogPath` | Path to a structured log file (timestamps + severity levels) |
 
-## Supported Applications (62)
+## Supported Applications (75)
 
 | Script | Vendor | Application | Detection Type |
 |---|---|---|---|
 | package-7zip.ps1 | Igor Pavlov | 7-Zip (x64) | RegistryKeyValue |
 | package-adobereader.ps1 | Adobe Inc. | Adobe Acrobat Reader DC (x64) | File version |
 | package-anaconda.ps1 | Anaconda, Inc. | Anaconda Distribution (x64) | File existence |
+| package-anydesk.ps1 | AnyDesk Software GmbH | AnyDesk | File version |
 | package-aspnethostingbundle8.ps1 | Microsoft | ASP.NET Core Hosting Bundle 8 | RegistryKey existence |
+| package-bitwarden.ps1 | Bitwarden Inc. | Bitwarden Desktop (x64) | File version |
+| package-brave.ps1 | Brave Software | Brave Browser (x64) | File version |
 | package-chrome.ps1 | Google | Google Chrome Enterprise (x64) | RegistryKeyValue |
 | package-corretto-jdk8-x64.ps1 | Amazon | Amazon Corretto JDK 8 (x64) | RegistryKeyValue |
 | package-corretto-jdk8-x86.ps1 | Amazon | Amazon Corretto JDK 8 (x86) | RegistryKeyValue |
@@ -131,11 +134,14 @@ All packager scripts accept the same core parameters:
 | package-Dotnet9x64.ps1 | Microsoft | .NET Desktop Runtime 9 (x64) | File existence |
 | package-Dotnet10x64.ps1 | Microsoft | .NET Desktop Runtime 10 (x64) | File existence |
 | package-edge.ps1 | Microsoft | Microsoft Edge (x64) | Compound (OR, 2x File version) |
+| package-everything.ps1 | Voidtools | Everything (x64) | RegistryKeyValue |
 | package-filezilla.ps1 | FileZilla Project | FileZilla Client (x64) | RegistryKeyValue |
 | package-firefox.ps1 | Mozilla | Mozilla Firefox (x64) | File version |
+| package-foxitreader.ps1 | Foxit Software | Foxit PDF Reader (x64) | File version |
 | package-git.ps1 | Git | Git for Windows (x64) | Script (git.exe --version) |
 | package-greenshot.ps1 | Greenshot | Greenshot | File existence |
 | package-keepass.ps1 | Dominik Reichl | KeePass | RegistryKeyValue |
+| package-libreoffice.ps1 | The Document Foundation | LibreOffice (x64) | RegistryKeyValue |
 | package-m365apps-x64.ps1 | Microsoft | M365 Apps for Enterprise (x64) | File version (WINWORD.EXE) |
 | package-m365apps-x86.ps1 | Microsoft | M365 Apps for Enterprise (x86) | File version (WINWORD.EXE) |
 | package-m365visio-x64.ps1 | Microsoft | M365 Visio (x64) | File version (VISIO.EXE) |
@@ -145,15 +151,20 @@ All packager scripts accept the same core parameters:
 | package-msodbcsql18.ps1 | Microsoft | ODBC Driver 18 for SQL Server | RegistryKeyValue |
 | package-msoledb.ps1 | Microsoft | OLE DB Driver for SQL Server | RegistryKeyValue |
 | package-msvcruntimes.ps1 | Microsoft | VC++ 2015-2022 Redistributable (x86+x64) | Compound (AND, 2x RegistryKeyValue) |
+| package-nodejs.ps1 | OpenJS Foundation | Node.js LTS (x64) | RegistryKeyValue |
 | package-notepadplusplus.ps1 | Notepad++ | Notepad++ (x64) | File version |
+| package-paintdotnet.ps1 | dotPDN LLC | Paint.NET (x64) | RegistryKeyValue |
 | package-powerbidesktop.ps1 | Microsoft | Power BI Desktop (x64) | File version |
+| package-powershell7.ps1 | Microsoft | PowerShell 7 (x64) | RegistryKeyValue |
 | package-positron.ps1 | Posit Software, PBC | Positron (x64) | File existence |
 | package-putty.ps1 | Simon Tatham | PuTTY (x64) | RegistryKeyValue |
 | package-python.ps1 | Python Software Foundation | Python (x64) | File existence |
 | package-r.ps1 | The R Foundation | R for Windows (x64) | File existence |
 | package-rstudio.ps1 | Posit Software, PBC | RStudio Desktop (x64) | RegistryKeyValue |
+| package-slack.ps1 | Slack Technologies | Slack (x64) | RegistryKeyValue |
 | package-ssms.ps1 | Microsoft | SQL Server Management Studio | File version (Ssms.exe) |
 | package-teams.ps1 | Microsoft | Microsoft Teams Enterprise (x64) | Script (Get-AppxPackage) |
+| package-teamviewer.ps1 | TeamViewer | TeamViewer (x64) | RegistryKeyValue |
 | package-temurin-jdk8-x64.ps1 | Eclipse Adoptium | Eclipse Temurin JDK 8 (x64) | RegistryKeyValue |
 | package-temurin-jdk8-x86.ps1 | Eclipse Adoptium | Eclipse Temurin JDK 8 (x86) | RegistryKeyValue |
 | package-temurin-jdk11-x64.ps1 | Eclipse Adoptium | Eclipse Temurin JDK 11 (x64) | RegistryKeyValue |
@@ -168,6 +179,8 @@ All packager scripts accept the same core parameters:
 | package-temurin-jre17.ps1 | Eclipse Adoptium | Eclipse Temurin JRE 17 (x64) | RegistryKeyValue |
 | package-temurin-jre21.ps1 | Eclipse Adoptium | Eclipse Temurin JRE 21 (x64) | RegistryKeyValue |
 | package-temurin-jre25.ps1 | Eclipse Adoptium | Eclipse Temurin JRE 25 (x64) | RegistryKeyValue |
+| package-thunderbird.ps1 | Mozilla Foundation | Thunderbird (x64) | File version |
+| package-treesizefree.ps1 | JAM Software | TreeSize Free | File version |
 | package-vmwaretools.ps1 | Broadcom | VMware Tools (x64) | File version |
 | package-vs2026.ps1 | Microsoft | Visual Studio 2026 Enterprise | File version (devenv.exe) |
 | package-vlc.ps1 | VideoLAN | VLC Media Player (x64) | RegistryKeyValue |
