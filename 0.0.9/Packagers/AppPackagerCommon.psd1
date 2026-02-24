@@ -45,6 +45,10 @@
 
         # ODT config XML
         'New-OdtConfigXml'
+
+        # Java vendor release helpers
+        'Get-LatestTemurinRelease'
+        'Get-LatestCorrettoRelease'
     )
 
     CmdletsToExport   = @()

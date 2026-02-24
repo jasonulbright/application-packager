@@ -773,3 +773,104 @@ Describe 'Stage manifest with ProgramData detection path' {
         $manifest.Detection.FileName     | Should -Be 'python.exe'
     }
 }
+
+# ============================================================================
+# Write-StageManifest — Temurin JRE 8 ARP detection with + in version
+# ============================================================================
+
+Describe 'Stage manifest with Temurin JRE 8 ARP detection' {
+    It 'round-trips RegistryKeyValue detection with +build version' {
+        $path = Join-Path $TestDrive 'temurin-jre8-manifest.json'
+
+        $data = @{
+            AppName         = 'Eclipse Temurin JRE 8 - 8.0.482+8 (x64)'
+            Publisher       = 'Eclipse Adoptium'
+            SoftwareVersion = '8.0.482+8'
+            InstallerFile   = 'OpenJDK8U-jre_x64_windows_hotspot_8u482b08.msi'
+            Detection       = @{
+                Type                = 'RegistryKeyValue'
+                RegistryKeyRelative = 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{A8C9D8D3-7E2A-4B1F-8C4E-12345678ABCD}'
+                ValueName           = 'DisplayVersion'
+                ExpectedValue       = '8.0.482.8'
+                Is64Bit             = $true
+            }
+        }
+
+        Write-StageManifest -Path $path -ManifestData $data
+        $manifest = Read-StageManifest -Path $path
+
+        $manifest.AppName         | Should -Be 'Eclipse Temurin JRE 8 - 8.0.482+8 (x64)'
+        $manifest.Publisher       | Should -Be 'Eclipse Adoptium'
+        $manifest.SoftwareVersion | Should -Be '8.0.482+8'
+        $manifest.Detection.Type  | Should -Be 'RegistryKeyValue'
+        $manifest.Detection.ExpectedValue | Should -Be '8.0.482.8'
+        $manifest.Detection.Is64Bit | Should -BeTrue
+    }
+}
+
+# ============================================================================
+# Write-StageManifest — Temurin JDK 21 ARP detection
+# ============================================================================
+
+Describe 'Stage manifest with Temurin JDK 21 ARP detection' {
+    It 'round-trips RegistryKeyValue detection with standard version' {
+        $path = Join-Path $TestDrive 'temurin-jdk21-manifest.json'
+
+        $data = @{
+            AppName         = 'Eclipse Temurin JDK 21 - 21.0.10+7 (x64)'
+            Publisher       = 'Eclipse Adoptium'
+            SoftwareVersion = '21.0.10+7'
+            InstallerFile   = 'OpenJDK21U-jdk_x64_windows_hotspot_21.0.10_7.msi'
+            Detection       = @{
+                Type                = 'RegistryKeyValue'
+                RegistryKeyRelative = 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{B2D4E6F8-1234-5678-9ABC-DEF012345678}'
+                ValueName           = 'DisplayVersion'
+                ExpectedValue       = '21.0.10.7'
+                Is64Bit             = $true
+            }
+        }
+
+        Write-StageManifest -Path $path -ManifestData $data
+        $manifest = Read-StageManifest -Path $path
+
+        $manifest.AppName         | Should -Be 'Eclipse Temurin JDK 21 - 21.0.10+7 (x64)'
+        $manifest.SoftwareVersion | Should -Be '21.0.10+7'
+        $manifest.Detection.RegistryKeyRelative | Should -Match 'B2D4E6F8'
+        $manifest.Detection.ExpectedValue | Should -Be '21.0.10.7'
+        $manifest.Detection.Is64Bit | Should -BeTrue
+    }
+}
+
+# ============================================================================
+# Write-StageManifest — Corretto JDK 21 ARP detection (4-part normalized)
+# ============================================================================
+
+Describe 'Stage manifest with Corretto JDK 21 ARP detection' {
+    It 'round-trips RegistryKeyValue detection with 4-part normalized version' {
+        $path = Join-Path $TestDrive 'corretto-jdk21-manifest.json'
+
+        $data = @{
+            AppName         = 'Amazon Corretto JDK 21 - 21.0.10.7 (x64)'
+            Publisher       = 'Amazon'
+            SoftwareVersion = '21.0.10.7'
+            InstallerFile   = 'amazon-corretto-21.0.10.7.1-windows-x64.msi'
+            Detection       = @{
+                Type                = 'RegistryKeyValue'
+                RegistryKeyRelative = 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{C3E5F7A9-ABCD-1234-5678-90ABCDEF1234}'
+                ValueName           = 'DisplayVersion'
+                ExpectedValue       = '21.0.10.7'
+                Is64Bit             = $true
+            }
+        }
+
+        Write-StageManifest -Path $path -ManifestData $data
+        $manifest = Read-StageManifest -Path $path
+
+        $manifest.AppName         | Should -Be 'Amazon Corretto JDK 21 - 21.0.10.7 (x64)'
+        $manifest.Publisher       | Should -Be 'Amazon'
+        $manifest.SoftwareVersion | Should -Be '21.0.10.7'
+        $manifest.Detection.Type  | Should -Be 'RegistryKeyValue'
+        $manifest.Detection.ExpectedValue | Should -Be '21.0.10.7'
+        $manifest.Detection.Is64Bit | Should -BeTrue
+    }
+}

@@ -932,6 +932,138 @@ function New-OdtConfigXml {
 }
 
 # ---------------------------------------------------------------------------
+# Java vendor release helpers
+# ---------------------------------------------------------------------------
+
+function Get-LatestTemurinRelease {
+    <#
+    .SYNOPSIS
+        Queries the Eclipse Adoptium API for the latest Temurin release.
+    .DESCRIPTION
+        Returns a hashtable with Version, DownloadUrl, and FileName for the
+        latest Temurin JRE or JDK MSI installer. The -LTS suffix is stripped
+        from the version string.
+    .PARAMETER FeatureVersion
+        Major Java version (8, 11, 17, 21, 25).
+    .PARAMETER ImageType
+        'jre' or 'jdk'.
+    .PARAMETER Architecture
+        'x64' or 'x86'. Defaults to 'x64'.
+    .PARAMETER Quiet
+        Suppress log output (for GetLatestVersionOnly mode).
+    #>
+    param(
+        [Parameter(Mandatory)][int]$FeatureVersion,
+        [Parameter(Mandatory)][ValidateSet('jre','jdk')][string]$ImageType,
+        [ValidateSet('x64','x86')][string]$Architecture = 'x64',
+        [switch]$Quiet
+    )
+
+    $apiUrl = "https://api.adoptium.net/v3/assets/latest/$FeatureVersion/hotspot?architecture=$Architecture&image_type=$ImageType&os=windows"
+    Write-Log "Adoptium API URL             : $apiUrl" -Quiet:$Quiet
+
+    try {
+        $json = (& curl.exe -L --fail --silent --show-error $apiUrl) -join ''
+        if ($LASTEXITCODE -ne 0) { throw "Failed to query Adoptium API." }
+
+        $data = ConvertFrom-Json $json
+
+        $asset = $data | Where-Object { $_.binary.installer.name -match '\.msi$' } | Select-Object -First 1
+        if (-not $asset) { throw "No MSI installer found for Temurin $ImageType $FeatureVersion ($Architecture)." }
+
+        $downloadUrl = $asset.binary.installer.link
+        $fileName    = $asset.binary.installer.name
+        $rawVersion  = $asset.version.semver
+
+        if ([string]::IsNullOrWhiteSpace($rawVersion)) { throw "version.semver is empty in Adoptium API response." }
+
+        $version = $rawVersion -replace '[\.\-]\d*\.?LTS$', ''
+
+        Write-Log ("Temurin {0} {1} version      : {2}" -f $ImageType, $FeatureVersion, $version) -Quiet:$Quiet
+
+        return @{
+            Version     = $version
+            DownloadUrl = $downloadUrl
+            FileName    = $fileName
+        }
+    }
+    catch {
+        Write-Log ("Failed to get Temurin release: {0}" -f $_.Exception.Message) -Level ERROR
+        return $null
+    }
+}
+
+
+function Get-LatestCorrettoRelease {
+    <#
+    .SYNOPSIS
+        Queries the GitHub API for the latest Amazon Corretto JDK release.
+    .DESCRIPTION
+        Returns a hashtable with Version (4-part normalized), DownloadUrl, and
+        FileName. Corretto uses 5-part versioning; the 5th part (Corretto patch)
+        is stripped to produce a 4-part version compatible with the GUI regex
+        and the .NET [version] type.
+    .PARAMETER FeatureVersion
+        Major Java version (8, 11, 17, 21, 25).
+    .PARAMETER Architecture
+        'x64' or 'x86'. Defaults to 'x64'.
+    .PARAMETER Quiet
+        Suppress log output (for GetLatestVersionOnly mode).
+    #>
+    param(
+        [Parameter(Mandatory)][int]$FeatureVersion,
+        [ValidateSet('x64','x86')][string]$Architecture = 'x64',
+        [switch]$Quiet
+    )
+
+    $apiUrl = "https://api.github.com/repos/corretto/corretto-$FeatureVersion/releases/latest"
+    Write-Log "Corretto GitHub API URL      : $apiUrl" -Quiet:$Quiet
+
+    try {
+        $json = (& curl.exe -L --fail --silent --show-error -A "PowerShell" $apiUrl) -join ''
+        if ($LASTEXITCODE -ne 0) { throw "Failed to query Corretto GitHub API." }
+
+        $release = ConvertFrom-Json $json
+
+        $tagVersion = $release.tag_name
+        if ([string]::IsNullOrWhiteSpace($tagVersion)) { throw "tag_name is empty in Corretto release response." }
+
+        # Construct MSI filename from known pattern
+        # v8: amazon-corretto-{TAG}-windows-{ARCH}-jdk.msi
+        # v11+: amazon-corretto-{TAG}-windows-{ARCH}.msi
+        if ($FeatureVersion -le 8) {
+            $fileName = "amazon-corretto-$tagVersion-windows-$Architecture-jdk.msi"
+        }
+        else {
+            $fileName = "amazon-corretto-$tagVersion-windows-$Architecture.msi"
+        }
+        $downloadUrl = "https://corretto.aws/downloads/resources/$tagVersion/$fileName"
+
+        # Normalize 5-part version to 4 parts (strip Corretto patch)
+        $parts = $tagVersion -split '\.'
+        if ($parts.Count -ge 5) {
+            $version = ($parts[0..3] -join '.')
+        }
+        else {
+            $version = $tagVersion
+        }
+
+        Write-Log ("Corretto {0} raw version     : {1}" -f $FeatureVersion, $tagVersion) -Quiet:$Quiet
+        Write-Log ("Corretto {0} normalized      : {1}" -f $FeatureVersion, $version) -Quiet:$Quiet
+
+        return @{
+            Version     = $version
+            DownloadUrl = $downloadUrl
+            FileName    = $fileName
+        }
+    }
+    catch {
+        Write-Log ("Failed to get Corretto release: {0}" -f $_.Exception.Message) -Level ERROR
+        return $null
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Module export (belt-and-suspenders with .psd1 FunctionsToExport)
 # ---------------------------------------------------------------------------
 
