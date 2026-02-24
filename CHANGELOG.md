@@ -8,14 +8,15 @@ All notable changes to AppPackager are documented in this file.
 - **Vendor URL debug column** — new "Vendor URL (Debug)" column in the DataGridView, visible when the Debug Columns checkbox is checked; shows the vendor's product page URL for each packager
 - **Ctrl+Click to open vendor page** — Ctrl+Left-click any non-checkbox cell to open the vendor's product page in the default browser; URL sourced from the new `VendorUrl:` metadata tag in each packager script header
 - **Row hover tooltips** — hovering over any grid row displays the packager's `.SYNOPSIS` description from the script header; uses DataGridView's built-in `CellToolTipTextNeeded` event (replaces the former static grid tooltip)
-- `VendorUrl:` metadata tag added to all 75 packager script headers — parsed by `Get-PackagerMetadata` alongside existing `Vendor:`, `App:`, and `CMName:` tags
+- `VendorUrl:` metadata tag added to all 76 packager script headers — parsed by `Get-PackagerMetadata` alongside existing `Vendor:`, `App:`, and `CMName:` tags
 - `Description` field added to `Get-PackagerMetadata` — parses the first non-blank line after `.SYNOPSIS` in the script's comment-based help block
-- 13 new packager scripts (62 -> 75 total):
+- 14 new packager scripts (62 -> 76 total):
   - `package-slack.ps1` — Slack (x64) MSI from Slack CDN redirect URL; ARP registry detection
   - `package-nodejs.ps1` — Node.js LTS (x64) MSI from nodejs.org; version from dist/index.json API (LTS filter); ARP registry detection
   - `package-powershell7.ps1` — PowerShell 7 (x64) MSI from GitHub releases; custom MSI properties for PATH, PS Remoting, context menu; ARP registry detection
   - `package-everything.ps1` — Everything (x64) MSI from voidtools.com; version scraped from downloads page; ARP registry detection
   - `package-teamviewer.ps1` — TeamViewer (x64) MSI extracted from ZIP; ARP registry detection
+  - `package-teamviewerhost.ps1` — TeamViewer Host (x64) EXE from TeamViewer CDN; silent /S install; file version detection; unattended-access variant for managed endpoints
   - `package-paintdotnet.ps1` — Paint.NET (x64) MSI extracted from GitHub releases ZIP; custom MSI properties (CHECKFORUPDATES=0); ARP registry detection
   - `package-anydesk.ps1` — AnyDesk EXE from static URL; file version detection (x86 install path)
   - `package-foxitreader.ps1` — Foxit PDF Reader (x64) EXE from Foxit CDN; version from Chocolatey API; file version detection
