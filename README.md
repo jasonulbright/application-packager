@@ -111,7 +111,7 @@ All packager scripts accept the same core parameters:
 | `-GetLatestVersionOnly` | Output the latest version string and exit |
 | `-LogPath` | Path to a structured log file (timestamps + severity levels) |
 
-## Supported Applications (81)
+## Supported Applications (87)
 
 | Script | Vendor | Application | Detection Type |
 |---|---|---|---|
@@ -122,6 +122,7 @@ All packager scripts accept the same core parameters:
 | package-aspnethostingbundle8.ps1 | Microsoft | ASP.NET Core Hosting Bundle 8 | RegistryKey existence |
 | package-bitwarden.ps1 | Bitwarden Inc. | Bitwarden Desktop (x64) | File version |
 | package-brave.ps1 | Brave Software | Brave Browser (x64) | File version |
+| package-ccleaner.ps1 | Piriform Software Ltd. | CCleaner | RegistryKeyValue |
 | package-chrome.ps1 | Google | Google Chrome Enterprise (x64) | RegistryKeyValue |
 | package-corretto-jdk8-x64.ps1 | Amazon | Amazon Corretto JDK 8 (x64) | RegistryKeyValue |
 | package-corretto-jdk8-x86.ps1 | Amazon | Amazon Corretto JDK 8 (x86) | RegistryKeyValue |
@@ -130,6 +131,7 @@ All packager scripts accept the same core parameters:
 | package-corretto-jdk17.ps1 | Amazon | Amazon Corretto JDK 17 (x64) | RegistryKeyValue |
 | package-corretto-jdk21.ps1 | Amazon | Amazon Corretto JDK 21 (x64) | RegistryKeyValue |
 | package-corretto-jdk25.ps1 | Amazon | Amazon Corretto JDK 25 (x64) | RegistryKeyValue |
+| package-cutepdfwriter.ps1 | Acro Software Inc. | CutePDF Writer | RegistryKeyValue |
 | package-dotnet8.ps1 | Microsoft | .NET Desktop Runtime 8 (x64) | Compound (AND, 2x File existence) |
 | package-Dotnet9x64.ps1 | Microsoft | .NET Desktop Runtime 9 (x64) | File existence |
 | package-Dotnet10x64.ps1 | Microsoft | .NET Desktop Runtime 10 (x64) | File existence |
@@ -142,6 +144,7 @@ All packager scripts accept the same core parameters:
 | package-greenshot.ps1 | Greenshot | Greenshot | File existence |
 | package-keepass.ps1 | Dominik Reichl | KeePass | RegistryKeyValue |
 | package-libreoffice.ps1 | The Document Foundation | LibreOffice (x64) | RegistryKeyValue |
+| package-malwarebytes.ps1 | Malwarebytes | Malwarebytes | RegistryKeyValue |
 | package-m365apps-x64.ps1 | Microsoft | M365 Apps for Enterprise (x64) | File version (WINWORD.EXE) |
 | package-m365apps-x86.ps1 | Microsoft | M365 Apps for Enterprise (x86) | File version (WINWORD.EXE) |
 | package-m365visio-x64.ps1 | Microsoft | M365 Visio (x64) | File version (VISIO.EXE) |
@@ -156,6 +159,7 @@ All packager scripts accept the same core parameters:
 | package-paintdotnet.ps1 | dotPDN LLC | Paint.NET (x64) | RegistryKeyValue |
 | package-powerbidesktop.ps1 | Microsoft | Power BI Desktop (x64) | File version |
 | package-powershell7.ps1 | Microsoft | PowerShell 7 (x64) | RegistryKeyValue |
+| package-powershell7lts.ps1 | Microsoft | PowerShell 7 LTS (x64) | RegistryKeyValue |
 | package-positron.ps1 | Posit Software, PBC | Positron (x64) | File existence |
 | package-postgresql13.ps1 | PostgreSQL Global Development Group | PostgreSQL 13 (x64) | File version |
 | package-postgresql14.ps1 | PostgreSQL Global Development Group | PostgreSQL 14 (x64) | File version |
@@ -167,6 +171,7 @@ All packager scripts accept the same core parameters:
 | package-r.ps1 | The R Foundation | R for Windows (x64) | File existence |
 | package-rstudio.ps1 | Posit Software, PBC | RStudio Desktop (x64) | RegistryKeyValue |
 | package-slack.ps1 | Slack Technologies | Slack (x64) | RegistryKeyValue |
+| package-sysinternals.ps1 | Microsoft | Sysinternals Suite | File existence |
 | package-ssms.ps1 | Microsoft | SQL Server Management Studio | File version (Ssms.exe) |
 | package-teams.ps1 | Microsoft | Microsoft Teams Enterprise (x64) | Script (Get-AppxPackage) |
 | package-teamviewer.ps1 | TeamViewer | TeamViewer (x64) | RegistryKeyValue |
@@ -194,6 +199,7 @@ All packager scripts accept the same core parameters:
 | package-webex.ps1 | Cisco | Webex (x64) | RegistryKeyValue |
 | package-webview2.ps1 | Microsoft | WebView2 Evergreen Runtime | File version |
 | package-winscp.ps1 | WinSCP | WinSCP | RegistryKeyValue |
+| package-winrar.ps1 | win.rar GmbH | WinRAR (x64) | RegistryKeyValue |
 | package-wireshark.ps1 | Wireshark Foundation | Wireshark (x64) | RegistryKeyValue |
 | package-zoom.ps1 | Zoom Video Communications | Zoom Workplace (x64) | File existence (per-user) |
 
