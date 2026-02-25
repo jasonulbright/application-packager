@@ -111,7 +111,7 @@ All packager scripts accept the same core parameters:
 | `-GetLatestVersionOnly` | Output the latest version string and exit |
 | `-LogPath` | Path to a structured log file (timestamps + severity levels) |
 
-## Supported Applications (87)
+## Supported Applications (91)
 
 | Script | Vendor | Application | Detection Type |
 |---|---|---|---|
@@ -140,6 +140,7 @@ All packager scripts accept the same core parameters:
 | package-filezilla.ps1 | FileZilla Project | FileZilla Client (x64) | RegistryKeyValue |
 | package-firefox.ps1 | Mozilla | Mozilla Firefox (x64) | File version |
 | package-foxitreader.ps1 | Foxit Software | Foxit PDF Reader (x64) | File version |
+| package-gimp.ps1 | The GIMP Team | GIMP (x64) | RegistryKeyValue |
 | package-git.ps1 | Git | Git for Windows (x64) | Script (git.exe --version) |
 | package-greenshot.ps1 | Greenshot | Greenshot | File existence |
 | package-keepass.ps1 | Dominik Reichl | KeePass | RegistryKeyValue |
@@ -156,6 +157,7 @@ All packager scripts accept the same core parameters:
 | package-msvcruntimes.ps1 | Microsoft | VC++ 2015-2022 Redistributable (x86+x64) | Compound (AND, 2x RegistryKeyValue) |
 | package-nodejs.ps1 | OpenJS Foundation | Node.js LTS (x64) | RegistryKeyValue |
 | package-notepadplusplus.ps1 | Notepad++ | Notepad++ (x64) | File version |
+| package-opera.ps1 | Opera Software | Opera Browser (x64) | File version |
 | package-paintdotnet.ps1 | dotPDN LLC | Paint.NET (x64) | RegistryKeyValue |
 | package-powerbidesktop.ps1 | Microsoft | Power BI Desktop (x64) | File version |
 | package-powershell7.ps1 | Microsoft | PowerShell 7 (x64) | RegistryKeyValue |
@@ -194,10 +196,12 @@ All packager scripts accept the same core parameters:
 | package-treesizefree.ps1 | JAM Software | TreeSize Free | File version |
 | package-vmwaretools.ps1 | Broadcom | VMware Tools (x64) | File version |
 | package-vs2026.ps1 | Microsoft | Visual Studio 2026 Enterprise | File version (devenv.exe) |
+| package-vim.ps1 | The Vim Project | Vim (x64) | RegistryKeyValue |
 | package-vlc.ps1 | VideoLAN | VLC Media Player (x64) | RegistryKeyValue |
 | package-vscode.ps1 | Microsoft | Visual Studio Code (x64) | File version |
 | package-webex.ps1 | Cisco | Webex (x64) | RegistryKeyValue |
 | package-webview2.ps1 | Microsoft | WebView2 Evergreen Runtime | File version |
+| package-windirstat.ps1 | WinDirStat Team | WinDirStat (x64) | File version |
 | package-winscp.ps1 | WinSCP | WinSCP | RegistryKeyValue |
 | package-winrar.ps1 | win.rar GmbH | WinRAR (x64) | RegistryKeyValue |
 | package-wireshark.ps1 | Wireshark Foundation | Wireshark (x64) | RegistryKeyValue |

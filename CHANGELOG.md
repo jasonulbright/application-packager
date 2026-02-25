@@ -8,9 +8,9 @@ All notable changes to AppPackager are documented in this file.
 - **Vendor URL debug column** — new "Vendor URL (Debug)" column in the DataGridView, visible when the Debug Columns checkbox is checked; shows the vendor's product page URL for each packager
 - **Ctrl+Click to open vendor page** — Ctrl+Left-click any non-checkbox cell to open the vendor's product page in the default browser; URL sourced from the new `VendorUrl:` metadata tag in each packager script header
 - **Row hover tooltips** — hovering over any grid row displays the packager's `.SYNOPSIS` description from the script header; uses DataGridView's built-in `CellToolTipTextNeeded` event (replaces the former static grid tooltip)
-- `VendorUrl:` metadata tag added to all 87 packager script headers — parsed by `Get-PackagerMetadata` alongside existing `Vendor:`, `App:`, and `CMName:` tags
+- `VendorUrl:` metadata tag added to all 91 packager script headers — parsed by `Get-PackagerMetadata` alongside existing `Vendor:`, `App:`, and `CMName:` tags
 - `Description` field added to `Get-PackagerMetadata` — parses the first non-blank line after `.SYNOPSIS` in the script's comment-based help block
-- 25 new packager scripts (62 -> 87 total):
+- 29 new packager scripts (62 -> 91 total):
   - `package-slack.ps1` — Slack (x64) MSI from Slack CDN redirect URL; ARP registry detection
   - `package-nodejs.ps1` — Node.js LTS (x64) MSI from nodejs.org; version from dist/index.json API (LTS filter); ARP registry detection
   - `package-powershell7.ps1` — PowerShell 7 (x64) MSI from GitHub releases; custom MSI properties for PATH, PS Remoting, context menu; ARP registry detection
@@ -36,6 +36,10 @@ All notable changes to AppPackager are documented in this file.
   - `package-malwarebytes.ps1` — Malwarebytes offline EXE from Malwarebytes CDN; version from file properties; ARP registry detection (static Inno Setup key)
   - `package-ccleaner.ps1` — CCleaner Free slim EXE from ccleaner.com; version from Chocolatey API; ARP registry detection
   - `package-powershell7lts.ps1` — PowerShell 7 LTS (x64) MSI from GitHub releases; filters for v7.4.x LTS branch; ARP registry detection; same MSI properties as Current channel script
+  - `package-gimp.ps1` — GIMP (x64) InnoSetup EXE from GIMP CDN; version from `0.0_LATEST-IS-*` marker file in CDN directory listing; ARP registry detection via stable key `GIMP-3.0_is1`
+  - `package-windirstat.ps1` — WinDirStat (x64) MSI from GitHub releases; version from `release/v*` tag; file version detection (WiX auto-generated ProductCode makes ARP unreliable)
+  - `package-opera.ps1` — Opera Browser (x64) EXE from Opera CDN; version from CDN directory listing; file version detection (ARP key changes per version)
+  - `package-vim.ps1` — Vim/gVim (x64) NSIS EXE from GitHub releases (vim-win32-installer); ARP registry detection via stable key `Vim {major.minor}`; custom uninstall wrapper for versioned subfolder
 
 ### Changed
 - `Invoke-PackagerGetLatestVersion` rewritten with async I/O — replaced synchronous `ReadToEnd()` calls with `ReadToEndAsync()` tasks and bounded `WaitForExit(30000)` timeout; prevents GUI hang when grandchild processes (e.g., `curl.exe`, `expand.exe` in M365 scripts) inherit stdout/stderr pipe handles
