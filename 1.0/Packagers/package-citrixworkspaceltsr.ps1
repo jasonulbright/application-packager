@@ -160,8 +160,11 @@ function Resolve-LtsrDownloadUrl {
         if ($LASTEXITCODE -ne 0) { throw "Failed to fetch LTSR download page." }
 
         # Look for a direct download link to CitrixWorkspaceApp.exe
-        if ($html -match 'https://downloads\.citrix\.com/\d+/CitrixWorkspaceApp\.exe') {
+        # Page uses protocol-relative URLs (//downloads.citrix.com/...)
+        if ($html -match '(?:https?:)?//downloads\.citrix\.com/\d+/CitrixWorkspaceApp\.exe') {
             $url = $Matches[0]
+            # Normalize protocol-relative URL to https
+            if ($url.StartsWith('//')) { $url = "https:$url" }
             Write-Log "Resolved LTSR download URL   : $url"
             return $url
         }
