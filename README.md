@@ -111,7 +111,7 @@ All packager scripts accept the same core parameters:
 | `-GetLatestVersionOnly` | Output the latest version string and exit |
 | `-LogPath` | Path to a structured log file (timestamps + severity levels) |
 
-## Supported Applications (91)
+## Supported Applications (92)
 
 | Script | Vendor | Application | Detection Type |
 |---|---|---|---|
@@ -196,6 +196,7 @@ All packager scripts accept the same core parameters:
 | package-treesizefree.ps1 | JAM Software | TreeSize Free | File version |
 | package-vmwaretools.ps1 | Broadcom | VMware Tools (x64) | File version |
 | package-vs2026.ps1 | Microsoft | Visual Studio 2026 Enterprise | File version (devenv.exe) |
+| package-vs2026community.ps1 | Microsoft | Visual Studio 2026 Community | File version (devenv.exe) |
 | package-vim.ps1 | The Vim Project | Vim (x64) | RegistryKeyValue |
 | package-vlc.ps1 | VideoLAN | VLC Media Player (x64) | RegistryKeyValue |
 | package-vscode.ps1 | Microsoft | Visual Studio Code (x64) | File version |

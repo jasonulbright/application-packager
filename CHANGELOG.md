@@ -8,9 +8,9 @@ All notable changes to AppPackager are documented in this file.
 - **Vendor URL debug column** — new "Vendor URL (Debug)" column in the DataGridView, visible when the Debug Columns checkbox is checked; shows the vendor's product page URL for each packager
 - **Ctrl+Click to open vendor page** — Ctrl+Left-click any non-checkbox cell to open the vendor's product page in the default browser; URL sourced from the new `VendorUrl:` metadata tag in each packager script header
 - **Row hover tooltips** — hovering over any grid row displays the packager's `.SYNOPSIS` description from the script header; uses DataGridView's built-in `CellToolTipTextNeeded` event (replaces the former static grid tooltip)
-- `VendorUrl:` metadata tag added to all 91 packager script headers — parsed by `Get-PackagerMetadata` alongside existing `Vendor:`, `App:`, and `CMName:` tags
+- `VendorUrl:` metadata tag added to all 92 packager script headers — parsed by `Get-PackagerMetadata` alongside existing `Vendor:`, `App:`, and `CMName:` tags
 - `Description` field added to `Get-PackagerMetadata` — parses the first non-blank line after `.SYNOPSIS` in the script's comment-based help block
-- 29 new packager scripts (62 -> 91 total):
+- 30 new packager scripts (62 -> 92 total):
   - `package-slack.ps1` — Slack (x64) MSI from Slack CDN redirect URL; ARP registry detection
   - `package-nodejs.ps1` — Node.js LTS (x64) MSI from nodejs.org; version from dist/index.json API (LTS filter); ARP registry detection
   - `package-powershell7.ps1` — PowerShell 7 (x64) MSI from GitHub releases; custom MSI properties for PATH, PS Remoting, context menu; ARP registry detection
@@ -40,6 +40,7 @@ All notable changes to AppPackager are documented in this file.
   - `package-windirstat.ps1` — WinDirStat (x64) MSI from GitHub releases; version from `release/v*` tag; file version detection (WiX auto-generated ProductCode makes ARP unreliable)
   - `package-opera.ps1` — Opera Browser (x64) EXE from Opera CDN; version from CDN directory listing; file version detection (ARP key changes per version)
   - `package-vim.ps1` — Vim/gVim (x64) NSIS EXE from GitHub releases (vim-win32-installer); ARP registry detection via stable key `Vim {major.minor}`; custom uninstall wrapper for versioned subfolder
+  - `package-vs2026community.ps1` — Visual Studio 2026 Community offline layout packager; same bootstrapper/layout/interactive-install pattern as Enterprise edition; Community edition is free for individuals, open-source, education, and small organizations
 
 ### Changed
 - `Invoke-PackagerGetLatestVersion` rewritten with async I/O — replaced synchronous `ReadToEnd()` calls with `ReadToEndAsync()` tasks and bounded `WaitForExit(30000)` timeout; prevents GUI hang when grandchild processes (e.g., `curl.exe`, `expand.exe` in M365 scripts) inherit stdout/stderr pipe handles
