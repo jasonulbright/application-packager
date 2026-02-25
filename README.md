@@ -111,7 +111,7 @@ All packager scripts accept the same core parameters:
 | `-GetLatestVersionOnly` | Output the latest version string and exit |
 | `-LogPath` | Path to a structured log file (timestamps + severity levels) |
 
-## Supported Applications (95)
+## Supported Applications (97)
 
 | Script | Vendor | Application | Detection Type |
 |---|---|---|---|
@@ -123,6 +123,8 @@ All packager scripts accept the same core parameters:
 | package-bitwarden.ps1 | Bitwarden Inc. | Bitwarden Desktop (x64) | File version |
 | package-brave.ps1 | Brave Software | Brave Browser (x64) | File version |
 | package-ccleaner.ps1 | Piriform Software Ltd. | CCleaner | RegistryKeyValue |
+| package-citrixworkspacecr.ps1 | Citrix (Cloud Software Group) | Citrix Workspace (CR) (x64) | RegistryKeyValue |
+| package-citrixworkspaceltsr.ps1 | Citrix (Cloud Software Group) | Citrix Workspace (LTSR) (x64) | RegistryKeyValue |
 | package-chrome.ps1 | Google | Google Chrome Enterprise (x64) | RegistryKeyValue |
 | package-corretto-jdk8-x64.ps1 | Amazon | Amazon Corretto JDK 8 (x64) | RegistryKeyValue |
 | package-corretto-jdk8-x86.ps1 | Amazon | Amazon Corretto JDK 8 (x86) | RegistryKeyValue |

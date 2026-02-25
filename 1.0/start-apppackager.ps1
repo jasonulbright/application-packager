@@ -987,6 +987,582 @@ function Show-PreferencesDialog {
 }
 
 # -----------------------------
+# CWA Switches dialog
+# -----------------------------
+function Get-CwaSwitchesPath {
+    Join-Path (Join-Path $PSScriptRoot "Packagers") "citrix-workspace-switches.json"
+}
+
+function Read-CwaSwitches {
+    $defaults = [pscustomobject]@{
+        Store = [pscustomobject]@{ Name = ""; Url = "" }
+        Installation = [pscustomobject]@{
+            CleanInstall     = $true
+            IncludeSSON      = $true
+            EnableSSON       = $true
+            AppProtection    = $false
+            SessionPreLaunch = $false
+            SelfServiceMode  = $true
+        }
+        Plugins = [pscustomobject]@{
+            MSTeamsPlugin        = $true
+            ZoomPlugin           = $true
+            WebExPlugin          = $false
+            UberAgent            = $false
+            UberAgentSkipUpgrade = $false
+            EPAClient            = $true
+            SessionRecording     = $false
+        }
+        UpdateAndTelemetry = [pscustomobject]@{
+            AutoUpdateCheck = "disabled"
+            EnableCEIP      = $false
+            EnableTracing   = $false
+        }
+        StorePolicy = [pscustomobject]@{
+            AllowAddStore = "S"
+            AllowSavePwd  = "S"
+        }
+        Components = [pscustomobject]@{
+            Customize      = $false
+            ReceiverInside = $true
+            ICA_Client     = $true
+            AM             = $true
+            SelfService    = $true
+            DesktopViewer  = $true
+            WebHelper      = $true
+            BCR_Client     = $true
+            USB            = $false
+            SSON           = $false
+        }
+    }
+
+    $path = Get-CwaSwitchesPath
+    if (-not (Test-Path -LiteralPath $path)) { return $defaults }
+
+    try {
+        $raw = Get-Content -LiteralPath $path -Raw -ErrorAction Stop
+        if ([string]::IsNullOrWhiteSpace($raw)) { return $defaults }
+        $data = $raw | ConvertFrom-Json -ErrorAction Stop
+
+        # Merge loaded data onto defaults (preserve any missing keys)
+        if ($null -ne $data.Store) {
+            if ($null -ne $data.Store.Name) { $defaults.Store.Name = [string]$data.Store.Name }
+            if ($null -ne $data.Store.Url)  { $defaults.Store.Url  = [string]$data.Store.Url }
+        }
+        foreach ($prop in @('CleanInstall','IncludeSSON','EnableSSON','AppProtection','SessionPreLaunch','SelfServiceMode')) {
+            if ($null -ne $data.Installation.$prop) { $defaults.Installation.$prop = [bool]$data.Installation.$prop }
+        }
+        foreach ($prop in @('MSTeamsPlugin','ZoomPlugin','WebExPlugin','UberAgent','UberAgentSkipUpgrade','EPAClient','SessionRecording')) {
+            if ($null -ne $data.Plugins.$prop) { $defaults.Plugins.$prop = [bool]$data.Plugins.$prop }
+        }
+        if ($null -ne $data.UpdateAndTelemetry) {
+            if ($null -ne $data.UpdateAndTelemetry.AutoUpdateCheck) { $defaults.UpdateAndTelemetry.AutoUpdateCheck = [string]$data.UpdateAndTelemetry.AutoUpdateCheck }
+            if ($null -ne $data.UpdateAndTelemetry.EnableCEIP)      { $defaults.UpdateAndTelemetry.EnableCEIP      = [bool]$data.UpdateAndTelemetry.EnableCEIP }
+            if ($null -ne $data.UpdateAndTelemetry.EnableTracing)   { $defaults.UpdateAndTelemetry.EnableTracing   = [bool]$data.UpdateAndTelemetry.EnableTracing }
+        }
+        if ($null -ne $data.StorePolicy) {
+            if ($null -ne $data.StorePolicy.AllowAddStore) { $defaults.StorePolicy.AllowAddStore = [string]$data.StorePolicy.AllowAddStore }
+            if ($null -ne $data.StorePolicy.AllowSavePwd)  { $defaults.StorePolicy.AllowSavePwd  = [string]$data.StorePolicy.AllowSavePwd }
+        }
+        foreach ($prop in @('Customize','ReceiverInside','ICA_Client','AM','SelfService','DesktopViewer','WebHelper','BCR_Client','USB','SSON')) {
+            if ($null -ne $data.Components.$prop) { $defaults.Components.$prop = [bool]$data.Components.$prop }
+        }
+    }
+    catch { }
+
+    return $defaults
+}
+
+function Save-CwaSwitches {
+    param([Parameter(Mandatory)][pscustomobject]$Switches)
+    $path = Get-CwaSwitchesPath
+    $json = $Switches | ConvertTo-Json -Depth 3
+    Set-Content -LiteralPath $path -Value $json -Encoding UTF8
+}
+
+function Show-CwaSwitchesDialog {
+    param([Parameter(Mandatory)][System.Windows.Forms.Form]$Owner)
+
+    $sw = Read-CwaSwitches
+
+    $dlg = New-Object System.Windows.Forms.Form
+    $dlg.Text = "Citrix Workspace App - Install Switches"
+    $dlg.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedDialog
+    $dlg.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterParent
+    $dlg.MaximizeBox = $false
+    $dlg.MinimizeBox = $false
+    $dlg.Size = New-Object System.Drawing.Size(540, 740)
+    $dlg.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $dlg.BackColor = [System.Drawing.Color]::White
+    $dlg.AutoScroll = $true
+
+    $tip = New-Object System.Windows.Forms.ToolTip
+    $tip.AutoPopDelay = 12000
+    $tip.InitialDelay = 300
+    $tip.ReshowDelay  = 200
+
+    $pad  = 14
+    $cw   = 490       # content width inside dialog
+    $gbW  = $cw - (2 * $pad)
+    $chkX = 12        # checkbox X inside groupbox
+    $y    = $pad
+
+    # =========== Store Configuration ===========
+    $gbStore = New-Object System.Windows.Forms.GroupBox
+    $gbStore.Text = "Store Configuration"
+    $gbStore.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+    $gbStore.Location = New-Object System.Drawing.Point($pad, $y)
+    $gbStore.Size = New-Object System.Drawing.Size($gbW, 78)
+    $dlg.Controls.Add($gbStore)
+
+    $lblSN = New-Object System.Windows.Forms.Label
+    $lblSN.Text = "Store Name:"
+    $lblSN.AutoSize = $true
+    $lblSN.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $lblSN.Location = New-Object System.Drawing.Point($chkX, 22)
+    $gbStore.Controls.Add($lblSN)
+
+    $txtStoreName = New-Object System.Windows.Forms.TextBox
+    $txtStoreName.Text = $sw.Store.Name
+    $txtStoreName.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $txtStoreName.Width = 180
+    $txtStoreName.Location = New-Object System.Drawing.Point(100, 19)
+    $gbStore.Controls.Add($txtStoreName)
+    $tip.SetToolTip($txtStoreName, "Friendly name for the StoreFront store (STORE0 parameter)")
+
+    $lblSU = New-Object System.Windows.Forms.Label
+    $lblSU.Text = "Store URL:"
+    $lblSU.AutoSize = $true
+    $lblSU.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $lblSU.Location = New-Object System.Drawing.Point($chkX, 50)
+    $gbStore.Controls.Add($lblSU)
+
+    $txtStoreUrl = New-Object System.Windows.Forms.TextBox
+    $txtStoreUrl.Text = $sw.Store.Url
+    $txtStoreUrl.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $txtStoreUrl.Width = 340
+    $txtStoreUrl.Location = New-Object System.Drawing.Point(100, 47)
+    $gbStore.Controls.Add($txtStoreUrl)
+    $tip.SetToolTip($txtStoreUrl, "StoreFront base URL (e.g. https://storefront.company.com/Citrix/Store). /discovery is appended automatically.")
+
+    $y += 90
+
+    # =========== Installation Options ===========
+    $gbInstall = New-Object System.Windows.Forms.GroupBox
+    $gbInstall.Text = "Installation Options"
+    $gbInstall.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+    $gbInstall.Location = New-Object System.Drawing.Point($pad, $y)
+    $gbInstall.Size = New-Object System.Drawing.Size($gbW, 138)
+    $dlg.Controls.Add($gbInstall)
+
+    $iy = 20
+    $chkClean = New-Object System.Windows.Forms.CheckBox
+    $chkClean.Text = "Clean Install (/CleanInstall)"
+    $chkClean.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $chkClean.AutoSize = $true
+    $chkClean.Checked = $sw.Installation.CleanInstall
+    $chkClean.Location = New-Object System.Drawing.Point($chkX, $iy)
+    $gbInstall.Controls.Add($chkClean)
+    $tip.SetToolTip($chkClean, "Removes leftover configuration and registry data from any prior installation before installing. Recommended for upgrades, safe for first-time installs.")
+    $iy += 24
+
+    $chkSSOn = New-Object System.Windows.Forms.CheckBox
+    $chkSSOn.Text = "Single Sign-On (/includeSSON + ENABLE_SSON)"
+    $chkSSOn.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $chkSSOn.AutoSize = $true
+    $chkSSOn.Checked = $sw.Installation.IncludeSSON
+    $chkSSOn.Location = New-Object System.Drawing.Point($chkX, $iy)
+    $gbInstall.Controls.Add($chkSSOn)
+    $tip.SetToolTip($chkSSOn, "Installs the SSO component and activates domain pass-through authentication. Requires admin rights; may require reboot.")
+    $iy += 24
+
+    $chkAppProt = New-Object System.Windows.Forms.CheckBox
+    $chkAppProt.Text = "App Protection (/includeappprotection)"
+    $chkAppProt.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $chkAppProt.AutoSize = $true
+    $chkAppProt.Checked = $sw.Installation.AppProtection
+    $chkAppProt.Location = New-Object System.Drawing.Point($chkX, $iy)
+    $gbInstall.Controls.Add($chkAppProt)
+    $tip.SetToolTip($chkAppProt, "Installs anti-keylogging and anti-screen capture protection for Citrix sessions.")
+    $iy += 24
+
+    $chkPreLaunch = New-Object System.Windows.Forms.CheckBox
+    $chkPreLaunch.Text = "Session Pre-Launch (ENABLEPRELAUNCH)"
+    $chkPreLaunch.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $chkPreLaunch.AutoSize = $true
+    $chkPreLaunch.Checked = $sw.Installation.SessionPreLaunch
+    $chkPreLaunch.Location = New-Object System.Drawing.Point($chkX, $iy)
+    $gbInstall.Controls.Add($chkPreLaunch)
+    $tip.SetToolTip($chkPreLaunch, "Pre-launches a Citrix session at logon for faster application startup.")
+    $iy += 24
+
+    $chkSelfSvc = New-Object System.Windows.Forms.CheckBox
+    $chkSelfSvc.Text = "Self-Service Mode (SELFSERVICEMODE)"
+    $chkSelfSvc.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $chkSelfSvc.AutoSize = $true
+    $chkSelfSvc.Checked = $sw.Installation.SelfServiceMode
+    $chkSelfSvc.Location = New-Object System.Drawing.Point($chkX, $iy)
+    $gbInstall.Controls.Add($chkSelfSvc)
+    $tip.SetToolTip($chkSelfSvc, "Shows the Citrix Workspace self-service app window where users can browse and launch applications.")
+
+    $y += 148
+
+    # =========== Plugins & Add-ons ===========
+    $gbPlugins = New-Object System.Windows.Forms.GroupBox
+    $gbPlugins.Text = "Plugins and Add-ons"
+    $gbPlugins.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+    $gbPlugins.Location = New-Object System.Drawing.Point($pad, $y)
+    $gbPlugins.Size = New-Object System.Drawing.Size($gbW, 186)
+    $dlg.Controls.Add($gbPlugins)
+
+    $py = 20
+    $chkTeams = New-Object System.Windows.Forms.CheckBox
+    $chkTeams.Text = "MS Teams VDI Plugin (default on 2508+)"
+    $chkTeams.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $chkTeams.AutoSize = $true
+    $chkTeams.Checked = $sw.Plugins.MSTeamsPlugin
+    $chkTeams.Location = New-Object System.Drawing.Point($chkX, $py)
+    $gbPlugins.Controls.Add($chkTeams)
+    $tip.SetToolTip($chkTeams, "Installs MsTeamsPluginCitrix for Teams VDI optimization (SlimCore). Default on in 2508+. Uncheck to pass InstallMSTeamsPlugin=N.")
+    $py += 24
+
+    $chkZoom = New-Object System.Windows.Forms.CheckBox
+    $chkZoom.Text = "Zoom VDI Plugin (default on 2511+)"
+    $chkZoom.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $chkZoom.AutoSize = $true
+    $chkZoom.Checked = $sw.Plugins.ZoomPlugin
+    $chkZoom.Location = New-Object System.Drawing.Point($chkX, $py)
+    $gbPlugins.Controls.Add($chkZoom)
+    $tip.SetToolTip($chkZoom, "Installs 64-bit Zoom VDI plugin. Default on in 2511+. Uncheck to pass Installzoomplugin=N.")
+    $py += 24
+
+    $chkWebEx = New-Object System.Windows.Forms.CheckBox
+    $chkWebEx.Text = "WebEx VDI Plugin (ADDONS=WebexVDIPlugin)"
+    $chkWebEx.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $chkWebEx.AutoSize = $true
+    $chkWebEx.Checked = $sw.Plugins.WebExPlugin
+    $chkWebEx.Location = New-Object System.Drawing.Point($chkX, $py)
+    $gbPlugins.Controls.Add($chkWebEx)
+    $tip.SetToolTip($chkWebEx, "Installs the WebEx VDI plugin engine. Not installed by default in any version; opt-in only.")
+    $py += 24
+
+    $chkUber = New-Object System.Windows.Forms.CheckBox
+    $chkUber.Text = "uberAgent Monitoring (/InstallUberAgent)"
+    $chkUber.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $chkUber.AutoSize = $true
+    $chkUber.Checked = $sw.Plugins.UberAgent
+    $chkUber.Location = New-Object System.Drawing.Point($chkX, $py)
+    $gbPlugins.Controls.Add($chkUber)
+    $tip.SetToolTip($chkUber, "Installs or upgrades the uberAgent monitoring/diagnostics plugin. Bundled since 2508 CR / 2507.1 LTSR but not installed by default.")
+    $py += 24
+
+    $chkUberSkip = New-Object System.Windows.Forms.CheckBox
+    $chkUberSkip.Text = "    Skip upgrade if present (/SkipUberAgentUpgrade)"
+    $chkUberSkip.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $chkUberSkip.AutoSize = $true
+    $chkUberSkip.Checked = $sw.Plugins.UberAgentSkipUpgrade
+    $chkUberSkip.Enabled = $sw.Plugins.UberAgent
+    $chkUberSkip.Location = New-Object System.Drawing.Point(($chkX + 20), $py)
+    $gbPlugins.Controls.Add($chkUberSkip)
+    $tip.SetToolTip($chkUberSkip, "Installs uberAgent only if not already present; skips upgrade if it already exists. Ideal for environments where uberAgent is managed separately.")
+
+    $chkUber.Add_CheckedChanged({ $chkUberSkip.Enabled = $chkUber.Checked })
+    $py += 24
+
+    $chkEPA = New-Object System.Windows.Forms.CheckBox
+    $chkEPA.Text = "EPA Client (default on 2508+)"
+    $chkEPA.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $chkEPA.AutoSize = $true
+    $chkEPA.Checked = $sw.Plugins.EPAClient
+    $chkEPA.Location = New-Object System.Drawing.Point($chkX, $py)
+    $gbPlugins.Controls.Add($chkEPA)
+    $tip.SetToolTip($chkEPA, "Endpoint Analysis client for Device Posture checks. Auto-installs on 2508+. Uncheck to pass InstallEPAClient=N.")
+    $py += 24
+
+    $chkSR = New-Object System.Windows.Forms.CheckBox
+    $chkSR.Text = "Session Recording (/InstallSRAgent, 2511+)"
+    $chkSR.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $chkSR.AutoSize = $true
+    $chkSR.Checked = $sw.Plugins.SessionRecording
+    $chkSR.Location = New-Object System.Drawing.Point($chkX, $py)
+    $gbPlugins.Controls.Add($chkSR)
+    $tip.SetToolTip($chkSR, "Installs the Session Recording agent for endpoint device session monitoring. Available on CWA 2503+.")
+
+    $y += 196
+
+    # =========== Update & Telemetry ===========
+    $gbUpdate = New-Object System.Windows.Forms.GroupBox
+    $gbUpdate.Text = "Update and Telemetry"
+    $gbUpdate.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+    $gbUpdate.Location = New-Object System.Drawing.Point($pad, $y)
+    $gbUpdate.Size = New-Object System.Drawing.Size($gbW, 100)
+    $dlg.Controls.Add($gbUpdate)
+
+    $uy = 20
+    $lblAutoUpd = New-Object System.Windows.Forms.Label
+    $lblAutoUpd.Text = "Auto-Update:"
+    $lblAutoUpd.AutoSize = $true
+    $lblAutoUpd.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $lblAutoUpd.Location = New-Object System.Drawing.Point($chkX, ($uy + 3))
+    $gbUpdate.Controls.Add($lblAutoUpd)
+
+    $cmbAutoUpd = New-Object System.Windows.Forms.ComboBox
+    $cmbAutoUpd.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
+    $cmbAutoUpd.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $cmbAutoUpd.Items.AddRange(@("auto", "manual", "disabled"))
+    $cmbAutoUpd.SelectedItem = $sw.UpdateAndTelemetry.AutoUpdateCheck
+    if ($cmbAutoUpd.SelectedIndex -lt 0) { $cmbAutoUpd.SelectedIndex = 2 }
+    $cmbAutoUpd.Width = 120
+    $cmbAutoUpd.Location = New-Object System.Drawing.Point(100, $uy)
+    $gbUpdate.Controls.Add($cmbAutoUpd)
+    $tip.SetToolTip($cmbAutoUpd, "Controls automatic update checking: auto (default Citrix behavior), manual (user-initiated only), disabled (no update checks).")
+    $uy += 28
+
+    $chkCEIP = New-Object System.Windows.Forms.CheckBox
+    $chkCEIP.Text = "CEIP / Telemetry (EnableCEIP)"
+    $chkCEIP.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $chkCEIP.AutoSize = $true
+    $chkCEIP.Checked = $sw.UpdateAndTelemetry.EnableCEIP
+    $chkCEIP.Location = New-Object System.Drawing.Point($chkX, $uy)
+    $gbUpdate.Controls.Add($chkCEIP)
+    $tip.SetToolTip($chkCEIP, "Citrix Customer Experience Improvement Program. Sends anonymous usage data to Citrix.")
+    $uy += 24
+
+    $chkTrace = New-Object System.Windows.Forms.CheckBox
+    $chkTrace.Text = "Always-On Tracing (EnableTracing)"
+    $chkTrace.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $chkTrace.AutoSize = $true
+    $chkTrace.Checked = $sw.UpdateAndTelemetry.EnableTracing
+    $chkTrace.Location = New-Object System.Drawing.Point($chkX, $uy)
+    $gbUpdate.Controls.Add($chkTrace)
+    $tip.SetToolTip($chkTrace, "Enables always-on diagnostic tracing for troubleshooting. May impact performance slightly.")
+
+    $y += 110
+
+    # =========== Store Policy ===========
+    $gbPolicy = New-Object System.Windows.Forms.GroupBox
+    $gbPolicy.Text = "Store Policy"
+    $gbPolicy.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+    $gbPolicy.Location = New-Object System.Drawing.Point($pad, $y)
+    $gbPolicy.Size = New-Object System.Drawing.Size($gbW, 62)
+    $dlg.Controls.Add($gbPolicy)
+
+    $lblAddStore = New-Object System.Windows.Forms.Label
+    $lblAddStore.Text = "Allow Add Store:"
+    $lblAddStore.AutoSize = $true
+    $lblAddStore.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $lblAddStore.Location = New-Object System.Drawing.Point($chkX, 24)
+    $gbPolicy.Controls.Add($lblAddStore)
+
+    $cmbAddStore = New-Object System.Windows.Forms.ComboBox
+    $cmbAddStore.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
+    $cmbAddStore.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $cmbAddStore.Items.AddRange(@("S", "A", "N"))
+    $cmbAddStore.SelectedItem = $sw.StorePolicy.AllowAddStore
+    if ($cmbAddStore.SelectedIndex -lt 0) { $cmbAddStore.SelectedIndex = 0 }
+    $cmbAddStore.Width = 50
+    $cmbAddStore.Location = New-Object System.Drawing.Point(120, 21)
+    $gbPolicy.Controls.Add($cmbAddStore)
+    $tip.SetToolTip($cmbAddStore, "S = Secure/HTTPS only (default), A = All protocols, N = None (users cannot add stores)")
+
+    $lblSavePwd = New-Object System.Windows.Forms.Label
+    $lblSavePwd.Text = "Allow Save Pwd:"
+    $lblSavePwd.AutoSize = $true
+    $lblSavePwd.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $lblSavePwd.Location = New-Object System.Drawing.Point(220, 24)
+    $gbPolicy.Controls.Add($lblSavePwd)
+
+    $cmbSavePwd = New-Object System.Windows.Forms.ComboBox
+    $cmbSavePwd.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
+    $cmbSavePwd.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $cmbSavePwd.Items.AddRange(@("S", "A", "N"))
+    $cmbSavePwd.SelectedItem = $sw.StorePolicy.AllowSavePwd
+    if ($cmbSavePwd.SelectedIndex -lt 0) { $cmbSavePwd.SelectedIndex = 0 }
+    $cmbSavePwd.Width = 50
+    $cmbSavePwd.Location = New-Object System.Drawing.Point(330, 21)
+    $gbPolicy.Controls.Add($cmbSavePwd)
+    $tip.SetToolTip($cmbSavePwd, "S = Secure/HTTPS only (default), A = All, N = Never cache credentials")
+
+    $y += 72
+
+    # =========== Components (ADDLOCAL) ===========
+    $gbComp = New-Object System.Windows.Forms.GroupBox
+    $gbComp.Text = "Components (ADDLOCAL)"
+    $gbComp.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+    $gbComp.Location = New-Object System.Drawing.Point($pad, $y)
+    $gbComp.Size = New-Object System.Drawing.Size($gbW, 244)
+    $dlg.Controls.Add($gbComp)
+
+    $cy = 20
+    $chkCustomize = New-Object System.Windows.Forms.CheckBox
+    $chkCustomize.Text = "Customize (specify ADDLOCAL explicitly)"
+    $chkCustomize.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+    $chkCustomize.AutoSize = $true
+    $chkCustomize.Checked = $sw.Components.Customize
+    $chkCustomize.Location = New-Object System.Drawing.Point($chkX, $cy)
+    $gbComp.Controls.Add($chkCustomize)
+    $tip.SetToolTip($chkCustomize, "When unchecked, ADDLOCAL is omitted and CWA installs its default component set. When checked, only the selected components below are installed.")
+    $cy += 26
+
+    # Component checkboxes - store in array for enable/disable toggling
+    $compChecks = @()
+
+    $compDefs = @(
+        @{ Name = 'ReceiverInside'; Label = 'ReceiverInside (Core SDK)'; Tip = 'Core Workspace SDK services. Required.'; Required = $true },
+        @{ Name = 'ICA_Client';     Label = 'ICA_Client (HDX Engine)';   Tip = 'Session launch and ICA protocol handling. Required.'; Required = $true },
+        @{ Name = 'AM';             Label = 'AM (Authentication)';       Tip = 'User authentication manager. Required.'; Required = $true },
+        @{ Name = 'SelfService';    Label = 'SelfService (Self-Service UI)'; Tip = 'Native application launch and self-service plugin.' },
+        @{ Name = 'DesktopViewer';  Label = 'DesktopViewer (Virtual Desktop)'; Tip = 'Virtual desktop UI framework for full desktop sessions.' },
+        @{ Name = 'WebHelper';      Label = 'WebHelper (Browser Helper)'; Tip = 'Browser-to-application connectivity for web launch.' },
+        @{ Name = 'BCR_Client';     Label = 'BCR_Client (Browser Content Redir.)'; Tip = 'Redirects browser content rendering to the client device. Default on in 2507+.' },
+        @{ Name = 'USB';            Label = 'USB (USB Redirection)'; Tip = 'USB device passthrough/redirection to virtual sessions. Requires server-side policy.' },
+        @{ Name = 'SSON';           Label = 'SSON (SSO Component)'; Tip = 'Single Sign-On GINA/credential provider component for domain pass-through.' }
+    )
+
+    foreach ($def in $compDefs) {
+        $chk = New-Object System.Windows.Forms.CheckBox
+        $chk.Text = $def.Label
+        $chk.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+        $chk.AutoSize = $true
+        $chk.Checked = ($sw.Components.($def.Name) -eq $true)
+        $chk.Location = New-Object System.Drawing.Point(($chkX + 20), $cy)
+        $chk.Enabled = $sw.Components.Customize
+        $chk.Tag = $def.Name
+        if ($def.Required) {
+            $chk.Checked = $true
+            # Required components are always checked; disable them when customize is on
+            $chk.Add_EnabledChanged({
+                param($sender, $e)
+                if ($sender.Tag -eq 'ReceiverInside' -or $sender.Tag -eq 'ICA_Client' -or $sender.Tag -eq 'AM') {
+                    $sender.Checked = $true
+                }
+            })
+        }
+        $gbComp.Controls.Add($chk)
+        $tip.SetToolTip($chk, $def.Tip)
+        $compChecks += $chk
+        $cy += 22
+    }
+
+    $chkCustomize.Add_CheckedChanged({
+        foreach ($c in $compChecks) {
+            $c.Enabled = $chkCustomize.Checked
+            # Keep required components checked
+            if ($c.Tag -eq 'ReceiverInside' -or $c.Tag -eq 'ICA_Client' -or $c.Tag -eq 'AM') {
+                $c.Checked = $true
+            }
+        }
+    })
+
+    $y += 254
+
+    # =========== Preview & Buttons ===========
+    $btnPreview = New-Object System.Windows.Forms.Button
+    $btnPreview.Text = "Preview Command"
+    $btnPreview.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $btnPreview.Size = New-Object System.Drawing.Size(120, 30)
+    $btnPreview.Location = New-Object System.Drawing.Point($pad, $y)
+    $dlg.Controls.Add($btnPreview)
+
+    $btnSave = New-Object System.Windows.Forms.Button
+    $btnSave.Text = "Save"
+    $btnSave.DialogResult = [System.Windows.Forms.DialogResult]::OK
+    $btnSave.Size = New-Object System.Drawing.Size(80, 30)
+    $btnSave.Location = New-Object System.Drawing.Point(($gbW - 90), $y)
+    $dlg.Controls.Add($btnSave)
+    $dlg.AcceptButton = $btnSave
+
+    $btnCancel = New-Object System.Windows.Forms.Button
+    $btnCancel.Text = "Cancel"
+    $btnCancel.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
+    $btnCancel.Size = New-Object System.Drawing.Size(80, 30)
+    $btnCancel.Location = New-Object System.Drawing.Point(($gbW - 180), $y)
+    $dlg.Controls.Add($btnCancel)
+    $dlg.CancelButton = $btnCancel
+
+    # Preview button handler - builds the command and shows in a message box
+    $btnPreview.Add_Click({
+        $previewArgs = @('/silent', '/noreboot')
+        if ($chkClean.Checked)    { $previewArgs += '/CleanInstall' }
+        if ($chkSSOn.Checked)     { $previewArgs += '/includeSSON'; $previewArgs += 'ENABLE_SSON=Yes' }
+        if ($chkAppProt.Checked)  { $previewArgs += '/includeappprotection' }
+        if ($chkPreLaunch.Checked){ $previewArgs += 'ENABLEPRELAUNCH=True' }
+        if ($chkSelfSvc.Checked)  { $previewArgs += 'SELFSERVICEMODE=True' } else { $previewArgs += 'SELFSERVICEMODE=False' }
+
+        if (-not [string]::IsNullOrWhiteSpace($txtStoreUrl.Text)) {
+            $sn = if ([string]::IsNullOrWhiteSpace($txtStoreName.Text)) { 'Store' } else { $txtStoreName.Text.Trim() }
+            $su = $txtStoreUrl.Text.Trim().TrimEnd('/')
+            if ($su -notlike '*/discovery') { $su = "$su/discovery" }
+            $previewArgs += ('STORE0="{0};{1};On;{0}"' -f $sn, $su)
+        }
+
+        if (-not $chkTeams.Checked)  { $previewArgs += 'InstallMSTeamsPlugin=N' }
+        if (-not $chkZoom.Checked)   { $previewArgs += 'Installzoomplugin=N' }
+        if ($chkWebEx.Checked)       { $previewArgs += 'ADDONS=WebexVDIPlugin' }
+        if ($chkUber.Checked)        { $previewArgs += '/InstallUberAgent'; if ($chkUberSkip.Checked) { $previewArgs += '/SkipUberAgentUpgrade' } }
+        if (-not $chkEPA.Checked)    { $previewArgs += 'InstallEPAClient=N' }
+        if ($chkSR.Checked)          { $previewArgs += '/InstallSRAgent' }
+
+        $previewArgs += ('AutoUpdateCheck={0}' -f $cmbAutoUpd.SelectedItem)
+        if (-not $chkCEIP.Checked)   { $previewArgs += 'EnableCEIP=False' }
+        if (-not $chkTrace.Checked)  { $previewArgs += 'EnableTracing=false' }
+
+        $previewArgs += ('ALLOWADDSTORE={0}' -f $cmbAddStore.SelectedItem)
+        $previewArgs += ('ALLOWSAVEPWD={0}' -f $cmbSavePwd.SelectedItem)
+
+        if ($chkCustomize.Checked) {
+            $cl = @()
+            foreach ($c in $compChecks) { if ($c.Checked) { $cl += $c.Tag } }
+            if ($cl.Count -gt 0) { $previewArgs += ('ADDLOCAL={0}' -f ($cl -join ',')) }
+        }
+
+        $cmdLine = "CitrixWorkspaceApp.exe " + ($previewArgs -join " ")
+        [System.Windows.Forms.MessageBox]::Show($cmdLine, "Command Preview", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
+    })
+
+    $result = $dlg.ShowDialog($Owner)
+
+    if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
+        $sw.Store.Name = $txtStoreName.Text.Trim()
+        $sw.Store.Url  = $txtStoreUrl.Text.Trim()
+
+        $sw.Installation.CleanInstall     = $chkClean.Checked
+        $sw.Installation.IncludeSSON      = $chkSSOn.Checked
+        $sw.Installation.EnableSSON       = $chkSSOn.Checked
+        $sw.Installation.AppProtection    = $chkAppProt.Checked
+        $sw.Installation.SessionPreLaunch = $chkPreLaunch.Checked
+        $sw.Installation.SelfServiceMode  = $chkSelfSvc.Checked
+
+        $sw.Plugins.MSTeamsPlugin        = $chkTeams.Checked
+        $sw.Plugins.ZoomPlugin           = $chkZoom.Checked
+        $sw.Plugins.WebExPlugin          = $chkWebEx.Checked
+        $sw.Plugins.UberAgent            = $chkUber.Checked
+        $sw.Plugins.UberAgentSkipUpgrade = $chkUberSkip.Checked
+        $sw.Plugins.EPAClient            = $chkEPA.Checked
+        $sw.Plugins.SessionRecording     = $chkSR.Checked
+
+        $sw.UpdateAndTelemetry.AutoUpdateCheck = [string]$cmbAutoUpd.SelectedItem
+        $sw.UpdateAndTelemetry.EnableCEIP      = $chkCEIP.Checked
+        $sw.UpdateAndTelemetry.EnableTracing   = $chkTrace.Checked
+
+        $sw.StorePolicy.AllowAddStore = [string]$cmbAddStore.SelectedItem
+        $sw.StorePolicy.AllowSavePwd  = [string]$cmbSavePwd.SelectedItem
+
+        $sw.Components.Customize = $chkCustomize.Checked
+        foreach ($c in $compChecks) {
+            $sw.Components.($c.Tag) = $c.Checked
+        }
+
+        Save-CwaSwitches -Switches $sw
+        $dlg.Dispose()
+        return $true
+    }
+
+    $dlg.Dispose()
+    return $false
+}
+
+# -----------------------------
 # UI
 # -----------------------------
 $form = New-Object System.Windows.Forms.Form
@@ -1040,10 +1616,19 @@ $menuPrefs.Add_Click({
     }
 })
 
+$menuCwaSwitches = New-Object System.Windows.Forms.ToolStripMenuItem "Citrix Workspace Switches..."
+$menuCwaSwitches.Add_Click({
+    $changed = Show-CwaSwitchesDialog -Owner $form
+    if ($changed) {
+        Add-LogLine -TextBox $txtLog -Message "Citrix Workspace install switches saved."
+    }
+})
+
 $menuExit = New-Object System.Windows.Forms.ToolStripMenuItem "Exit"
 $menuExit.Add_Click({ $form.Close() })
 
 $menuFile.DropDownItems.Add($menuPrefs) | Out-Null
+$menuFile.DropDownItems.Add($menuCwaSwitches) | Out-Null
 $menuFile.DropDownItems.Add((New-Object System.Windows.Forms.ToolStripSeparator)) | Out-Null
 $menuFile.DropDownItems.Add($menuExit) | Out-Null
 

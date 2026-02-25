@@ -8,9 +8,10 @@ All notable changes to AppPackager are documented in this file.
 - **Vendor URL debug column** — new "Vendor URL (Debug)" column in the DataGridView, visible when the Debug Columns checkbox is checked; shows the vendor's product page URL for each packager
 - **Ctrl+Click to open vendor page** — Ctrl+Left-click any non-checkbox cell to open the vendor's product page in the default browser; URL sourced from the new `VendorUrl:` metadata tag in each packager script header
 - **Row hover tooltips** — hovering over any grid row displays the packager's `.SYNOPSIS` description from the script header; uses DataGridView's built-in `CellToolTipTextNeeded` event (replaces the former static grid tooltip)
-- `VendorUrl:` metadata tag added to all 95 packager script headers — parsed by `Get-PackagerMetadata` alongside existing `Vendor:`, `App:`, and `CMName:` tags
+- `VendorUrl:` metadata tag added to all 97 packager script headers — parsed by `Get-PackagerMetadata` alongside existing `Vendor:`, `App:`, and `CMName:` tags
 - `Description` field added to `Get-PackagerMetadata` — parses the first non-blank line after `.SYNOPSIS` in the script's comment-based help block
-- 33 new packager scripts (62 -> 95 total):
+- **Citrix Workspace Switches dialog** — new File menu item "Citrix Workspace Switches..." opens a modal dialog for configuring CWA silent install parameters; includes grouped checkboxes for installation options, plugins/add-ons, update/telemetry, store policy, and ADDLOCAL component selection; persists settings to `citrix-workspace-switches.json`; "Preview Command" button shows assembled command line; tooltips sourced from Citrix vendor documentation
+- 35 new packager scripts (62 -> 97 total):
   - `package-slack.ps1` — Slack (x64) MSI from Slack CDN redirect URL; ARP registry detection
   - `package-nodejs.ps1` — Node.js LTS (x64) MSI from nodejs.org; version from dist/index.json API (LTS filter); ARP registry detection
   - `package-powershell7.ps1` — PowerShell 7 (x64) MSI from GitHub releases; custom MSI properties for PATH, PS Remoting, context menu; ARP registry detection
@@ -44,6 +45,8 @@ All notable changes to AppPackager are documented in this file.
   - `package-tableaudesktop.ps1` — Tableau Desktop (x64) EXE from Tableau CDN (`tssoftwareregistered/`); version from release notes page scrape; file version detection on `tableau.exe`; replaces deprecated temp-install version
   - `package-tableauprep.ps1` — Tableau Prep Builder (x64) EXE from Tableau CDN (`tssoftware/`); version from release notes page scrape; file version detection on `tableau-prep-builder.exe`; replaces deprecated temp-install version
   - `package-tableaureader.ps1` — Tableau Reader (x64) EXE from Tableau CDN (`tssoftware/`); version from release notes page scrape; file version detection on `tabreader.exe`; free product, no license required; replaces deprecated temp-install version
+  - `package-citrixworkspacecr.ps1` — Citrix Workspace App Current Release (CR) (x64) EXE from Citrix CDN; version from Chocolatey API; ARP registry detection on fixed `CitrixOnlinePluginPackWeb` key; install switches read from `citrix-workspace-switches.json` for enterprise customization (SSO, plugins, ADDLOCAL, store URL, telemetry)
+  - `package-citrixworkspaceltsr.ps1` — Citrix Workspace App LTSR (x64) EXE; version from Chocolatey API with local-file fallback; LTSR download URL resolved from Citrix download page or manual placement; same ARP detection and switches config as CR script
 
 ### Changed
 - `Invoke-PackagerGetLatestVersion` rewritten with async I/O — replaced synchronous `ReadToEnd()` calls with `ReadToEndAsync()` tasks and bounded `WaitForExit(30000)` timeout; prevents GUI hang when grandchild processes (e.g., `curl.exe`, `expand.exe` in M365 scripts) inherit stdout/stderr pipe handles
