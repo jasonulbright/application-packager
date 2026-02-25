@@ -111,7 +111,7 @@ All packager scripts accept the same core parameters:
 | `-GetLatestVersionOnly` | Output the latest version string and exit |
 | `-LogPath` | Path to a structured log file (timestamps + severity levels) |
 
-## Supported Applications (92)
+## Supported Applications (95)
 
 | Script | Vendor | Application | Detection Type |
 |---|---|---|---|
@@ -178,6 +178,9 @@ All packager scripts accept the same core parameters:
 | package-teams.ps1 | Microsoft | Microsoft Teams Enterprise (x64) | Script (Get-AppxPackage) |
 | package-teamviewer.ps1 | TeamViewer | TeamViewer (x64) | RegistryKeyValue |
 | package-teamviewerhost.ps1 | TeamViewer | TeamViewer Host (x64) | File |
+| package-tableaudesktop.ps1 | Salesforce (Tableau) | Tableau Desktop (x64) | File version |
+| package-tableauprep.ps1 | Salesforce (Tableau) | Tableau Prep Builder (x64) | File version |
+| package-tableaureader.ps1 | Salesforce (Tableau) | Tableau Reader (x64) | File version |
 | package-temurin-jdk8-x64.ps1 | Eclipse Adoptium | Eclipse Temurin JDK 8 (x64) | RegistryKeyValue |
 | package-temurin-jdk8-x86.ps1 | Eclipse Adoptium | Eclipse Temurin JDK 8 (x86) | RegistryKeyValue |
 | package-temurin-jdk11-x64.ps1 | Eclipse Adoptium | Eclipse Temurin JDK 11 (x64) | RegistryKeyValue |
