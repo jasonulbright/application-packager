@@ -70,6 +70,12 @@ Or with custom parameters:
 
 Settings that rarely change (Site Code, File Share Root, Download Root, Est/Max Runtime, Company Name) are managed via **File > Preferences** and persisted to `AppPackager.preferences.json`. Company Name is also synced to `packager-preferences.json` for use by ODT-based packagers. The Comment field remains on the main form for per-run entry. Window size and position are persisted automatically across sessions.
 
+![Preferences](prefs_screenshot.png)
+
+Citrix Workspace App install switches are configured via **File > Citrix Workspace Switches...**. The dialog provides grouped checkboxes for installation options, plugins/add-ons, update/telemetry, store policy, and ADDLOCAL component selection. Settings are persisted to `citrix-workspace-switches.json` and applied during Stage for both CR and LTSR packagers.
+
+![Citrix Workspace Switches](citrix_prefs_screenshot.png)
+
 Additional grid features:
 - **Right-click context menu** on any row — Open Log Folder, Open Staged Folder, Open Network Share, Copy Latest Version
 - **Ctrl+Click** any row to open the vendor's product page in the default browser

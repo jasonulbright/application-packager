@@ -1087,11 +1087,12 @@ function Show-CwaSwitchesDialog {
 
     $dlg = New-Object System.Windows.Forms.Form
     $dlg.Text = "Citrix Workspace App - Install Switches"
-    $dlg.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedDialog
+    $dlg.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::Sizable
     $dlg.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterParent
     $dlg.MaximizeBox = $false
     $dlg.MinimizeBox = $false
     $dlg.Size = New-Object System.Drawing.Size(540, 740)
+    $dlg.MinimumSize = New-Object System.Drawing.Size(540, 400)
     $dlg.Font = New-Object System.Drawing.Font("Segoe UI", 9)
     $dlg.BackColor = [System.Drawing.Color]::White
     $dlg.AutoScroll = $true
