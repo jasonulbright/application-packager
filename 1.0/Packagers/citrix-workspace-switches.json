@@ -1,0 +1,44 @@
+﻿{
+    "Store":  {
+                  "Name":  "Workspace",
+                  "Url":  "cloud.software.group"
+              },
+    "Installation":  {
+                         "CleanInstall":  true,
+                         "IncludeSSON":  true,
+                         "EnableSSON":  true,
+                         "AppProtection":  false,
+                         "SessionPreLaunch":  false,
+                         "SelfServiceMode":  true
+                     },
+    "Plugins":  {
+                    "MSTeamsPlugin":  true,
+                    "ZoomPlugin":  true,
+                    "WebExPlugin":  false,
+                    "UberAgent":  false,
+                    "UberAgentSkipUpgrade":  false,
+                    "EPAClient":  true,
+                    "SessionRecording":  false
+                },
+    "UpdateAndTelemetry":  {
+                               "AutoUpdateCheck":  "disabled",
+                               "EnableCEIP":  false,
+                               "EnableTracing":  false
+                           },
+    "StorePolicy":  {
+                        "AllowAddStore":  "S",
+                        "AllowSavePwd":  "S"
+                    },
+    "Components":  {
+                       "Customize":  false,
+                       "ReceiverInside":  true,
+                       "ICA_Client":  true,
+                       "AM":  true,
+                       "SelfService":  true,
+                       "DesktopViewer":  true,
+                       "WebHelper":  true,
+                       "BCR_Client":  true,
+                       "USB":  false,
+                       "SSON":  false
+                   }
+}

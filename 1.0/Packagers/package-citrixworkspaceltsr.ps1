@@ -16,11 +16,11 @@ VendorUrl: https://www.citrix.com/downloads/workspace-app/
       -StageOnly    Download installer, generate content wrappers, write manifest
       -PackageOnly  Read manifest, copy to network, create MECM application
 
-    The latest LTSR version is resolved via the Chocolatey community API. The
-    LTSR download URL changes with each Cumulative Update release; the script
-    attempts to resolve it from the Citrix download page. If the automated
-    URL resolution fails, place the installer manually in the download root
-    folder (C:\temp\ap\CitrixWorkspaceLTSR\CitrixWorkspaceApp.exe).
+    The latest LTSR version and download URL are resolved via the Citrix
+    auto-update catalog XML. If the catalog is unavailable, the script falls
+    back to scraping the Citrix LTSR download page. If all automated URL
+    resolution fails, place the installer manually in the download root
+    folder (C:\temp\ap\CitrixWorkspaceLTSR\CitrixWorkspaceFullInstaller.exe).
 
     Detection uses the fixed ARP registry key CitrixOnlinePluginPackWeb under
     Wow6432Node. The DisplayVersion value contains the 4-part internal version
@@ -57,7 +57,7 @@ VendorUrl: https://www.citrix.com/downloads/workspace-app/
     Runs only the Package phase.
 
 .PARAMETER GetLatestVersionOnly
-    Queries the Chocolatey API for the latest LTSR version, outputs the
+    Queries the Citrix catalog for the latest LTSR version, outputs the
     version string, and exits. No MECM changes are made.
 
 .REQUIREMENTS
@@ -91,10 +91,10 @@ if ($StageOnly -and $PackageOnly) {
 }
 
 # --- Configuration ---
-$ChocolateyApiUrl = "https://community.chocolatey.org/api/v2/FindPackagesById()?`$orderby=Version%20desc&`$top=1&id=%27citrix-workspace-ltsr%27"
-$InstallerFileName = "CitrixWorkspaceApp.exe"
+$CatalogUrl        = "https://downloadplugins.citrix.com/ReceiverUpdates/Prod/catalog_win.xml"
+$InstallerFileName = "CitrixWorkspaceFullInstaller.exe"
 
-# Citrix LTSR download page (scraped for the download link)
+# Citrix LTSR download page (fallback if catalog is unavailable)
 $LtsrDownloadPageUrl = "https://www.citrix.com/downloads/workspace-app/workspace-app-for-windows-long-term-service-release/workspace-app-for-windows-LTSR-Latest.html"
 
 $VendorFolder = "Citrix"
@@ -111,26 +111,28 @@ $ArpKeyPath = "SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\C
 function Get-LatestCitrixLTSRVersion {
     param([switch]$Quiet)
 
-    Write-Log "Chocolatey API URL           : $ChocolateyApiUrl" -Quiet:$Quiet
+    Write-Log "Citrix catalog URL           : $CatalogUrl" -Quiet:$Quiet
 
     try {
-        $xml = (curl.exe -L --fail --silent --show-error $ChocolateyApiUrl) -join ''
-        if ($LASTEXITCODE -ne 0) { throw "Failed to query Chocolatey API." }
+        [xml]$catalog = (curl.exe -L --fail --silent --show-error $CatalogUrl) -join ''
+        if ($LASTEXITCODE -ne 0) { throw "Failed to fetch Citrix update catalog." }
 
-        if ($xml -match '<d:Version[^>]*>([^<]+)</d:Version>') {
-            $chocoVersion = $Matches[1].Trim()
+        $ltsr = $catalog.Catalog.Installers.Installer | Where-Object { $_.Stream -eq 'LTSR' }
+        if (-not $ltsr) { throw "No 'LTSR' stream found in catalog." }
+
+        $version = $ltsr.Version
+        if ([string]::IsNullOrWhiteSpace($version) -or $version -eq '0.0.0.0') {
+            throw "Invalid version in catalog: '$version'"
         }
-        else {
-            throw "Could not parse version from Chocolatey API response."
-        }
 
-        if ([string]::IsNullOrWhiteSpace($chocoVersion)) { throw "Empty version in Chocolatey response." }
+        # Store download URL from catalog for use during staging
+        $script:CatalogDownloadUrl = "https://downloadplugins.citrix.com" + $ltsr.DownloadURL
 
-        Write-Log "Latest CWA LTSR version      : $chocoVersion" -Quiet:$Quiet
-        return $chocoVersion
+        Write-Log "Latest CWA LTSR version      : $version" -Quiet:$Quiet
+        return $version
     }
     catch {
-        Write-Log "Chocolatey lookup failed: $($_.Exception.Message)" -Level WARN
+        Write-Log "Catalog lookup failed: $($_.Exception.Message)" -Level WARN
 
         # Fallback: check for a manually placed installer in the download root
         Write-Log "Checking for local installer to read version..." -Quiet:$Quiet
@@ -159,9 +161,10 @@ function Resolve-LtsrDownloadUrl {
         $html = (curl.exe -L --fail --silent --show-error $LtsrDownloadPageUrl) -join "`n"
         if ($LASTEXITCODE -ne 0) { throw "Failed to fetch LTSR download page." }
 
-        # Look for a direct download link to CitrixWorkspaceApp.exe
+        # Look for a direct download link to the LTSR installer
         # Page uses protocol-relative URLs (//downloads.citrix.com/...)
-        if ($html -match '(?:https?:)?//downloads\.citrix\.com/\d+/CitrixWorkspaceApp\.exe') {
+        # Filename may be CitrixWorkspaceApp.exe or CitrixWorkspaceFullInstaller.exe
+        if ($html -match '(?:https?:)?//downloads\.citrix\.com/\d+/CitrixWorkspace[^"''>\s]+\.exe') {
             $url = $Matches[0]
             # Normalize protocol-relative URL to https
             if ($url.StartsWith('//')) { $url = "https:$url" }
@@ -297,18 +300,46 @@ function Invoke-StageCitrixLTSR {
     Write-Log "Local installer path         : $localExe"
 
     if (-not (Test-Path -LiteralPath $localExe)) {
-        # Try to resolve the LTSR download URL from Citrix page
-        $downloadUrl = Resolve-LtsrDownloadUrl
-        if (-not $downloadUrl) {
-            throw ("LTSR installer not found locally and could not resolve download URL. " +
+        $downloaded = $false
+
+        # Primary: use download URL from catalog (set by Get-LatestCitrixLTSRVersion)
+        $downloadUrl = $script:CatalogDownloadUrl
+        if ($downloadUrl) {
+            try {
+                Write-Log "Download URL                 : $downloadUrl"
+                Write-Log "Downloading Citrix Workspace LTSR (catalog URL)..."
+                Invoke-DownloadWithRetry -Url $downloadUrl -OutFile $localExe
+                $downloaded = $true
+            }
+            catch {
+                Write-Log "Catalog download failed: $($_.Exception.Message)" -Level WARN
+            }
+        }
+
+        # Fallback: scrape the Citrix LTSR download page
+        if (-not $downloaded) {
+            Write-Log "Trying LTSR download page..." -Level WARN
+            $downloadUrl = Resolve-LtsrDownloadUrl
+            if ($downloadUrl) {
+                try {
+                    Write-Log "Download URL                 : $downloadUrl"
+                    Write-Log "Downloading Citrix Workspace LTSR (page scrape)..."
+                    Invoke-DownloadWithRetry -Url $downloadUrl -OutFile $localExe
+                    $downloaded = $true
+                }
+                catch {
+                    Write-Log "Page scrape download failed: $($_.Exception.Message)" -Level WARN
+                }
+            }
+        }
+
+        if (-not $downloaded) {
+            throw ("LTSR installer not found locally and all download methods failed. " +
                    "Please download the LTSR installer manually from:`n" +
                    "  $LtsrDownloadPageUrl`n" +
                    "and place it at:`n" +
                    "  $localExe")
         }
-
-        Write-Log "Downloading Citrix Workspace LTSR..."
-        Invoke-DownloadWithRetry -Url $downloadUrl -OutFile $localExe
     }
     else {
         Write-Log "Local installer exists. Skipping download."

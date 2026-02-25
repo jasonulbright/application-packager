@@ -96,9 +96,8 @@ $DisplayNamePrefix      = "Wireshark"
 $DesktopIconSetting     = "no"
 $QuickLaunchIconSetting = "no"
 
-$InitialInstallBufferSeconds = 60
-$PollSleepSeconds            = 60
-$MaxRegistryPollRetries      = 20
+$PollSleepSeconds            = 5
+$MaxRegistryPollRetries      = 12
 
 $BaseDownloadRoot = Join-Path $DownloadRoot "Wireshark"
 
@@ -168,9 +167,6 @@ function Invoke-WiresharkMetadataExtraction {
     Write-Log "Installing temporarily for metadata extraction..."
     $installArgs = "/S /desktopicon=$DesktopIconSetting /quicklaunchicon=$QuickLaunchIconSetting"
     Start-Process -FilePath $InstallerPath -ArgumentList $installArgs -Wait -NoNewWindow
-
-    Write-Log "Waiting $InitialInstallBufferSeconds seconds for installer to complete registration..."
-    Start-Sleep -Seconds $InitialInstallBufferSeconds
 
     $uninstallRoots = @(
         "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",

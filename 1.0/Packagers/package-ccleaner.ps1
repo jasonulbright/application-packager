@@ -16,12 +16,10 @@ VendorUrl: https://www.ccleaner.com/
       -StageOnly    Download installer, resolve version, generate wrappers, write manifest
       -PackageOnly  Read manifest, copy to network, create MECM application
 
-    The slim variant is used to avoid bundled third-party offers. The version is
-    resolved from the Chocolatey community API.
-
-    NOTE: CCleaner 7 may use an online/stub installer from the Avast CDN. If the
-    slim download URL returns 404, check the CCleaner builds page for an updated
-    offline installer URL.
+    The offline full installer is downloaded from the Avast CDN (CCleaner is
+    now part of Gen Digital/Avast). The download URL is version-agnostic and
+    always serves the latest release. The version is resolved from the
+    CCleaner version-history page.
 
 .PARAMETER SiteCode
     ConfigMgr site code PSDrive name (e.g., "MCM").
@@ -50,8 +48,8 @@ VendorUrl: https://www.ccleaner.com/
     Runs only the Package phase.
 
 .PARAMETER GetLatestVersionOnly
-    Queries the Chocolatey API for the latest CCleaner version, outputs the
-    version string, and exits. No MECM changes are made.
+    Queries the CCleaner version-history page for the latest version, outputs
+    the version string, and exits. No MECM changes are made.
 
 .REQUIREMENTS
     - PowerShell 5.1
@@ -84,8 +82,10 @@ if ($StageOnly -and $PackageOnly) {
 }
 
 # --- Configuration ---
-$ChocolateyApiUrl = "https://community.chocolatey.org/api/v2/FindPackagesById()?`$orderby=Version%20desc&`$top=1&id=%27ccleaner%27"
-$DownloadBaseUrl  = "https://download.ccleaner.com/slim"
+$VersionHistoryUrl = "https://www.ccleaner.com/ccleaner/version-history"
+# Avast CDN offline installer -- version-agnostic, always serves latest release
+$ExeDownloadUrl    = "https://bits.avcdn.net/productfamily_CCLEANER7/insttype_FREE/platform_WIN/installertype_FULL/build_RELEASE"
+$InstallerFileName = "ccsetup_offline_setup.exe"
 
 $VendorFolder = "Piriform"
 $AppFolder    = "CCleaner"
@@ -98,23 +98,21 @@ $BaseDownloadRoot = Join-Path $DownloadRoot "CCleaner"
 function Get-LatestCCleanerVersion {
     param([switch]$Quiet)
 
-    Write-Log "Chocolatey API URL           : $ChocolateyApiUrl" -Quiet:$Quiet
+    Write-Log "Version history URL          : $VersionHistoryUrl" -Quiet:$Quiet
 
     try {
-        $xml = (curl.exe -L --fail --silent --show-error $ChocolateyApiUrl) -join ''
-        if ($LASTEXITCODE -ne 0) { throw "Failed to query Chocolatey API." }
+        $html = (curl.exe -L --fail --silent --show-error $VersionHistoryUrl) -join ''
+        if ($LASTEXITCODE -ne 0) { throw "Failed to fetch CCleaner version history page." }
 
-        if ($xml -match '<d:Version[^>]*>([^<]+)</d:Version>') {
-            $chocoVersion = $Matches[1].Trim()
+        if ($html -match 'v(\d+\.\d+\.\d+)') {
+            $version = $Matches[1].Trim()
         }
         else {
-            throw "Could not parse version from Chocolatey API response."
+            throw "Could not parse version from CCleaner version history page."
         }
 
-        if ([string]::IsNullOrWhiteSpace($chocoVersion)) { throw "Empty version in Chocolatey response." }
-
-        Write-Log "Latest CCleaner version      : $chocoVersion" -Quiet:$Quiet
-        return $chocoVersion
+        Write-Log "Latest CCleaner version      : $version" -Quiet:$Quiet
+        return $version
     }
     catch {
         Write-Log "Failed to get CCleaner version: $($_.Exception.Message)" -Level ERROR
@@ -145,36 +143,22 @@ function Invoke-StageCCleaner {
     $version = Get-LatestCCleanerVersion
     if (-not $version) { throw "Could not determine latest CCleaner version." }
 
-    # Construct download URL from version
-    # Version format examples: "6.29" -> "629", "7.04" -> "704"
-    $parts = $version.Split('.')
-    $major = $parts[0]
-    $minor = if ($parts.Length -ge 2) { $parts[1].PadLeft(2, '0') } else { "00" }
-    $verDigits = "$major$minor"
-    $installerFileName = "ccsetup${verDigits}_slim.exe"
-    $downloadUrl = "$DownloadBaseUrl/$installerFileName"
-
     Write-Log "Version                      : $version"
-    Write-Log "Download URL                 : $downloadUrl"
+    Write-Log "Download URL                 : $ExeDownloadUrl"
     Write-Log ""
 
     # --- Download ---
-    $localExe = Join-Path $BaseDownloadRoot $installerFileName
+    # URL is version-agnostic (always latest), so always re-download
+    $localExe = Join-Path $BaseDownloadRoot $InstallerFileName
     Write-Log "Local installer path         : $localExe"
-
-    if (-not (Test-Path -LiteralPath $localExe)) {
-        Write-Log "Downloading CCleaner..."
-        Invoke-DownloadWithRetry -Url $downloadUrl -OutFile $localExe
-    }
-    else {
-        Write-Log "Local installer exists. Skipping download."
-    }
+    Write-Log "Downloading CCleaner..."
+    Invoke-DownloadWithRetry -Url $ExeDownloadUrl -OutFile $localExe
 
     # --- Versioned local content folder ---
     $localContentPath = Join-Path $BaseDownloadRoot $version
     Initialize-Folder -Path $localContentPath
 
-    $stagedExe = Join-Path $localContentPath $installerFileName
+    $stagedExe = Join-Path $localContentPath $InstallerFileName
     if (-not (Test-Path -LiteralPath $stagedExe)) {
         Copy-Item -LiteralPath $localExe -Destination $stagedExe -Force -ErrorAction Stop
         Write-Log "Copied EXE to staged folder  : $stagedExe"
@@ -185,7 +169,7 @@ function Invoke-StageCCleaner {
 
     # --- Generate content wrappers ---
     $wrapperContent = New-ExeWrapperContent `
-        -InstallerFileName $installerFileName `
+        -InstallerFileName $InstallerFileName `
         -InstallArgs "'/S'" `
         -UninstallCommand "C:\Program Files\CCleaner\uninst.exe" `
         -UninstallArgs "'/S'"
@@ -208,7 +192,7 @@ function Invoke-StageCCleaner {
         AppName         = $appName
         Publisher       = $publisher
         SoftwareVersion = $version
-        InstallerFile   = $installerFileName
+        InstallerFile   = $InstallerFileName
         Detection       = @{
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = $arpRegistryKey
@@ -325,7 +309,7 @@ try {
     Write-Log "SiteCode                     : $SiteCode"
     Write-Log "FileServerPath               : $FileServerPath"
     Write-Log "BaseDownloadRoot             : $BaseDownloadRoot"
-    Write-Log "Chocolatey API URL           : $ChocolateyApiUrl"
+    Write-Log "Download URL                 : $ExeDownloadUrl"
     Write-Log ""
 
     if ($StageOnly) {

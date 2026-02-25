@@ -16,7 +16,7 @@ VendorUrl: https://www.citrix.com/downloads/workspace-app/
       -StageOnly    Download installer, generate content wrappers, write manifest
       -PackageOnly  Read manifest, copy to network, create MECM application
 
-    The latest version is resolved via the Chocolatey community API. The
+    The latest version is resolved via the Citrix auto-update catalog XML. The
     installer is always available at a permanent CDN URL that serves the
     latest CR build.
 
@@ -55,7 +55,7 @@ VendorUrl: https://www.citrix.com/downloads/workspace-app/
     Runs only the Package phase.
 
 .PARAMETER GetLatestVersionOnly
-    Queries the Chocolatey API for the latest CR version, outputs the version
+    Queries the Citrix catalog for the latest CR version, outputs the version
     string, and exits. No MECM changes are made.
 
 .REQUIREMENTS
@@ -89,7 +89,7 @@ if ($StageOnly -and $PackageOnly) {
 }
 
 # --- Configuration ---
-$ChocolateyApiUrl = "https://community.chocolatey.org/api/v2/FindPackagesById()?`$orderby=Version%20desc&`$top=1&id=%27citrix-workspace%27"
+$CatalogUrl       = "https://downloadplugins.citrix.com/ReceiverUpdates/Prod/catalog_win.xml"
 $InstallerUrl     = "https://downloadplugins.citrix.com/Windows/CitrixWorkspaceApp.exe"
 $InstallerFileName = "CitrixWorkspaceApp.exe"
 
@@ -107,23 +107,22 @@ $ArpKeyPath = "SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\C
 function Get-LatestCitrixCRVersion {
     param([switch]$Quiet)
 
-    Write-Log "Chocolatey API URL           : $ChocolateyApiUrl" -Quiet:$Quiet
+    Write-Log "Citrix catalog URL           : $CatalogUrl" -Quiet:$Quiet
 
     try {
-        $xml = (curl.exe -L --fail --silent --show-error $ChocolateyApiUrl) -join ''
-        if ($LASTEXITCODE -ne 0) { throw "Failed to query Chocolatey API." }
+        [xml]$catalog = (curl.exe -L --fail --silent --show-error $CatalogUrl) -join ''
+        if ($LASTEXITCODE -ne 0) { throw "Failed to fetch Citrix update catalog." }
 
-        if ($xml -match '<d:Version[^>]*>([^<]+)</d:Version>') {
-            $chocoVersion = $Matches[1].Trim()
+        $current = $catalog.Catalog.Installers.Installer | Where-Object { $_.Stream -eq 'Current' }
+        if (-not $current) { throw "No 'Current' stream found in catalog." }
+
+        $version = $current.Version
+        if ([string]::IsNullOrWhiteSpace($version) -or $version -eq '0.0.0.0') {
+            throw "Invalid version in catalog: '$version'"
         }
-        else {
-            throw "Could not parse version from Chocolatey API response."
-        }
 
-        if ([string]::IsNullOrWhiteSpace($chocoVersion)) { throw "Empty version in Chocolatey response." }
-
-        Write-Log "Latest CWA CR version        : $chocoVersion" -Quiet:$Quiet
-        return $chocoVersion
+        Write-Log "Latest CWA CR version        : $version" -Quiet:$Quiet
+        return $version
     }
     catch {
         Write-Log "Failed to get CWA CR version: $($_.Exception.Message)" -Level ERROR
@@ -243,7 +242,7 @@ function Invoke-StageCitrixCR {
     if (-not $version) { throw "Could not determine latest Citrix Workspace CR version." }
 
     Write-Log "Download URL                 : $InstallerUrl"
-    Write-Log "Version (Chocolatey)         : $version"
+    Write-Log "Version (catalog)            : $version"
     Write-Log ""
 
     # --- Download ---
@@ -265,7 +264,7 @@ function Invoke-StageCitrixCR {
         $internalVersion = $fileInfo.ProductVersion
     }
     if ([string]::IsNullOrWhiteSpace($internalVersion)) {
-        Write-Log "Could not read internal version from EXE; using Chocolatey version." -Level WARN
+        Write-Log "Could not read internal version from EXE; using catalog version." -Level WARN
         $internalVersion = $version
     }
     Write-Log "Internal version (detection) : $internalVersion"

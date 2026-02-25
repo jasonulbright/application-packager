@@ -1,32 +1,24 @@
 <#
-Vendor: Microsoft Corporation
-App: Sysinternals Suite
-CMName: Sysinternals Suite
-VendorUrl: https://learn.microsoft.com/en-us/sysinternals/
+Vendor: pgAdmin Development Team
+App: pgAdmin 4
+CMName: pgAdmin 4
+VendorUrl: https://www.pgadmin.org/
 
 .SYNOPSIS
-    Packages Sysinternals Suite for MECM.
+    Packages pgAdmin 4 for MECM.
 
 .DESCRIPTION
-    Downloads the latest Sysinternals Suite ZIP from Microsoft, stages content to
-    a versioned local folder with file-existence detection metadata, and creates
-    an MECM Application.
+    Downloads the latest pgAdmin 4 x64 setup EXE from ftp.postgresql.org,
+    stages content to a versioned local folder with ARP-based detection
+    metadata, and creates an MECM Application.
 
     Supports two-phase operation:
-      -StageOnly    Download ZIP, resolve version from Last-Modified header, write manifest
+      -StageOnly    Download, generate content wrappers, write manifest
       -PackageOnly  Read manifest, copy to network, create MECM application
 
-    Sysinternals Suite is a ZIP archive of standalone tools -- there is no
-    traditional installer. The install wrapper extracts the ZIP to
-    C:\Program Files\Sysinternals. The uninstall wrapper removes the folder.
-
-    The suite uses date-based versioning (e.g. 2026.2.4) derived from the
-    Last-Modified header on the download ZIP. Individual tools have their own
-    independent version numbers.
-
-    NOTE: Each Sysinternals tool shows a EULA dialog on first run. Users can
-    suppress this by passing -accepteula to any tool, or an administrator can
-    pre-accept by setting registry keys under HKCU:\Software\Sysinternals.
+    The installer is an InnoSetup package supporting /VERYSILENT flags.
+    The version is scraped from the pgAdmin download page. The ARP registry
+    key follows the InnoSetup pattern: pgAdmin 4v{MAJOR}_is1.
 
 .PARAMETER SiteCode
     ConfigMgr site code PSDrive name (e.g., "MCM").
@@ -36,11 +28,9 @@ VendorUrl: https://learn.microsoft.com/en-us/sysinternals/
 
 .PARAMETER FileServerPath
     UNC root that contains your Applications folder (example: \\fileserver\sccm$).
-    Content is staged under: <FileServerPath>\Applications\Microsoft\Sysinternals Suite\<Version>
 
 .PARAMETER DownloadRoot
-    Local root folder for staging downloaded installers.
-    Default: C:\temp\ap
+    Local root folder for staging downloaded installers. Default: C:\temp\ap
 
 .PARAMETER EstimatedRuntimeMins
     Estimated runtime in minutes. Default: 15
@@ -55,8 +45,8 @@ VendorUrl: https://learn.microsoft.com/en-us/sysinternals/
     Runs only the Package phase.
 
 .PARAMETER GetLatestVersionOnly
-    Queries the Sysinternals download headers for the latest date-based
-    version, outputs the version string, and exits. No MECM changes are made.
+    Scrapes pgadmin.org for the latest version, outputs the version string,
+    and exits. No download or MECM changes are made.
 
 .REQUIREMENTS
     - PowerShell 5.1
@@ -89,42 +79,41 @@ if ($StageOnly -and $PackageOnly) {
 }
 
 # --- Configuration ---
-$ZipDownloadUrl = "https://download.sysinternals.com/files/SysinternalsSuite.zip"
-$ZipFileName    = "SysinternalsSuite.zip"
+$DownloadPageUrl = "https://www.pgadmin.org/download/pgadmin-4-windows/"
 
-$VendorFolder = "Microsoft"
-$AppFolder    = "Sysinternals Suite"
+$VendorFolder = "pgAdmin"
+$AppFolder    = "pgAdmin 4"
 
-$BaseDownloadRoot = Join-Path $DownloadRoot "Sysinternals"
+$BaseDownloadRoot = Join-Path $DownloadRoot "pgAdmin4"
 
 # --- Functions ---
 
 
-function Get-LatestSysinternalsVersion {
+function Get-LatestPgAdmin4Version {
     param([switch]$Quiet)
 
-    Write-Log "ZIP download URL             : $ZipDownloadUrl" -Quiet:$Quiet
+    Write-Log "Download page                : $DownloadPageUrl" -Quiet:$Quiet
 
     try {
-        $headers = (curl.exe --head --silent --show-error $ZipDownloadUrl)
-        if ($LASTEXITCODE -ne 0) { throw "Failed to query Sysinternals download headers." }
+        $html = (curl.exe -L --fail --silent --show-error $DownloadPageUrl) -join ''
+        if ($LASTEXITCODE -ne 0) { throw "Failed to fetch pgAdmin download page." }
 
-        $lastModLine = $headers | Where-Object { $_ -match '^Last-Modified:' } | Select-Object -First 1
-        if (-not $lastModLine) { throw "No Last-Modified header from Sysinternals download." }
+        # Parse version from FTP link pattern: pgadmin4/vX.XX/windows/
+        if ($html -match 'pgadmin4/v(\d+\.\d+)/windows/') {
+            $version = $Matches[1]
+        }
+        elseif ($html -match 'pgadmin4-(\d+\.\d+)-x64\.exe') {
+            $version = $Matches[1]
+        }
+        else {
+            throw "Could not parse version from pgAdmin download page."
+        }
 
-        $lastModValue = ($lastModLine -replace '^Last-Modified:\s*', '').Trim()
-        $date = [datetime]::ParseExact(
-            $lastModValue,
-            'ddd, dd MMM yyyy HH:mm:ss GMT',
-            [System.Globalization.CultureInfo]::InvariantCulture
-        )
-        $version = '{0}.{1}.{2}' -f $date.Year, $date.Month, $date.Day
-
-        Write-Log "Latest Sysinternals version  : $version" -Quiet:$Quiet
+        Write-Log "Latest pgAdmin 4 version     : $version" -Quiet:$Quiet
         return $version
     }
     catch {
-        Write-Log "Failed to get Sysinternals version: $($_.Exception.Message)" -Level ERROR
+        Write-Log "Failed to get pgAdmin 4 version: $($_.Exception.Message)" -Level ERROR
         return $null
     }
 }
@@ -134,10 +123,10 @@ function Get-LatestSysinternalsVersion {
 # Stage phase
 # ---------------------------------------------------------------------------
 
-function Invoke-StageSysinternals {
+function Invoke-StagePgAdmin4 {
     Write-Log ""
     Write-Log ("=" * 60)
-    Write-Log "Sysinternals Suite - STAGE phase"
+    Write-Log "pgAdmin 4 - STAGE phase"
     Write-Log ("=" * 60)
     Write-Log ""
 
@@ -148,63 +137,62 @@ function Invoke-StageSysinternals {
 
     Initialize-Folder -Path $BaseDownloadRoot
 
-    # --- Get latest version ---
-    $version = Get-LatestSysinternalsVersion
-    if (-not $version) { throw "Could not determine latest Sysinternals version." }
+    $version = Get-LatestPgAdmin4Version
+    if (-not $version) { throw "Could not determine latest pgAdmin 4 version." }
 
-    # --- Download ---
-    $localZip = Join-Path $BaseDownloadRoot $ZipFileName
+    $installerFileName = "pgadmin4-${version}-x64.exe"
+    $downloadUrl = "https://ftp.postgresql.org/pub/pgadmin/pgadmin4/v${version}/windows/${installerFileName}"
 
-    Write-Log "Download URL                 : $ZipDownloadUrl"
-    Write-Log "Local ZIP path               : $localZip"
     Write-Log "Version                      : $version"
+    Write-Log "Download URL                 : $downloadUrl"
+    Write-Log "Installer filename           : $installerFileName"
     Write-Log ""
 
-    # Always re-download since URL is static (always latest) and we have a new version
-    Write-Log "Downloading Sysinternals Suite..."
-    Invoke-DownloadWithRetry -Url $ZipDownloadUrl -OutFile $localZip
+    # --- Download ---
+    $localExe = Join-Path $BaseDownloadRoot $installerFileName
+    Write-Log "Local installer path         : $localExe"
+
+    if (-not (Test-Path -LiteralPath $localExe)) {
+        Write-Log "Downloading pgAdmin 4..."
+        Invoke-DownloadWithRetry -Url $downloadUrl -OutFile $localExe
+    }
+    else {
+        Write-Log "Local installer exists. Skipping download."
+    }
 
     # --- Versioned local content folder ---
     $localContentPath = Join-Path $BaseDownloadRoot $version
     Initialize-Folder -Path $localContentPath
 
-    $stagedZip = Join-Path $localContentPath $ZipFileName
-    if (-not (Test-Path -LiteralPath $stagedZip)) {
-        Copy-Item -LiteralPath $localZip -Destination $stagedZip -Force -ErrorAction Stop
-        Write-Log "Copied ZIP to staged folder  : $stagedZip"
+    $stagedExe = Join-Path $localContentPath $installerFileName
+    if (-not (Test-Path -LiteralPath $stagedExe)) {
+        Copy-Item -LiteralPath $localExe -Destination $stagedExe -Force -ErrorAction Stop
+        Write-Log "Copied EXE to staged folder  : $stagedExe"
     }
     else {
-        Write-Log "Staged ZIP exists. Skipping copy."
+        Write-Log "Staged EXE exists. Skipping copy."
     }
 
     # --- Generate content wrappers ---
-    # Install: extract ZIP to Program Files, no traditional installer
-    $installPs1 = @(
-        "`$zipPath = Join-Path `$PSScriptRoot '$ZipFileName'"
-        "`$installDir = Join-Path `$env:ProgramFiles 'Sysinternals'"
-        "if (-not (Test-Path `$installDir)) { New-Item -Path `$installDir -ItemType Directory -Force | Out-Null }"
-        "Expand-Archive -Path `$zipPath -DestinationPath `$installDir -Force"
-        "exit 0"
-    ) -join "`r`n"
-
-    $uninstallPs1 = @(
-        "`$installDir = Join-Path `$env:ProgramFiles 'Sysinternals'"
-        "if (Test-Path `$installDir) { Remove-Item -Path `$installDir -Recurse -Force }"
-        "exit 0"
-    ) -join "`r`n"
+    $wrapperContent = New-ExeWrapperContent `
+        -InstallerFileName $installerFileName `
+        -InstallArgs "'/VERYSILENT', '/NORESTART'" `
+        -UninstallCommand 'C:\Program Files\pgAdmin 4\unins000.exe' `
+        -UninstallArgs "'/VERYSILENT', '/NORESTART'"
 
     Write-ContentWrappers -OutputPath $localContentPath `
-        -InstallPs1Content $installPs1 `
-        -UninstallPs1Content $uninstallPs1
+        -InstallPs1Content $wrapperContent.Install `
+        -UninstallPs1Content $wrapperContent.Uninstall
 
     # --- Write stage manifest ---
-    $detectionPath = "{0}\Sysinternals" -f $env:ProgramFiles
+    # InnoSetup ARP key includes major version: pgAdmin 4v{MAJOR}_is1
+    $majorVersion = ($version -split '\.')[0]
+    $arpRegistryKey = "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\pgAdmin 4v${majorVersion}_is1"
 
-    $appName   = "Sysinternals Suite $version"
-    $publisher = "Microsoft Corporation"
+    $appName   = "pgAdmin 4 v$version"
+    $publisher = "pgAdmin Development Team"
 
-    Write-Log "Detection path               : $detectionPath"
-    Write-Log "Detection file               : procmon.exe"
+    Write-Log "ARP Registry Key             : $arpRegistryKey"
     Write-Log ""
 
     $manifestPath = Join-Path $localContentPath "stage-manifest.json"
@@ -212,15 +200,14 @@ function Invoke-StageSysinternals {
         AppName         = $appName
         Publisher       = $publisher
         SoftwareVersion = $version
-        InstallerFile   = $ZipFileName
+        InstallerFile   = $installerFileName
         Detection       = @{
-            Type          = "File"
-            FilePath      = $detectionPath
-            FileName      = "procmon.exe"
-            PropertyType  = "DateModified"
-            Operator      = "GreaterEquals"
-            ExpectedValue = (Get-Date).ToString("yyyy-MM-dd")
-            Is64Bit       = $true
+            Type                = "RegistryKeyValue"
+            RegistryKeyRelative = $arpRegistryKey
+            ValueName           = "DisplayVersion"
+            ExpectedValue       = $version
+            Operator            = "GreaterEquals"
+            Is64Bit             = $true
         }
     }
 
@@ -237,10 +224,10 @@ function Invoke-StageSysinternals {
 # Package phase
 # ---------------------------------------------------------------------------
 
-function Invoke-PackageSysinternals {
+function Invoke-PackagePgAdmin4 {
     Write-Log ""
     Write-Log ("=" * 60)
-    Write-Log "Sysinternals Suite - PACKAGE phase"
+    Write-Log "pgAdmin 4 - PACKAGE phase"
     Write-Log ("=" * 60)
     Write-Log ""
 
@@ -305,7 +292,7 @@ function Invoke-PackageSysinternals {
 if ($GetLatestVersionOnly) {
     try {
         $ProgressPreference = 'SilentlyContinue'
-        $v = Get-LatestSysinternalsVersion -Quiet
+        $v = Get-LatestPgAdmin4Version -Quiet
         if (-not $v) { exit 1 }
         Write-Output $v
         exit 0
@@ -321,7 +308,7 @@ try {
 
     Write-Log ""
     Write-Log ("=" * 60)
-    Write-Log "Sysinternals Suite Auto-Packager starting"
+    Write-Log "pgAdmin 4 Auto-Packager starting"
     Write-Log ("=" * 60)
     Write-Log ""
     Write-Log ("RunAsUser                    : {0}\{1}" -f $env:USERDOMAIN,$env:USERNAME)
@@ -330,18 +317,18 @@ try {
     Write-Log "SiteCode                     : $SiteCode"
     Write-Log "FileServerPath               : $FileServerPath"
     Write-Log "BaseDownloadRoot             : $BaseDownloadRoot"
-    Write-Log "ZipDownloadUrl               : $ZipDownloadUrl"
+    Write-Log "DownloadPageUrl              : $DownloadPageUrl"
     Write-Log ""
 
     if ($StageOnly) {
-        Invoke-StageSysinternals
+        Invoke-StagePgAdmin4
     }
     elseif ($PackageOnly) {
-        Invoke-PackageSysinternals
+        Invoke-PackagePgAdmin4
     }
     else {
-        Invoke-StageSysinternals
-        Invoke-PackageSysinternals
+        Invoke-StagePgAdmin4
+        Invoke-PackagePgAdmin4
     }
 
     Write-Log ""

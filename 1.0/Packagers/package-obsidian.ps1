@@ -1,32 +1,24 @@
 <#
-Vendor: Microsoft Corporation
-App: Sysinternals Suite
-CMName: Sysinternals Suite
-VendorUrl: https://learn.microsoft.com/en-us/sysinternals/
+Vendor: Obsidian
+App: Obsidian
+CMName: Obsidian
+VendorUrl: https://obsidian.md/
 
 .SYNOPSIS
-    Packages Sysinternals Suite for MECM.
+    Packages Obsidian for MECM as a per-user install.
 
 .DESCRIPTION
-    Downloads the latest Sysinternals Suite ZIP from Microsoft, stages content to
-    a versioned local folder with file-existence detection metadata, and creates
-    an MECM Application.
+    Downloads the latest Obsidian installer from GitHub releases, stages
+    content to a versioned local folder with file-existence detection metadata,
+    and creates an MECM Application configured for per-user deployment.
 
     Supports two-phase operation:
-      -StageOnly    Download ZIP, resolve version from Last-Modified header, write manifest
+      -StageOnly    Download, generate content wrappers, write manifest
       -PackageOnly  Read manifest, copy to network, create MECM application
 
-    Sysinternals Suite is a ZIP archive of standalone tools -- there is no
-    traditional installer. The install wrapper extracts the ZIP to
-    C:\Program Files\Sysinternals. The uninstall wrapper removes the folder.
-
-    The suite uses date-based versioning (e.g. 2026.2.4) derived from the
-    Last-Modified header on the download ZIP. Individual tools have their own
-    independent version numbers.
-
-    NOTE: Each Sysinternals tool shows a EULA dialog on first run. Users can
-    suppress this by passing -accepteula to any tool, or an administrator can
-    pre-accept by setting registry keys under HKCU:\Software\Sysinternals.
+    This is a USER-level install (not system). The MECM deployment type uses
+    InstallForUser behavior and OnlyWhenUserLoggedOn logon requirement.
+    The installer is an NSIS package; /S runs it silently.
 
 .PARAMETER SiteCode
     ConfigMgr site code PSDrive name (e.g., "MCM").
@@ -36,11 +28,9 @@ VendorUrl: https://learn.microsoft.com/en-us/sysinternals/
 
 .PARAMETER FileServerPath
     UNC root that contains your Applications folder (example: \\fileserver\sccm$).
-    Content is staged under: <FileServerPath>\Applications\Microsoft\Sysinternals Suite\<Version>
 
 .PARAMETER DownloadRoot
-    Local root folder for staging downloaded installers.
-    Default: C:\temp\ap
+    Local root folder for staging downloaded installers. Default: C:\temp\ap
 
 .PARAMETER EstimatedRuntimeMins
     Estimated runtime in minutes. Default: 15
@@ -55,8 +45,8 @@ VendorUrl: https://learn.microsoft.com/en-us/sysinternals/
     Runs only the Package phase.
 
 .PARAMETER GetLatestVersionOnly
-    Queries the Sysinternals download headers for the latest date-based
-    version, outputs the version string, and exits. No MECM changes are made.
+    Queries the GitHub releases API for the latest Obsidian version, outputs
+    the version string, and exits.
 
 .REQUIREMENTS
     - PowerShell 5.1
@@ -89,42 +79,42 @@ if ($StageOnly -and $PackageOnly) {
 }
 
 # --- Configuration ---
-$ZipDownloadUrl = "https://download.sysinternals.com/files/SysinternalsSuite.zip"
-$ZipFileName    = "SysinternalsSuite.zip"
+$GitHubApiUrl = "https://api.github.com/repos/obsidianmd/obsidian-releases/releases/latest"
 
-$VendorFolder = "Microsoft"
-$AppFolder    = "Sysinternals Suite"
+$VendorFolder = "Obsidian"
+$AppFolder    = "Obsidian"
 
-$BaseDownloadRoot = Join-Path $DownloadRoot "Sysinternals"
+$BaseDownloadRoot = Join-Path $DownloadRoot "Obsidian"
 
 # --- Functions ---
 
 
-function Get-LatestSysinternalsVersion {
+function Get-LatestObsidianRelease {
     param([switch]$Quiet)
 
-    Write-Log "ZIP download URL             : $ZipDownloadUrl" -Quiet:$Quiet
+    Write-Log "GitHub releases API          : $GitHubApiUrl" -Quiet:$Quiet
 
     try {
-        $headers = (curl.exe --head --silent --show-error $ZipDownloadUrl)
-        if ($LASTEXITCODE -ne 0) { throw "Failed to query Sysinternals download headers." }
+        $json = (curl.exe -L --fail --silent --show-error $GitHubApiUrl) -join ''
+        if ($LASTEXITCODE -ne 0) { throw "Failed to query GitHub releases API." }
 
-        $lastModLine = $headers | Where-Object { $_ -match '^Last-Modified:' } | Select-Object -First 1
-        if (-not $lastModLine) { throw "No Last-Modified header from Sysinternals download." }
+        $release = ConvertFrom-Json $json
+        $version = $release.tag_name -replace '^v', ''
+        if ([string]::IsNullOrWhiteSpace($version)) {
+            throw "Could not parse version from GitHub release tag."
+        }
 
-        $lastModValue = ($lastModLine -replace '^Last-Modified:\s*', '').Trim()
-        $date = [datetime]::ParseExact(
-            $lastModValue,
-            'ddd, dd MMM yyyy HH:mm:ss GMT',
-            [System.Globalization.CultureInfo]::InvariantCulture
-        )
-        $version = '{0}.{1}.{2}' -f $date.Year, $date.Month, $date.Day
+        # Match the NSIS installer EXE (not .exe.blockmap, not arm64)
+        $asset = $release.assets | Where-Object {
+            $_.name -match 'Obsidian-[\d.]+\.exe$' -and $_.name -notmatch 'arm'
+        } | Select-Object -First 1
+        if (-not $asset) { throw "No Windows setup EXE asset found in release." }
 
-        Write-Log "Latest Sysinternals version  : $version" -Quiet:$Quiet
-        return $version
+        Write-Log "Latest Obsidian version      : $version" -Quiet:$Quiet
+        return @{ Version = $version; FileName = $asset.name; DownloadUrl = $asset.browser_download_url }
     }
     catch {
-        Write-Log "Failed to get Sysinternals version: $($_.Exception.Message)" -Level ERROR
+        Write-Log "Failed to get Obsidian version: $($_.Exception.Message)" -Level ERROR
         return $null
     }
 }
@@ -134,10 +124,10 @@ function Get-LatestSysinternalsVersion {
 # Stage phase
 # ---------------------------------------------------------------------------
 
-function Invoke-StageSysinternals {
+function Invoke-StageObsidian {
     Write-Log ""
     Write-Log ("=" * 60)
-    Write-Log "Sysinternals Suite - STAGE phase"
+    Write-Log "Obsidian - STAGE phase"
     Write-Log ("=" * 60)
     Write-Log ""
 
@@ -148,79 +138,87 @@ function Invoke-StageSysinternals {
 
     Initialize-Folder -Path $BaseDownloadRoot
 
-    # --- Get latest version ---
-    $version = Get-LatestSysinternalsVersion
-    if (-not $version) { throw "Could not determine latest Sysinternals version." }
+    $releaseInfo = Get-LatestObsidianRelease
+    if (-not $releaseInfo) { throw "Could not resolve Obsidian version." }
 
-    # --- Download ---
-    $localZip = Join-Path $BaseDownloadRoot $ZipFileName
+    $version           = $releaseInfo.Version
+    $installerFileName = $releaseInfo.FileName
+    $downloadUrl       = $releaseInfo.DownloadUrl
 
-    Write-Log "Download URL                 : $ZipDownloadUrl"
-    Write-Log "Local ZIP path               : $localZip"
     Write-Log "Version                      : $version"
+    Write-Log "Download URL                 : $downloadUrl"
+    Write-Log "Installer filename           : $installerFileName"
     Write-Log ""
 
-    # Always re-download since URL is static (always latest) and we have a new version
-    Write-Log "Downloading Sysinternals Suite..."
-    Invoke-DownloadWithRetry -Url $ZipDownloadUrl -OutFile $localZip
+    # --- Download ---
+    $localExe = Join-Path $BaseDownloadRoot $installerFileName
+    Write-Log "Local installer path         : $localExe"
+
+    if (-not (Test-Path -LiteralPath $localExe)) {
+        Write-Log "Downloading Obsidian..."
+        Invoke-DownloadWithRetry -Url $downloadUrl -OutFile $localExe
+    }
+    else {
+        Write-Log "Local installer exists. Skipping download."
+    }
 
     # --- Versioned local content folder ---
     $localContentPath = Join-Path $BaseDownloadRoot $version
     Initialize-Folder -Path $localContentPath
 
-    $stagedZip = Join-Path $localContentPath $ZipFileName
-    if (-not (Test-Path -LiteralPath $stagedZip)) {
-        Copy-Item -LiteralPath $localZip -Destination $stagedZip -Force -ErrorAction Stop
-        Write-Log "Copied ZIP to staged folder  : $stagedZip"
+    $stagedExe = Join-Path $localContentPath $installerFileName
+    if (-not (Test-Path -LiteralPath $stagedExe)) {
+        Copy-Item -LiteralPath $localExe -Destination $stagedExe -Force -ErrorAction Stop
+        Write-Log "Copied EXE to staged folder  : $stagedExe"
     }
     else {
-        Write-Log "Staged ZIP exists. Skipping copy."
+        Write-Log "Staged EXE exists. Skipping copy."
     }
 
     # --- Generate content wrappers ---
-    # Install: extract ZIP to Program Files, no traditional installer
-    $installPs1 = @(
-        "`$zipPath = Join-Path `$PSScriptRoot '$ZipFileName'"
-        "`$installDir = Join-Path `$env:ProgramFiles 'Sysinternals'"
-        "if (-not (Test-Path `$installDir)) { New-Item -Path `$installDir -ItemType Directory -Force | Out-Null }"
-        "Expand-Archive -Path `$zipPath -DestinationPath `$installDir -Force"
-        "exit 0"
+    # NSIS installer: /S for silent
+    $installContent = (
+        ('$exePath = Join-Path $PSScriptRoot ''{0}''' -f $installerFileName),
+        '$proc = Start-Process -FilePath $exePath -ArgumentList @(''/S'') -Wait -PassThru -NoNewWindow',
+        'exit $proc.ExitCode'
     ) -join "`r`n"
 
-    $uninstallPs1 = @(
-        "`$installDir = Join-Path `$env:ProgramFiles 'Sysinternals'"
-        "if (Test-Path `$installDir) { Remove-Item -Path `$installDir -Recurse -Force }"
-        "exit 0"
+    $uninstallContent = (
+        '$uninstExe = Join-Path $env:LOCALAPPDATA ''Obsidian\Uninstall Obsidian.exe''',
+        'if (Test-Path -LiteralPath $uninstExe) {',
+        '    $proc = Start-Process -FilePath $uninstExe -ArgumentList @(''/S'') -Wait -PassThru -NoNewWindow',
+        '    exit $proc.ExitCode',
+        '}',
+        'exit 0'
     ) -join "`r`n"
 
     Write-ContentWrappers -OutputPath $localContentPath `
-        -InstallPs1Content $installPs1 `
-        -UninstallPs1Content $uninstallPs1
+        -InstallPs1Content $installContent `
+        -UninstallPs1Content $uninstallContent
 
     # --- Write stage manifest ---
-    $detectionPath = "{0}\Sysinternals" -f $env:ProgramFiles
+    $detectionPath = "%LOCALAPPDATA%\Obsidian"
 
-    $appName   = "Sysinternals Suite $version"
-    $publisher = "Microsoft Corporation"
+    $appName   = "Obsidian $version"
+    $publisher = "Obsidian"
 
     Write-Log "Detection path               : $detectionPath"
-    Write-Log "Detection file               : procmon.exe"
+    Write-Log "Detection file               : Obsidian.exe"
     Write-Log ""
 
     $manifestPath = Join-Path $localContentPath "stage-manifest.json"
     Write-StageManifest -Path $manifestPath -ManifestData @{
-        AppName         = $appName
-        Publisher       = $publisher
-        SoftwareVersion = $version
-        InstallerFile   = $ZipFileName
-        Detection       = @{
-            Type          = "File"
-            FilePath      = $detectionPath
-            FileName      = "procmon.exe"
-            PropertyType  = "DateModified"
-            Operator      = "GreaterEquals"
-            ExpectedValue = (Get-Date).ToString("yyyy-MM-dd")
-            Is64Bit       = $true
+        AppName                  = $appName
+        Publisher                = $publisher
+        SoftwareVersion          = $version
+        InstallerFile            = $installerFileName
+        InstallationBehaviorType = "InstallForUser"
+        LogonRequirementType     = "OnlyWhenUserLoggedOn"
+        Detection                = @{
+            Type         = "File"
+            FilePath     = $detectionPath
+            FileName     = "Obsidian.exe"
+            PropertyType = "Existence"
         }
     }
 
@@ -237,10 +235,10 @@ function Invoke-StageSysinternals {
 # Package phase
 # ---------------------------------------------------------------------------
 
-function Invoke-PackageSysinternals {
+function Invoke-PackageObsidian {
     Write-Log ""
     Write-Log ("=" * 60)
-    Write-Log "Sysinternals Suite - PACKAGE phase"
+    Write-Log "Obsidian - PACKAGE phase"
     Write-Log ("=" * 60)
     Write-Log ""
 
@@ -265,6 +263,7 @@ function Invoke-PackageSysinternals {
     Write-Log "AppName                      : $($manifest.AppName)"
     Write-Log "Publisher                    : $($manifest.Publisher)"
     Write-Log "SoftwareVersion              : $($manifest.SoftwareVersion)"
+    Write-Log "InstallationBehaviorType     : $($manifest.InstallationBehaviorType)"
     Write-Log ""
 
     if (-not (Test-NetworkShareAccess -Path $FileServerPath)) {
@@ -305,9 +304,9 @@ function Invoke-PackageSysinternals {
 if ($GetLatestVersionOnly) {
     try {
         $ProgressPreference = 'SilentlyContinue'
-        $v = Get-LatestSysinternalsVersion -Quiet
-        if (-not $v) { exit 1 }
-        Write-Output $v
+        $info = Get-LatestObsidianRelease -Quiet
+        if (-not $info) { exit 1 }
+        Write-Output $info.Version
         exit 0
     }
     catch {
@@ -321,7 +320,7 @@ try {
 
     Write-Log ""
     Write-Log ("=" * 60)
-    Write-Log "Sysinternals Suite Auto-Packager starting"
+    Write-Log "Obsidian Auto-Packager starting"
     Write-Log ("=" * 60)
     Write-Log ""
     Write-Log ("RunAsUser                    : {0}\{1}" -f $env:USERDOMAIN,$env:USERNAME)
@@ -330,18 +329,18 @@ try {
     Write-Log "SiteCode                     : $SiteCode"
     Write-Log "FileServerPath               : $FileServerPath"
     Write-Log "BaseDownloadRoot             : $BaseDownloadRoot"
-    Write-Log "ZipDownloadUrl               : $ZipDownloadUrl"
+    Write-Log "GitHubApiUrl                 : $GitHubApiUrl"
     Write-Log ""
 
     if ($StageOnly) {
-        Invoke-StageSysinternals
+        Invoke-StageObsidian
     }
     elseif ($PackageOnly) {
-        Invoke-PackageSysinternals
+        Invoke-PackageObsidian
     }
     else {
-        Invoke-StageSysinternals
-        Invoke-PackageSysinternals
+        Invoke-StageObsidian
+        Invoke-PackageObsidian
     }
 
     Write-Log ""

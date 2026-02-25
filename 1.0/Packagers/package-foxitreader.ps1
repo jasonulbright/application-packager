@@ -17,8 +17,8 @@ VendorUrl: https://www.foxit.com/pdf-reader.html
       -PackageOnly  Read manifest, copy to network, create MECM application
 
     NOTE: Foxit's enterprise MSI requires registration. This packager uses the
-    free EXE installer (~370MB) with InnoSetup silent flags. The version is
-    resolved from the Chocolatey API.
+    free EXE installer (~370MB) with InnoSetup silent flags. The version and
+    download URL are resolved from the Foxit download redirect.
 
 .PARAMETER SiteCode
     ConfigMgr site code PSDrive name (e.g., "MCM").
@@ -53,7 +53,7 @@ VendorUrl: https://www.foxit.com/pdf-reader.html
     create MECM application with file-based detection.
 
 .PARAMETER GetLatestVersionOnly
-    Queries the Chocolatey API for the latest Foxit Reader version, outputs
+    Queries the Foxit download redirect for the latest version, outputs
     the version string, and exits. No download or MECM changes are made.
 
 .REQUIREMENTS
@@ -87,7 +87,7 @@ if ($StageOnly -and $PackageOnly) {
 }
 
 # --- Configuration ---
-$ChocolateyApiUrl = "https://community.chocolatey.org/api/v2/FindPackagesById()?`$orderby=Version%20desc&`$top=1&id=%27FoxitReader%27"
+$FoxitDownloadRedirectUrl = "https://www.foxit.com/downloads/latest/?product=Foxit-Reader&platform=Windows&operating_type=64&package_type=exe&language=ML"
 
 $VendorFolder = "Foxit Software"
 $AppFolder    = "Foxit PDF Reader"
@@ -100,19 +100,26 @@ $BaseDownloadRoot = Join-Path $DownloadRoot "FoxitReader"
 function Get-LatestFoxitReaderVersion {
     param([switch]$Quiet)
 
-    Write-Log "Chocolatey API               : foxitreader" -Quiet:$Quiet
+    Write-Log "Foxit redirect URL           : $FoxitDownloadRedirectUrl" -Quiet:$Quiet
 
     try {
-        $xml = (curl.exe -L --fail --silent --show-error $ChocolateyApiUrl) -join ''
-        if ($LASTEXITCODE -ne 0) { throw "Failed to query Chocolatey API." }
+        $response = (curl.exe -sI $FoxitDownloadRedirectUrl)
+        if ($LASTEXITCODE -ne 0) { throw "Failed to query Foxit download redirect." }
 
-        # Parse version from OData XML response
-        if ($xml -match '<d:Version[^>]*>([^<]+)</d:Version>') {
+        $locationLine = $response | Where-Object { $_ -match '^Location:' } | Select-Object -First 1
+        if (-not $locationLine) { throw "No redirect Location header from Foxit download URL." }
+
+        $cdnUrl = ($locationLine -replace '^Location:\s*', '').Trim()
+
+        if ($cdnUrl -match '/win/([\d.]+)/') {
             $version = $Matches[1]
         }
         else {
-            throw "Could not parse version from Chocolatey API response."
+            throw "Could not parse version from Foxit CDN redirect URL."
         }
+
+        # Store the CDN URL for download during staging
+        $script:FoxitCdnUrl = $cdnUrl
 
         Write-Log "Latest Foxit Reader version  : $version" -Quiet:$Quiet
         return $version
@@ -121,20 +128,6 @@ function Get-LatestFoxitReaderVersion {
         Write-Log "Failed to get Foxit Reader version: $($_.Exception.Message)" -Level ERROR
         return $null
     }
-}
-
-
-function Get-FoxitDownloadUrl {
-    param([string]$Version)
-
-    # CDN URL pattern: major.minor version in path, abbreviated in filename
-    # e.g., version 2025.3.0.35737 -> path 2025.3.0, filename FoxitPDFReader20253
-    $parts = $Version.Split('.')
-    $majorMinorPatch = "{0}.{1}.{2}" -f $parts[0], $parts[1], $parts[2]
-    $filenamePart = "{0}{1}" -f $parts[0], $parts[1]
-
-    $url = "https://cdn01.foxitsoftware.com/product/reader/desktop/win/${majorMinorPatch}/FoxitPDFReader${filenamePart}_L10N_Setup_Prom_x64.exe"
-    return $url
 }
 
 
@@ -157,18 +150,14 @@ function Invoke-StageFoxitReader {
     Initialize-Folder -Path $BaseDownloadRoot
 
     # --- Get version ---
-    $fullVersion = Get-LatestFoxitReaderVersion
-    if (-not $fullVersion) { throw "Could not resolve Foxit Reader version." }
+    $version = Get-LatestFoxitReaderVersion
+    if (-not $version) { throw "Could not resolve Foxit Reader version." }
 
-    $downloadUrl = Get-FoxitDownloadUrl -Version $fullVersion
+    $downloadUrl = $script:FoxitCdnUrl
+    if (-not $downloadUrl) { throw "No download URL resolved from Foxit redirect." }
     $installerFileName = [System.IO.Path]::GetFileName($downloadUrl)
 
-    # Display version without build number (e.g., "2025.3.0" from "2025.3.0.35737")
-    $parts = $fullVersion.Split('.')
-    $displayVersion = "{0}.{1}.{2}" -f $parts[0], $parts[1], $parts[2]
-
-    Write-Log "Full version                 : $fullVersion"
-    Write-Log "Display version              : $displayVersion"
+    Write-Log "Version                      : $version"
     Write-Log "Download URL                 : $downloadUrl"
     Write-Log "Installer filename           : $installerFileName"
     Write-Log ""
@@ -186,7 +175,7 @@ function Invoke-StageFoxitReader {
     }
 
     # --- Versioned local content folder ---
-    $localContentPath = Join-Path $BaseDownloadRoot $displayVersion
+    $localContentPath = Join-Path $BaseDownloadRoot $version
     Initialize-Folder -Path $localContentPath
 
     $stagedExe = Join-Path $localContentPath $installerFileName
@@ -212,7 +201,7 @@ function Invoke-StageFoxitReader {
     # --- Write stage manifest ---
     $detectionPath = "{0}\Foxit Software\Foxit PDF Reader" -f $env:ProgramFiles
 
-    $appName   = "Foxit PDF Reader $displayVersion (x64)"
+    $appName   = "Foxit PDF Reader $version (x64)"
     $publisher = "Foxit Software Inc."
 
     Write-Log "Detection path               : $detectionPath"
@@ -223,7 +212,7 @@ function Invoke-StageFoxitReader {
     Write-StageManifest -Path $manifestPath -ManifestData @{
         AppName         = $appName
         Publisher       = $publisher
-        SoftwareVersion = $displayVersion
+        SoftwareVersion = $version
         InstallerFile   = $installerFileName
         Detection       = @{
             Type          = "File"
@@ -231,13 +220,13 @@ function Invoke-StageFoxitReader {
             FileName      = "FoxitPDFReader.exe"
             PropertyType  = "Version"
             Operator      = "GreaterEquals"
-            ExpectedValue = $displayVersion
+            ExpectedValue = $version
             Is64Bit       = $true
         }
     }
 
     # Save version marker for Package phase
-    Set-Content -LiteralPath (Join-Path $BaseDownloadRoot "staged-version.txt") -Value $displayVersion -Encoding ASCII -ErrorAction Stop
+    Set-Content -LiteralPath (Join-Path $BaseDownloadRoot "staged-version.txt") -Value $version -Encoding ASCII -ErrorAction Stop
 
     Write-Log ""
     Write-Log "Stage complete               : $localContentPath"
@@ -327,10 +316,7 @@ if ($GetLatestVersionOnly) {
         $ProgressPreference = 'SilentlyContinue'
         $v = Get-LatestFoxitReaderVersion -Quiet
         if (-not $v) { exit 1 }
-        # Output display version (without build number)
-        $parts = $v.Split('.')
-        $display = "{0}.{1}.{2}" -f $parts[0], $parts[1], $parts[2]
-        Write-Output $display
+        Write-Output $v
         exit 0
     }
     catch {

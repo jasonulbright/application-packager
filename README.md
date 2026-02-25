@@ -111,7 +111,7 @@ All packager scripts accept the same core parameters:
 | `-GetLatestVersionOnly` | Output the latest version string and exit |
 | `-LogPath` | Path to a structured log file (timestamps + severity levels) |
 
-## Supported Applications (97)
+## Supported Applications (114)
 
 | Script | Vendor | Application | Detection Type |
 |---|---|---|---|
@@ -119,6 +119,7 @@ All packager scripts accept the same core parameters:
 | package-adobereader.ps1 | Adobe Inc. | Adobe Acrobat Reader DC (x64) | File version |
 | package-anaconda.ps1 | Anaconda, Inc. | Anaconda Distribution (x64) | File existence |
 | package-anydesk.ps1 | AnyDesk Software GmbH | AnyDesk | File version |
+| package-audacity.ps1 | Audacity Team | Audacity (x64) | File version |
 | package-aspnethostingbundle8.ps1 | Microsoft | ASP.NET Core Hosting Bundle 8 | RegistryKey existence |
 | package-bitwarden.ps1 | Bitwarden Inc. | Bitwarden Desktop (x64) | File version |
 | package-brave.ps1 | Brave Software | Brave Browser (x64) | File version |
@@ -133,10 +134,13 @@ All packager scripts accept the same core parameters:
 | package-corretto-jdk17.ps1 | Amazon | Amazon Corretto JDK 17 (x64) | RegistryKeyValue |
 | package-corretto-jdk21.ps1 | Amazon | Amazon Corretto JDK 21 (x64) | RegistryKeyValue |
 | package-corretto-jdk25.ps1 | Amazon | Amazon Corretto JDK 25 (x64) | RegistryKeyValue |
+| package-cpuz.ps1 | CPUID | CPU-Z | File version |
 | package-cutepdfwriter.ps1 | Acro Software Inc. | CutePDF Writer | RegistryKeyValue |
+| package-dbeaver.ps1 | DBeaver Corp | DBeaver Community | File version |
 | package-dotnet8.ps1 | Microsoft | .NET Desktop Runtime 8 (x64) | Compound (AND, 2x File existence) |
 | package-Dotnet9x64.ps1 | Microsoft | .NET Desktop Runtime 9 (x64) | File existence |
 | package-Dotnet10x64.ps1 | Microsoft | .NET Desktop Runtime 10 (x64) | File existence |
+| package-drawio.ps1 | JGraph Ltd | draw.io | RegistryKeyValue |
 | package-edge.ps1 | Microsoft | Microsoft Edge (x64) | Compound (OR, 2x File version) |
 | package-everything.ps1 | Voidtools | Everything (x64) | RegistryKeyValue |
 | package-filezilla.ps1 | FileZilla Project | FileZilla Client (x64) | RegistryKeyValue |
@@ -145,9 +149,11 @@ All packager scripts accept the same core parameters:
 | package-gimp.ps1 | The GIMP Team | GIMP (x64) | RegistryKeyValue |
 | package-git.ps1 | Git | Git for Windows (x64) | Script (git.exe --version) |
 | package-greenshot.ps1 | Greenshot | Greenshot | File existence |
+| package-inkscape.ps1 | Inkscape Project | Inkscape (x64) | RegistryKeyValue |
 | package-keepass.ps1 | Dominik Reichl | KeePass | RegistryKeyValue |
 | package-libreoffice.ps1 | The Document Foundation | LibreOffice (x64) | RegistryKeyValue |
 | package-malwarebytes.ps1 | Malwarebytes | Malwarebytes | RegistryKeyValue |
+| package-mremoteng.ps1 | mRemoteNG | mRemoteNG | RegistryKeyValue |
 | package-m365apps-x64.ps1 | Microsoft | M365 Apps for Enterprise (x64) | File version (WINWORD.EXE) |
 | package-m365apps-x86.ps1 | Microsoft | M365 Apps for Enterprise (x86) | File version (WINWORD.EXE) |
 | package-m365visio-x64.ps1 | Microsoft | M365 Visio (x64) | File version (VISIO.EXE) |
@@ -159,11 +165,15 @@ All packager scripts accept the same core parameters:
 | package-msvcruntimes.ps1 | Microsoft | VC++ 2015-2022 Redistributable (x86+x64) | Compound (AND, 2x RegistryKeyValue) |
 | package-nodejs.ps1 | OpenJS Foundation | Node.js LTS (x64) | RegistryKeyValue |
 | package-notepadplusplus.ps1 | Notepad++ | Notepad++ (x64) | File version |
+| package-obsidian.ps1 | Obsidian | Obsidian | File existence (per-user) |
 | package-opera.ps1 | Opera Software | Opera Browser (x64) | File version |
 | package-paintdotnet.ps1 | dotPDN LLC | Paint.NET (x64) | RegistryKeyValue |
+| package-pgadmin4.ps1 | pgAdmin Development Team | pgAdmin 4 | RegistryKeyValue |
+| package-postman.ps1 | Postman Inc. | Postman | File existence (per-user) |
 | package-powerbidesktop.ps1 | Microsoft | Power BI Desktop (x64) | File version |
 | package-powershell7.ps1 | Microsoft | PowerShell 7 (x64) | RegistryKeyValue |
 | package-powershell7lts.ps1 | Microsoft | PowerShell 7 LTS (x64) | RegistryKeyValue |
+| package-powertoys.ps1 | Microsoft Corporation | PowerToys (x64) | File version |
 | package-positron.ps1 | Posit Software, PBC | Positron (x64) | File existence |
 | package-postgresql13.ps1 | PostgreSQL Global Development Group | PostgreSQL 13 (x64) | File version |
 | package-postgresql14.ps1 | PostgreSQL Global Development Group | PostgreSQL 14 (x64) | File version |
@@ -174,7 +184,9 @@ All packager scripts accept the same core parameters:
 | package-python.ps1 | Python Software Foundation | Python (x64) | File existence |
 | package-r.ps1 | The R Foundation | R for Windows (x64) | File existence |
 | package-rstudio.ps1 | Posit Software, PBC | RStudio Desktop (x64) | RegistryKeyValue |
+| package-sharex.ps1 | ShareX Team | ShareX | File version |
 | package-slack.ps1 | Slack Technologies | Slack (x64) | RegistryKeyValue |
+| package-soapui.ps1 | SmartBear Software | SoapUI | File existence |
 | package-sysinternals.ps1 | Microsoft | Sysinternals Suite | File existence |
 | package-ssms.ps1 | Microsoft | SQL Server Management Studio | File version (Ssms.exe) |
 | package-teams.ps1 | Microsoft | Microsoft Teams Enterprise (x64) | Script (Get-AppxPackage) |
@@ -199,7 +211,10 @@ All packager scripts accept the same core parameters:
 | package-temurin-jre25.ps1 | Eclipse Adoptium | Eclipse Temurin JRE 25 (x64) | RegistryKeyValue |
 | package-thunderbird.ps1 | Mozilla Foundation | Thunderbird (x64) | File version |
 | package-treesizefree.ps1 | JAM Software | TreeSize Free | File version |
+| package-tortoisegit.ps1 | TortoiseGit | TortoiseGit (x64) | RegistryKeyValue |
+| package-tortoisesvn.ps1 | TortoiseSVN | TortoiseSVN (x64) | RegistryKeyValue |
 | package-vmwaretools.ps1 | Broadcom | VMware Tools (x64) | File version |
+| package-vmwareworkstation.ps1 | Broadcom | VMware Workstation Pro | File version |
 | package-vs2026.ps1 | Microsoft | Visual Studio 2026 Enterprise | File version (devenv.exe) |
 | package-vs2026community.ps1 | Microsoft | Visual Studio 2026 Community | File version (devenv.exe) |
 | package-vim.ps1 | The Vim Project | Vim (x64) | RegistryKeyValue |
@@ -208,9 +223,11 @@ All packager scripts accept the same core parameters:
 | package-webex.ps1 | Cisco | Webex (x64) | RegistryKeyValue |
 | package-webview2.ps1 | Microsoft | WebView2 Evergreen Runtime | File version |
 | package-windirstat.ps1 | WinDirStat Team | WinDirStat (x64) | File version |
+| package-winmerge.ps1 | WinMerge | WinMerge (x64) | File version |
 | package-winscp.ps1 | WinSCP | WinSCP | RegistryKeyValue |
 | package-winrar.ps1 | win.rar GmbH | WinRAR (x64) | RegistryKeyValue |
 | package-wireshark.ps1 | Wireshark Foundation | Wireshark (x64) | RegistryKeyValue |
+| package-wiztree.ps1 | Antibody Software | WizTree | File version |
 | package-zoom.ps1 | Zoom Video Communications | Zoom Workplace (x64) | File existence (per-user) |
 
 ## Content Staging Layout

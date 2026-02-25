@@ -1,32 +1,23 @@
 <#
-Vendor: Microsoft Corporation
-App: Sysinternals Suite
-CMName: Sysinternals Suite
-VendorUrl: https://learn.microsoft.com/en-us/sysinternals/
+Vendor: CPUID
+App: CPU-Z
+CMName: CPU-Z
+VendorUrl: https://www.cpuid.com/softwares/cpu-z.html
 
 .SYNOPSIS
-    Packages Sysinternals Suite for MECM.
+    Packages CPU-Z for MECM.
 
 .DESCRIPTION
-    Downloads the latest Sysinternals Suite ZIP from Microsoft, stages content to
-    a versioned local folder with file-existence detection metadata, and creates
-    an MECM Application.
+    Downloads the latest CPU-Z setup EXE from cpuid.com, stages content to a
+    versioned local folder with file-based version detection metadata, and
+    creates an MECM Application with file-based detection.
 
     Supports two-phase operation:
-      -StageOnly    Download ZIP, resolve version from Last-Modified header, write manifest
+      -StageOnly    Download, generate content wrappers, write manifest
       -PackageOnly  Read manifest, copy to network, create MECM application
 
-    Sysinternals Suite is a ZIP archive of standalone tools -- there is no
-    traditional installer. The install wrapper extracts the ZIP to
-    C:\Program Files\Sysinternals. The uninstall wrapper removes the folder.
-
-    The suite uses date-based versioning (e.g. 2026.2.4) derived from the
-    Last-Modified header on the download ZIP. Individual tools have their own
-    independent version numbers.
-
-    NOTE: Each Sysinternals tool shows a EULA dialog on first run. Users can
-    suppress this by passing -accepteula to any tool, or an administrator can
-    pre-accept by setting registry keys under HKCU:\Software\Sysinternals.
+    The installer is an InnoSetup package supporting /VERYSILENT flags.
+    The version is scraped from the cpuid.com product page.
 
 .PARAMETER SiteCode
     ConfigMgr site code PSDrive name (e.g., "MCM").
@@ -36,11 +27,10 @@ VendorUrl: https://learn.microsoft.com/en-us/sysinternals/
 
 .PARAMETER FileServerPath
     UNC root that contains your Applications folder (example: \\fileserver\sccm$).
-    Content is staged under: <FileServerPath>\Applications\Microsoft\Sysinternals Suite\<Version>
+    Content is staged under: <FileServerPath>\Applications\CPUID\CPU-Z\<Version>
 
 .PARAMETER DownloadRoot
-    Local root folder for staging downloaded installers.
-    Default: C:\temp\ap
+    Local root folder for staging downloaded installers. Default: C:\temp\ap
 
 .PARAMETER EstimatedRuntimeMins
     Estimated runtime in minutes. Default: 15
@@ -55,8 +45,8 @@ VendorUrl: https://learn.microsoft.com/en-us/sysinternals/
     Runs only the Package phase.
 
 .PARAMETER GetLatestVersionOnly
-    Queries the Sysinternals download headers for the latest date-based
-    version, outputs the version string, and exits. No MECM changes are made.
+    Scrapes cpuid.com for the latest CPU-Z version, outputs the version string,
+    and exits. No download or MECM changes are made.
 
 .REQUIREMENTS
     - PowerShell 5.1
@@ -89,42 +79,41 @@ if ($StageOnly -and $PackageOnly) {
 }
 
 # --- Configuration ---
-$ZipDownloadUrl = "https://download.sysinternals.com/files/SysinternalsSuite.zip"
-$ZipFileName    = "SysinternalsSuite.zip"
+$ProductPageUrl = "https://www.cpuid.com/softwares/cpu-z.html"
 
-$VendorFolder = "Microsoft"
-$AppFolder    = "Sysinternals Suite"
+$VendorFolder = "CPUID"
+$AppFolder    = "CPU-Z"
 
-$BaseDownloadRoot = Join-Path $DownloadRoot "Sysinternals"
+$BaseDownloadRoot = Join-Path $DownloadRoot "CPU-Z"
 
 # --- Functions ---
 
 
-function Get-LatestSysinternalsVersion {
+function Get-LatestCpuZRelease {
     param([switch]$Quiet)
 
-    Write-Log "ZIP download URL             : $ZipDownloadUrl" -Quiet:$Quiet
+    Write-Log "Product page                 : $ProductPageUrl" -Quiet:$Quiet
 
     try {
-        $headers = (curl.exe --head --silent --show-error $ZipDownloadUrl)
-        if ($LASTEXITCODE -ne 0) { throw "Failed to query Sysinternals download headers." }
+        $html = (curl.exe -L --fail --silent --show-error $ProductPageUrl) -join ''
+        if ($LASTEXITCODE -ne 0) { throw "Failed to fetch CPU-Z product page." }
 
-        $lastModLine = $headers | Where-Object { $_ -match '^Last-Modified:' } | Select-Object -First 1
-        if (-not $lastModLine) { throw "No Last-Modified header from Sysinternals download." }
+        # Parse version from download link pattern: cpu-z_X.XX-en.exe
+        if ($html -match 'cpu-z_(\d+\.\d+)-en\.exe') {
+            $version = $Matches[1]
+        }
+        else {
+            throw "Could not parse version from CPU-Z product page."
+        }
 
-        $lastModValue = ($lastModLine -replace '^Last-Modified:\s*', '').Trim()
-        $date = [datetime]::ParseExact(
-            $lastModValue,
-            'ddd, dd MMM yyyy HH:mm:ss GMT',
-            [System.Globalization.CultureInfo]::InvariantCulture
-        )
-        $version = '{0}.{1}.{2}' -f $date.Year, $date.Month, $date.Day
+        $fileName = "cpu-z_${version}-en.exe"
+        $downloadUrl = "https://www.cpuid.com/downloads/cpu-z/$fileName"
 
-        Write-Log "Latest Sysinternals version  : $version" -Quiet:$Quiet
-        return $version
+        Write-Log "Latest CPU-Z version         : $version" -Quiet:$Quiet
+        return @{ Version = $version; FileName = $fileName; DownloadUrl = $downloadUrl }
     }
     catch {
-        Write-Log "Failed to get Sysinternals version: $($_.Exception.Message)" -Level ERROR
+        Write-Log "Failed to get CPU-Z version: $($_.Exception.Message)" -Level ERROR
         return $null
     }
 }
@@ -134,10 +123,10 @@ function Get-LatestSysinternalsVersion {
 # Stage phase
 # ---------------------------------------------------------------------------
 
-function Invoke-StageSysinternals {
+function Invoke-StageCpuZ {
     Write-Log ""
     Write-Log ("=" * 60)
-    Write-Log "Sysinternals Suite - STAGE phase"
+    Write-Log "CPU-Z - STAGE phase"
     Write-Log ("=" * 60)
     Write-Log ""
 
@@ -148,63 +137,62 @@ function Invoke-StageSysinternals {
 
     Initialize-Folder -Path $BaseDownloadRoot
 
-    # --- Get latest version ---
-    $version = Get-LatestSysinternalsVersion
-    if (-not $version) { throw "Could not determine latest Sysinternals version." }
+    $releaseInfo = Get-LatestCpuZRelease
+    if (-not $releaseInfo) { throw "Could not resolve CPU-Z version." }
 
-    # --- Download ---
-    $localZip = Join-Path $BaseDownloadRoot $ZipFileName
+    $version           = $releaseInfo.Version
+    $installerFileName = $releaseInfo.FileName
+    $downloadUrl       = $releaseInfo.DownloadUrl
 
-    Write-Log "Download URL                 : $ZipDownloadUrl"
-    Write-Log "Local ZIP path               : $localZip"
     Write-Log "Version                      : $version"
+    Write-Log "Download URL                 : $downloadUrl"
+    Write-Log "Installer filename           : $installerFileName"
     Write-Log ""
 
-    # Always re-download since URL is static (always latest) and we have a new version
-    Write-Log "Downloading Sysinternals Suite..."
-    Invoke-DownloadWithRetry -Url $ZipDownloadUrl -OutFile $localZip
+    # --- Download ---
+    $localExe = Join-Path $BaseDownloadRoot $installerFileName
+    Write-Log "Local installer path         : $localExe"
+
+    if (-not (Test-Path -LiteralPath $localExe)) {
+        Write-Log "Downloading CPU-Z..."
+        Invoke-DownloadWithRetry -Url $downloadUrl -OutFile $localExe
+    }
+    else {
+        Write-Log "Local installer exists. Skipping download."
+    }
 
     # --- Versioned local content folder ---
     $localContentPath = Join-Path $BaseDownloadRoot $version
     Initialize-Folder -Path $localContentPath
 
-    $stagedZip = Join-Path $localContentPath $ZipFileName
-    if (-not (Test-Path -LiteralPath $stagedZip)) {
-        Copy-Item -LiteralPath $localZip -Destination $stagedZip -Force -ErrorAction Stop
-        Write-Log "Copied ZIP to staged folder  : $stagedZip"
+    $stagedExe = Join-Path $localContentPath $installerFileName
+    if (-not (Test-Path -LiteralPath $stagedExe)) {
+        Copy-Item -LiteralPath $localExe -Destination $stagedExe -Force -ErrorAction Stop
+        Write-Log "Copied EXE to staged folder  : $stagedExe"
     }
     else {
-        Write-Log "Staged ZIP exists. Skipping copy."
+        Write-Log "Staged EXE exists. Skipping copy."
     }
 
     # --- Generate content wrappers ---
-    # Install: extract ZIP to Program Files, no traditional installer
-    $installPs1 = @(
-        "`$zipPath = Join-Path `$PSScriptRoot '$ZipFileName'"
-        "`$installDir = Join-Path `$env:ProgramFiles 'Sysinternals'"
-        "if (-not (Test-Path `$installDir)) { New-Item -Path `$installDir -ItemType Directory -Force | Out-Null }"
-        "Expand-Archive -Path `$zipPath -DestinationPath `$installDir -Force"
-        "exit 0"
-    ) -join "`r`n"
-
-    $uninstallPs1 = @(
-        "`$installDir = Join-Path `$env:ProgramFiles 'Sysinternals'"
-        "if (Test-Path `$installDir) { Remove-Item -Path `$installDir -Recurse -Force }"
-        "exit 0"
-    ) -join "`r`n"
+    $wrapperContent = New-ExeWrapperContent `
+        -InstallerFileName $installerFileName `
+        -InstallArgs "'/VERYSILENT', '/NORESTART'" `
+        -UninstallCommand 'C:\Program Files\CPUID\CPU-Z\unins000.exe' `
+        -UninstallArgs "'/VERYSILENT', '/NORESTART'"
 
     Write-ContentWrappers -OutputPath $localContentPath `
-        -InstallPs1Content $installPs1 `
-        -UninstallPs1Content $uninstallPs1
+        -InstallPs1Content $wrapperContent.Install `
+        -UninstallPs1Content $wrapperContent.Uninstall
 
     # --- Write stage manifest ---
-    $detectionPath = "{0}\Sysinternals" -f $env:ProgramFiles
+    $detectionPath = "{0}\CPUID\CPU-Z" -f $env:ProgramFiles
 
-    $appName   = "Sysinternals Suite $version"
-    $publisher = "Microsoft Corporation"
+    $appName   = "CPU-Z $version"
+    $publisher = "CPUID"
 
     Write-Log "Detection path               : $detectionPath"
-    Write-Log "Detection file               : procmon.exe"
+    Write-Log "Detection file               : cpuz_x64.exe"
     Write-Log ""
 
     $manifestPath = Join-Path $localContentPath "stage-manifest.json"
@@ -212,14 +200,14 @@ function Invoke-StageSysinternals {
         AppName         = $appName
         Publisher       = $publisher
         SoftwareVersion = $version
-        InstallerFile   = $ZipFileName
+        InstallerFile   = $installerFileName
         Detection       = @{
             Type          = "File"
             FilePath      = $detectionPath
-            FileName      = "procmon.exe"
-            PropertyType  = "DateModified"
+            FileName      = "cpuz_x64.exe"
+            PropertyType  = "Version"
             Operator      = "GreaterEquals"
-            ExpectedValue = (Get-Date).ToString("yyyy-MM-dd")
+            ExpectedValue = $version
             Is64Bit       = $true
         }
     }
@@ -237,10 +225,10 @@ function Invoke-StageSysinternals {
 # Package phase
 # ---------------------------------------------------------------------------
 
-function Invoke-PackageSysinternals {
+function Invoke-PackageCpuZ {
     Write-Log ""
     Write-Log ("=" * 60)
-    Write-Log "Sysinternals Suite - PACKAGE phase"
+    Write-Log "CPU-Z - PACKAGE phase"
     Write-Log ("=" * 60)
     Write-Log ""
 
@@ -305,9 +293,9 @@ function Invoke-PackageSysinternals {
 if ($GetLatestVersionOnly) {
     try {
         $ProgressPreference = 'SilentlyContinue'
-        $v = Get-LatestSysinternalsVersion -Quiet
-        if (-not $v) { exit 1 }
-        Write-Output $v
+        $info = Get-LatestCpuZRelease -Quiet
+        if (-not $info) { exit 1 }
+        Write-Output $info.Version
         exit 0
     }
     catch {
@@ -321,7 +309,7 @@ try {
 
     Write-Log ""
     Write-Log ("=" * 60)
-    Write-Log "Sysinternals Suite Auto-Packager starting"
+    Write-Log "CPU-Z Auto-Packager starting"
     Write-Log ("=" * 60)
     Write-Log ""
     Write-Log ("RunAsUser                    : {0}\{1}" -f $env:USERDOMAIN,$env:USERNAME)
@@ -330,18 +318,18 @@ try {
     Write-Log "SiteCode                     : $SiteCode"
     Write-Log "FileServerPath               : $FileServerPath"
     Write-Log "BaseDownloadRoot             : $BaseDownloadRoot"
-    Write-Log "ZipDownloadUrl               : $ZipDownloadUrl"
+    Write-Log "ProductPageUrl               : $ProductPageUrl"
     Write-Log ""
 
     if ($StageOnly) {
-        Invoke-StageSysinternals
+        Invoke-StageCpuZ
     }
     elseif ($PackageOnly) {
-        Invoke-PackageSysinternals
+        Invoke-PackageCpuZ
     }
     else {
-        Invoke-StageSysinternals
-        Invoke-PackageSysinternals
+        Invoke-StageCpuZ
+        Invoke-PackageCpuZ
     }
 
     Write-Log ""

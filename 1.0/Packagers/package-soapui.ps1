@@ -1,32 +1,24 @@
 <#
-Vendor: Microsoft Corporation
-App: Sysinternals Suite
-CMName: Sysinternals Suite
-VendorUrl: https://learn.microsoft.com/en-us/sysinternals/
+Vendor: SmartBear Software
+App: SoapUI Open Source
+CMName: SoapUI
+VendorUrl: https://www.soapui.org/
 
 .SYNOPSIS
-    Packages Sysinternals Suite for MECM.
+    Packages SoapUI Open Source for MECM.
 
 .DESCRIPTION
-    Downloads the latest Sysinternals Suite ZIP from Microsoft, stages content to
-    a versioned local folder with file-existence detection metadata, and creates
-    an MECM Application.
+    Downloads the latest SoapUI Open Source x64 setup EXE from the SmartBear
+    CDN, stages content to a versioned local folder with file-existence
+    detection metadata, and creates an MECM Application.
 
     Supports two-phase operation:
-      -StageOnly    Download ZIP, resolve version from Last-Modified header, write manifest
+      -StageOnly    Download, generate content wrappers, write manifest
       -PackageOnly  Read manifest, copy to network, create MECM application
 
-    Sysinternals Suite is a ZIP archive of standalone tools -- there is no
-    traditional installer. The install wrapper extracts the ZIP to
-    C:\Program Files\Sysinternals. The uninstall wrapper removes the folder.
-
-    The suite uses date-based versioning (e.g. 2026.2.4) derived from the
-    Last-Modified header on the download ZIP. Individual tools have their own
-    independent version numbers.
-
-    NOTE: Each Sysinternals tool shows a EULA dialog on first run. Users can
-    suppress this by passing -accepteula to any tool, or an administrator can
-    pre-accept by setting registry keys under HKCU:\Software\Sysinternals.
+    The installer is an install4j package. The -q flag runs a quiet install.
+    SoapUI installs to a versioned directory (SmartBear\SoapUI-{VER}) so
+    file-existence detection is used instead of file-version detection.
 
 .PARAMETER SiteCode
     ConfigMgr site code PSDrive name (e.g., "MCM").
@@ -36,11 +28,9 @@ VendorUrl: https://learn.microsoft.com/en-us/sysinternals/
 
 .PARAMETER FileServerPath
     UNC root that contains your Applications folder (example: \\fileserver\sccm$).
-    Content is staged under: <FileServerPath>\Applications\Microsoft\Sysinternals Suite\<Version>
 
 .PARAMETER DownloadRoot
-    Local root folder for staging downloaded installers.
-    Default: C:\temp\ap
+    Local root folder for staging downloaded installers. Default: C:\temp\ap
 
 .PARAMETER EstimatedRuntimeMins
     Estimated runtime in minutes. Default: 15
@@ -55,8 +45,8 @@ VendorUrl: https://learn.microsoft.com/en-us/sysinternals/
     Runs only the Package phase.
 
 .PARAMETER GetLatestVersionOnly
-    Queries the Sysinternals download headers for the latest date-based
-    version, outputs the version string, and exits. No MECM changes are made.
+    Scrapes the SoapUI download page for the latest version, outputs the
+    version string, and exits.
 
 .REQUIREMENTS
     - PowerShell 5.1
@@ -89,42 +79,41 @@ if ($StageOnly -and $PackageOnly) {
 }
 
 # --- Configuration ---
-$ZipDownloadUrl = "https://download.sysinternals.com/files/SysinternalsSuite.zip"
-$ZipFileName    = "SysinternalsSuite.zip"
+$DownloadPageUrl = "https://www.soapui.org/downloads/latest-release/"
 
-$VendorFolder = "Microsoft"
-$AppFolder    = "Sysinternals Suite"
+$VendorFolder = "SmartBear"
+$AppFolder    = "SoapUI"
 
-$BaseDownloadRoot = Join-Path $DownloadRoot "Sysinternals"
+$BaseDownloadRoot = Join-Path $DownloadRoot "SoapUI"
 
 # --- Functions ---
 
 
-function Get-LatestSysinternalsVersion {
+function Get-LatestSoapUIVersion {
     param([switch]$Quiet)
 
-    Write-Log "ZIP download URL             : $ZipDownloadUrl" -Quiet:$Quiet
+    Write-Log "Download page                : $DownloadPageUrl" -Quiet:$Quiet
 
     try {
-        $headers = (curl.exe --head --silent --show-error $ZipDownloadUrl)
-        if ($LASTEXITCODE -ne 0) { throw "Failed to query Sysinternals download headers." }
+        $html = (curl.exe -L --fail --silent --show-error $DownloadPageUrl) -join ''
+        if ($LASTEXITCODE -ne 0) { throw "Failed to fetch SoapUI download page." }
 
-        $lastModLine = $headers | Where-Object { $_ -match '^Last-Modified:' } | Select-Object -First 1
-        if (-not $lastModLine) { throw "No Last-Modified header from Sysinternals download." }
+        # Parse version from CDN download link pattern: SoapUI-x64-X.X.X.exe
+        if ($html -match 'SoapUI-x64-(\d+\.\d+\.\d+)\.exe') {
+            $version = $Matches[1]
+        }
+        elseif ($html -match 'soapuios/(\d+\.\d+\.\d+)/') {
+            $version = $Matches[1]
+        }
+        else {
+            throw "Could not parse version from SoapUI download page."
+        }
 
-        $lastModValue = ($lastModLine -replace '^Last-Modified:\s*', '').Trim()
-        $date = [datetime]::ParseExact(
-            $lastModValue,
-            'ddd, dd MMM yyyy HH:mm:ss GMT',
-            [System.Globalization.CultureInfo]::InvariantCulture
-        )
-        $version = '{0}.{1}.{2}' -f $date.Year, $date.Month, $date.Day
-
-        Write-Log "Latest Sysinternals version  : $version" -Quiet:$Quiet
+        Write-Log "Latest SoapUI version        : $version" -Quiet:$Quiet
         return $version
     }
     catch {
-        Write-Log "Failed to get Sysinternals version: $($_.Exception.Message)" -Level ERROR
+        Write-Log "Failed to get SoapUI version: $($_.Exception.Message)" -Level ERROR
         return $null
     }
 }
@@ -134,10 +123,10 @@ function Get-LatestSysinternalsVersion {
 # Stage phase
 # ---------------------------------------------------------------------------
 
-function Invoke-StageSysinternals {
+function Invoke-StageSoapUI {
     Write-Log ""
     Write-Log ("=" * 60)
-    Write-Log "Sysinternals Suite - STAGE phase"
+    Write-Log "SoapUI Open Source - STAGE phase"
     Write-Log ("=" * 60)
     Write-Log ""
 
@@ -148,63 +137,63 @@ function Invoke-StageSysinternals {
 
     Initialize-Folder -Path $BaseDownloadRoot
 
-    # --- Get latest version ---
-    $version = Get-LatestSysinternalsVersion
-    if (-not $version) { throw "Could not determine latest Sysinternals version." }
+    $version = Get-LatestSoapUIVersion
+    if (-not $version) { throw "Could not determine latest SoapUI version." }
 
-    # --- Download ---
-    $localZip = Join-Path $BaseDownloadRoot $ZipFileName
+    $installerFileName = "SoapUI-x64-${version}.exe"
+    $downloadUrl = "https://dl.eviware.com/soapuios/${version}/${installerFileName}"
 
-    Write-Log "Download URL                 : $ZipDownloadUrl"
-    Write-Log "Local ZIP path               : $localZip"
     Write-Log "Version                      : $version"
+    Write-Log "Download URL                 : $downloadUrl"
+    Write-Log "Installer filename           : $installerFileName"
     Write-Log ""
 
-    # Always re-download since URL is static (always latest) and we have a new version
-    Write-Log "Downloading Sysinternals Suite..."
-    Invoke-DownloadWithRetry -Url $ZipDownloadUrl -OutFile $localZip
+    # --- Download ---
+    $localExe = Join-Path $BaseDownloadRoot $installerFileName
+    Write-Log "Local installer path         : $localExe"
+
+    if (-not (Test-Path -LiteralPath $localExe)) {
+        Write-Log "Downloading SoapUI..."
+        Invoke-DownloadWithRetry -Url $downloadUrl -OutFile $localExe
+    }
+    else {
+        Write-Log "Local installer exists. Skipping download."
+    }
 
     # --- Versioned local content folder ---
     $localContentPath = Join-Path $BaseDownloadRoot $version
     Initialize-Folder -Path $localContentPath
 
-    $stagedZip = Join-Path $localContentPath $ZipFileName
-    if (-not (Test-Path -LiteralPath $stagedZip)) {
-        Copy-Item -LiteralPath $localZip -Destination $stagedZip -Force -ErrorAction Stop
-        Write-Log "Copied ZIP to staged folder  : $stagedZip"
+    $stagedExe = Join-Path $localContentPath $installerFileName
+    if (-not (Test-Path -LiteralPath $stagedExe)) {
+        Copy-Item -LiteralPath $localExe -Destination $stagedExe -Force -ErrorAction Stop
+        Write-Log "Copied EXE to staged folder  : $stagedExe"
     }
     else {
-        Write-Log "Staged ZIP exists. Skipping copy."
+        Write-Log "Staged EXE exists. Skipping copy."
     }
 
     # --- Generate content wrappers ---
-    # Install: extract ZIP to Program Files, no traditional installer
-    $installPs1 = @(
-        "`$zipPath = Join-Path `$PSScriptRoot '$ZipFileName'"
-        "`$installDir = Join-Path `$env:ProgramFiles 'Sysinternals'"
-        "if (-not (Test-Path `$installDir)) { New-Item -Path `$installDir -ItemType Directory -Force | Out-Null }"
-        "Expand-Archive -Path `$zipPath -DestinationPath `$installDir -Force"
-        "exit 0"
-    ) -join "`r`n"
-
-    $uninstallPs1 = @(
-        "`$installDir = Join-Path `$env:ProgramFiles 'Sysinternals'"
-        "if (Test-Path `$installDir) { Remove-Item -Path `$installDir -Recurse -Force }"
-        "exit 0"
-    ) -join "`r`n"
+    # install4j installer; -q for quiet mode
+    $wrapperContent = New-ExeWrapperContent `
+        -InstallerFileName $installerFileName `
+        -InstallArgs "'-q'" `
+        -UninstallCommand "C:\Program Files\SmartBear\SoapUI-${version}\uninstall.exe" `
+        -UninstallArgs "'-q'"
 
     Write-ContentWrappers -OutputPath $localContentPath `
-        -InstallPs1Content $installPs1 `
-        -UninstallPs1Content $uninstallPs1
+        -InstallPs1Content $wrapperContent.Install `
+        -UninstallPs1Content $wrapperContent.Uninstall
 
     # --- Write stage manifest ---
-    $detectionPath = "{0}\Sysinternals" -f $env:ProgramFiles
+    # SoapUI installs to a versioned directory so use file-existence detection
+    $detectionPath = "{0}\SmartBear\SoapUI-{1}\bin" -f $env:ProgramFiles, $version
 
-    $appName   = "Sysinternals Suite $version"
-    $publisher = "Microsoft Corporation"
+    $appName   = "SoapUI $version"
+    $publisher = "SmartBear Software"
 
     Write-Log "Detection path               : $detectionPath"
-    Write-Log "Detection file               : procmon.exe"
+    Write-Log "Detection file               : SoapUI-${version}.exe"
     Write-Log ""
 
     $manifestPath = Join-Path $localContentPath "stage-manifest.json"
@@ -212,15 +201,13 @@ function Invoke-StageSysinternals {
         AppName         = $appName
         Publisher       = $publisher
         SoftwareVersion = $version
-        InstallerFile   = $ZipFileName
+        InstallerFile   = $installerFileName
         Detection       = @{
-            Type          = "File"
-            FilePath      = $detectionPath
-            FileName      = "procmon.exe"
-            PropertyType  = "DateModified"
-            Operator      = "GreaterEquals"
-            ExpectedValue = (Get-Date).ToString("yyyy-MM-dd")
-            Is64Bit       = $true
+            Type         = "File"
+            FilePath     = $detectionPath
+            FileName     = "SoapUI-${version}.exe"
+            PropertyType = "Existence"
+            Is64Bit      = $true
         }
     }
 
@@ -237,10 +224,10 @@ function Invoke-StageSysinternals {
 # Package phase
 # ---------------------------------------------------------------------------
 
-function Invoke-PackageSysinternals {
+function Invoke-PackageSoapUI {
     Write-Log ""
     Write-Log ("=" * 60)
-    Write-Log "Sysinternals Suite - PACKAGE phase"
+    Write-Log "SoapUI Open Source - PACKAGE phase"
     Write-Log ("=" * 60)
     Write-Log ""
 
@@ -305,7 +292,7 @@ function Invoke-PackageSysinternals {
 if ($GetLatestVersionOnly) {
     try {
         $ProgressPreference = 'SilentlyContinue'
-        $v = Get-LatestSysinternalsVersion -Quiet
+        $v = Get-LatestSoapUIVersion -Quiet
         if (-not $v) { exit 1 }
         Write-Output $v
         exit 0
@@ -321,7 +308,7 @@ try {
 
     Write-Log ""
     Write-Log ("=" * 60)
-    Write-Log "Sysinternals Suite Auto-Packager starting"
+    Write-Log "SoapUI Open Source Auto-Packager starting"
     Write-Log ("=" * 60)
     Write-Log ""
     Write-Log ("RunAsUser                    : {0}\{1}" -f $env:USERDOMAIN,$env:USERNAME)
@@ -330,18 +317,18 @@ try {
     Write-Log "SiteCode                     : $SiteCode"
     Write-Log "FileServerPath               : $FileServerPath"
     Write-Log "BaseDownloadRoot             : $BaseDownloadRoot"
-    Write-Log "ZipDownloadUrl               : $ZipDownloadUrl"
+    Write-Log "DownloadPageUrl              : $DownloadPageUrl"
     Write-Log ""
 
     if ($StageOnly) {
-        Invoke-StageSysinternals
+        Invoke-StageSoapUI
     }
     elseif ($PackageOnly) {
-        Invoke-PackageSysinternals
+        Invoke-PackageSoapUI
     }
     else {
-        Invoke-StageSysinternals
-        Invoke-PackageSysinternals
+        Invoke-StageSoapUI
+        Invoke-PackageSoapUI
     }
 
     Write-Log ""

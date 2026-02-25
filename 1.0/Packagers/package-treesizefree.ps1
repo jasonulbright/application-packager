@@ -17,7 +17,7 @@ VendorUrl: https://www.jam-software.com/treesize_free
       -PackageOnly  Read manifest, copy to network, create MECM application
 
     The installer is an InnoSetup package supporting /VERYSILENT flags.
-    The version is resolved from the Chocolatey API.
+    The version is resolved from the JAM Software changelog page.
 
 .PARAMETER SiteCode
     ConfigMgr site code PSDrive name (e.g., "MCM").
@@ -52,8 +52,8 @@ VendorUrl: https://www.jam-software.com/treesize_free
     create MECM application with file-based detection.
 
 .PARAMETER GetLatestVersionOnly
-    Queries the Chocolatey API for the latest TreeSize Free version, outputs
-    the version string, and exits. No download or MECM changes are made.
+    Queries the JAM Software changelog for the latest TreeSize Free version,
+    outputs the version string, and exits. No download or MECM changes are made.
 
 .REQUIREMENTS
     - PowerShell 5.1
@@ -88,7 +88,7 @@ if ($StageOnly -and $PackageOnly) {
 # --- Configuration ---
 $ExeDownloadUrl    = "https://www.jam-software.com/treesize_free/TreeSizeFreeSetup.exe"
 $InstallerFileName = "TreeSizeFreeSetup.exe"
-$ChocolateyApiUrl  = "https://community.chocolatey.org/api/v2/FindPackagesById()?`$orderby=Version%20desc&`$top=1&id=%27treesizefree%27"
+$ChangelogUrl      = "https://www.jam-software.com/treesize_free/changes.shtml"
 
 $VendorFolder = "JAM Software"
 $AppFolder    = "TreeSize Free"
@@ -101,17 +101,17 @@ $BaseDownloadRoot = Join-Path $DownloadRoot "TreeSizeFree"
 function Get-LatestTreeSizeVersion {
     param([switch]$Quiet)
 
-    Write-Log "Chocolatey API               : treesizefree" -Quiet:$Quiet
+    Write-Log "Changelog URL                : $ChangelogUrl" -Quiet:$Quiet
 
     try {
-        $xml = (curl.exe -L --fail --silent --show-error $ChocolateyApiUrl) -join ''
-        if ($LASTEXITCODE -ne 0) { throw "Failed to query Chocolatey API." }
+        $html = (curl.exe -L --fail --silent --show-error $ChangelogUrl) -join "`n"
+        if ($LASTEXITCODE -ne 0) { throw "Failed to fetch TreeSize Free changelog." }
 
-        if ($xml -match '<d:Version[^>]*>([^<]+)</d:Version>') {
+        if ($html -match 'Version\s+([\d.]+)</h3>') {
             $version = $Matches[1]
         }
         else {
-            throw "Could not parse version from Chocolatey API response."
+            throw "Could not parse version from TreeSize Free changelog."
         }
 
         Write-Log "Latest TreeSize Free version : $version" -Quiet:$Quiet

@@ -1,32 +1,28 @@
 <#
-Vendor: Microsoft Corporation
-App: Sysinternals Suite
-CMName: Sysinternals Suite
-VendorUrl: https://learn.microsoft.com/en-us/sysinternals/
+Vendor: Postman Inc.
+App: Postman
+CMName: Postman
+VendorUrl: https://www.postman.com/
 
 .SYNOPSIS
-    Packages Sysinternals Suite for MECM.
+    Packages Postman for MECM as a per-user install.
 
 .DESCRIPTION
-    Downloads the latest Sysinternals Suite ZIP from Microsoft, stages content to
-    a versioned local folder with file-existence detection metadata, and creates
-    an MECM Application.
+    Downloads the latest Postman installer from the static Postman CDN URL,
+    stages content to a versioned local folder with file-existence detection
+    metadata, and creates an MECM Application configured for per-user deployment.
 
     Supports two-phase operation:
-      -StageOnly    Download ZIP, resolve version from Last-Modified header, write manifest
+      -StageOnly    Download, generate content wrappers, write manifest
       -PackageOnly  Read manifest, copy to network, create MECM application
 
-    Sysinternals Suite is a ZIP archive of standalone tools -- there is no
-    traditional installer. The install wrapper extracts the ZIP to
-    C:\Program Files\Sysinternals. The uninstall wrapper removes the folder.
+    This is a USER-level install (not system). The MECM deployment type uses
+    InstallForUser behavior and OnlyWhenUserLoggedOn logon requirement.
+    The installer is a Squirrel-based package; -s runs it silently.
 
-    The suite uses date-based versioning (e.g. 2026.2.4) derived from the
-    Last-Modified header on the download ZIP. Individual tools have their own
-    independent version numbers.
-
-    NOTE: Each Sysinternals tool shows a EULA dialog on first run. Users can
-    suppress this by passing -accepteula to any tool, or an administrator can
-    pre-accept by setting registry keys under HKCU:\Software\Sysinternals.
+    The download URL is version-agnostic (always serves latest), so the
+    installer is always re-downloaded. The version is read from the EXE's
+    FileVersionInfo.
 
 .PARAMETER SiteCode
     ConfigMgr site code PSDrive name (e.g., "MCM").
@@ -36,11 +32,9 @@ VendorUrl: https://learn.microsoft.com/en-us/sysinternals/
 
 .PARAMETER FileServerPath
     UNC root that contains your Applications folder (example: \\fileserver\sccm$).
-    Content is staged under: <FileServerPath>\Applications\Microsoft\Sysinternals Suite\<Version>
 
 .PARAMETER DownloadRoot
-    Local root folder for staging downloaded installers.
-    Default: C:\temp\ap
+    Local root folder for staging downloaded installers. Default: C:\temp\ap
 
 .PARAMETER EstimatedRuntimeMins
     Estimated runtime in minutes. Default: 15
@@ -55,8 +49,8 @@ VendorUrl: https://learn.microsoft.com/en-us/sysinternals/
     Runs only the Package phase.
 
 .PARAMETER GetLatestVersionOnly
-    Queries the Sysinternals download headers for the latest date-based
-    version, outputs the version string, and exits. No MECM changes are made.
+    Downloads the installer, reads its version, outputs the version string,
+    and exits.
 
 .REQUIREMENTS
     - PowerShell 5.1
@@ -89,42 +83,47 @@ if ($StageOnly -and $PackageOnly) {
 }
 
 # --- Configuration ---
-$ZipDownloadUrl = "https://download.sysinternals.com/files/SysinternalsSuite.zip"
-$ZipFileName    = "SysinternalsSuite.zip"
+$InstallerUrl      = "https://dl.pstmn.io/download/latest/win64"
+$InstallerFileName = "Postman-win64-Setup.exe"
 
-$VendorFolder = "Microsoft"
-$AppFolder    = "Sysinternals Suite"
+$VendorFolder = "Postman"
+$AppFolder    = "Postman"
 
-$BaseDownloadRoot = Join-Path $DownloadRoot "Sysinternals"
+$BaseDownloadRoot = Join-Path $DownloadRoot "Postman"
 
 # --- Functions ---
 
 
-function Get-LatestSysinternalsVersion {
+function Get-PostmanVersion {
+    <#
+    .SYNOPSIS
+        Downloads the latest Postman installer and reads its version.
+    #>
     param([switch]$Quiet)
 
-    Write-Log "ZIP download URL             : $ZipDownloadUrl" -Quiet:$Quiet
+    Write-Log "Installer URL                : $InstallerUrl" -Quiet:$Quiet
 
     try {
-        $headers = (curl.exe --head --silent --show-error $ZipDownloadUrl)
-        if ($LASTEXITCODE -ne 0) { throw "Failed to query Sysinternals download headers." }
+        Initialize-Folder -Path $BaseDownloadRoot
+        $localExe = Join-Path $BaseDownloadRoot $InstallerFileName
+        Write-Log "Downloading Postman..." -Quiet:$Quiet
+        Invoke-DownloadWithRetry -Url $InstallerUrl -OutFile $localExe
 
-        $lastModLine = $headers | Where-Object { $_ -match '^Last-Modified:' } | Select-Object -First 1
-        if (-not $lastModLine) { throw "No Last-Modified header from Sysinternals download." }
+        $fvi = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($localExe)
+        $version = $fvi.ProductVersion
+        if ([string]::IsNullOrWhiteSpace($version)) {
+            $version = $fvi.FileVersion
+        }
+        if ([string]::IsNullOrWhiteSpace($version)) {
+            throw "Could not read version from Postman installer."
+        }
 
-        $lastModValue = ($lastModLine -replace '^Last-Modified:\s*', '').Trim()
-        $date = [datetime]::ParseExact(
-            $lastModValue,
-            'ddd, dd MMM yyyy HH:mm:ss GMT',
-            [System.Globalization.CultureInfo]::InvariantCulture
-        )
-        $version = '{0}.{1}.{2}' -f $date.Year, $date.Month, $date.Day
-
-        Write-Log "Latest Sysinternals version  : $version" -Quiet:$Quiet
+        $version = $version.Trim()
+        Write-Log "Postman version              : $version" -Quiet:$Quiet
         return $version
     }
     catch {
-        Write-Log "Failed to get Sysinternals version: $($_.Exception.Message)" -Level ERROR
+        Write-Log "Failed to get Postman version: $($_.Exception.Message)" -Level ERROR
         return $null
     }
 }
@@ -134,10 +133,10 @@ function Get-LatestSysinternalsVersion {
 # Stage phase
 # ---------------------------------------------------------------------------
 
-function Invoke-StageSysinternals {
+function Invoke-StagePostman {
     Write-Log ""
     Write-Log ("=" * 60)
-    Write-Log "Sysinternals Suite - STAGE phase"
+    Write-Log "Postman - STAGE phase"
     Write-Log ("=" * 60)
     Write-Log ""
 
@@ -148,79 +147,78 @@ function Invoke-StageSysinternals {
 
     Initialize-Folder -Path $BaseDownloadRoot
 
-    # --- Get latest version ---
-    $version = Get-LatestSysinternalsVersion
-    if (-not $version) { throw "Could not determine latest Sysinternals version." }
+    # --- Download (always re-download; URL is version-agnostic) ---
+    $localExe = Join-Path $BaseDownloadRoot $InstallerFileName
+    Write-Log "Downloading Postman..."
+    Invoke-DownloadWithRetry -Url $InstallerUrl -OutFile $localExe
 
-    # --- Download ---
-    $localZip = Join-Path $BaseDownloadRoot $ZipFileName
+    # --- Read version from EXE ---
+    $fvi = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($localExe)
+    $version = $fvi.ProductVersion
+    if ([string]::IsNullOrWhiteSpace($version)) { $version = $fvi.FileVersion }
+    if ([string]::IsNullOrWhiteSpace($version)) { throw "Could not read version from Postman installer." }
+    $version = $version.Trim()
 
-    Write-Log "Download URL                 : $ZipDownloadUrl"
-    Write-Log "Local ZIP path               : $localZip"
     Write-Log "Version                      : $version"
     Write-Log ""
-
-    # Always re-download since URL is static (always latest) and we have a new version
-    Write-Log "Downloading Sysinternals Suite..."
-    Invoke-DownloadWithRetry -Url $ZipDownloadUrl -OutFile $localZip
 
     # --- Versioned local content folder ---
     $localContentPath = Join-Path $BaseDownloadRoot $version
     Initialize-Folder -Path $localContentPath
 
-    $stagedZip = Join-Path $localContentPath $ZipFileName
-    if (-not (Test-Path -LiteralPath $stagedZip)) {
-        Copy-Item -LiteralPath $localZip -Destination $stagedZip -Force -ErrorAction Stop
-        Write-Log "Copied ZIP to staged folder  : $stagedZip"
+    $stagedExe = Join-Path $localContentPath $InstallerFileName
+    if (-not (Test-Path -LiteralPath $stagedExe)) {
+        Copy-Item -LiteralPath $localExe -Destination $stagedExe -Force -ErrorAction Stop
+        Write-Log "Copied EXE to staged folder  : $stagedExe"
     }
     else {
-        Write-Log "Staged ZIP exists. Skipping copy."
+        Write-Log "Staged EXE exists. Skipping copy."
     }
 
     # --- Generate content wrappers ---
-    # Install: extract ZIP to Program Files, no traditional installer
-    $installPs1 = @(
-        "`$zipPath = Join-Path `$PSScriptRoot '$ZipFileName'"
-        "`$installDir = Join-Path `$env:ProgramFiles 'Sysinternals'"
-        "if (-not (Test-Path `$installDir)) { New-Item -Path `$installDir -ItemType Directory -Force | Out-Null }"
-        "Expand-Archive -Path `$zipPath -DestinationPath `$installDir -Force"
-        "exit 0"
+    # Squirrel installer: -s for silent
+    $installContent = (
+        ('$exePath = Join-Path $PSScriptRoot ''{0}''' -f $InstallerFileName),
+        '$proc = Start-Process -FilePath $exePath -ArgumentList @(''-s'') -Wait -PassThru -NoNewWindow',
+        'exit $proc.ExitCode'
     ) -join "`r`n"
 
-    $uninstallPs1 = @(
-        "`$installDir = Join-Path `$env:ProgramFiles 'Sysinternals'"
-        "if (Test-Path `$installDir) { Remove-Item -Path `$installDir -Recurse -Force }"
-        "exit 0"
+    $uninstallContent = (
+        '$updateExe = Join-Path $env:LOCALAPPDATA ''Postman\Update.exe''',
+        'if (Test-Path -LiteralPath $updateExe) {',
+        '    $proc = Start-Process -FilePath $updateExe -ArgumentList @(''--uninstall'', ''-s'') -Wait -PassThru -NoNewWindow',
+        '    exit $proc.ExitCode',
+        '}',
+        'exit 0'
     ) -join "`r`n"
 
     Write-ContentWrappers -OutputPath $localContentPath `
-        -InstallPs1Content $installPs1 `
-        -UninstallPs1Content $uninstallPs1
+        -InstallPs1Content $installContent `
+        -UninstallPs1Content $uninstallContent
 
     # --- Write stage manifest ---
-    $detectionPath = "{0}\Sysinternals" -f $env:ProgramFiles
+    $detectionPath = "%LOCALAPPDATA%\Postman"
 
-    $appName   = "Sysinternals Suite $version"
-    $publisher = "Microsoft Corporation"
+    $appName   = "Postman $version"
+    $publisher = "Postman Inc."
 
     Write-Log "Detection path               : $detectionPath"
-    Write-Log "Detection file               : procmon.exe"
+    Write-Log "Detection file               : Postman.exe"
     Write-Log ""
 
     $manifestPath = Join-Path $localContentPath "stage-manifest.json"
     Write-StageManifest -Path $manifestPath -ManifestData @{
-        AppName         = $appName
-        Publisher       = $publisher
-        SoftwareVersion = $version
-        InstallerFile   = $ZipFileName
-        Detection       = @{
-            Type          = "File"
-            FilePath      = $detectionPath
-            FileName      = "procmon.exe"
-            PropertyType  = "DateModified"
-            Operator      = "GreaterEquals"
-            ExpectedValue = (Get-Date).ToString("yyyy-MM-dd")
-            Is64Bit       = $true
+        AppName                  = $appName
+        Publisher                = $publisher
+        SoftwareVersion          = $version
+        InstallerFile            = $InstallerFileName
+        InstallationBehaviorType = "InstallForUser"
+        LogonRequirementType     = "OnlyWhenUserLoggedOn"
+        Detection                = @{
+            Type         = "File"
+            FilePath     = $detectionPath
+            FileName     = "Postman.exe"
+            PropertyType = "Existence"
         }
     }
 
@@ -237,10 +235,10 @@ function Invoke-StageSysinternals {
 # Package phase
 # ---------------------------------------------------------------------------
 
-function Invoke-PackageSysinternals {
+function Invoke-PackagePostman {
     Write-Log ""
     Write-Log ("=" * 60)
-    Write-Log "Sysinternals Suite - PACKAGE phase"
+    Write-Log "Postman - PACKAGE phase"
     Write-Log ("=" * 60)
     Write-Log ""
 
@@ -265,6 +263,7 @@ function Invoke-PackageSysinternals {
     Write-Log "AppName                      : $($manifest.AppName)"
     Write-Log "Publisher                    : $($manifest.Publisher)"
     Write-Log "SoftwareVersion              : $($manifest.SoftwareVersion)"
+    Write-Log "InstallationBehaviorType     : $($manifest.InstallationBehaviorType)"
     Write-Log ""
 
     if (-not (Test-NetworkShareAccess -Path $FileServerPath)) {
@@ -305,7 +304,7 @@ function Invoke-PackageSysinternals {
 if ($GetLatestVersionOnly) {
     try {
         $ProgressPreference = 'SilentlyContinue'
-        $v = Get-LatestSysinternalsVersion -Quiet
+        $v = Get-PostmanVersion -Quiet
         if (-not $v) { exit 1 }
         Write-Output $v
         exit 0
@@ -321,7 +320,7 @@ try {
 
     Write-Log ""
     Write-Log ("=" * 60)
-    Write-Log "Sysinternals Suite Auto-Packager starting"
+    Write-Log "Postman Auto-Packager starting"
     Write-Log ("=" * 60)
     Write-Log ""
     Write-Log ("RunAsUser                    : {0}\{1}" -f $env:USERDOMAIN,$env:USERNAME)
@@ -330,18 +329,18 @@ try {
     Write-Log "SiteCode                     : $SiteCode"
     Write-Log "FileServerPath               : $FileServerPath"
     Write-Log "BaseDownloadRoot             : $BaseDownloadRoot"
-    Write-Log "ZipDownloadUrl               : $ZipDownloadUrl"
+    Write-Log "InstallerUrl                 : $InstallerUrl"
     Write-Log ""
 
     if ($StageOnly) {
-        Invoke-StageSysinternals
+        Invoke-StagePostman
     }
     elseif ($PackageOnly) {
-        Invoke-PackageSysinternals
+        Invoke-PackagePostman
     }
     else {
-        Invoke-StageSysinternals
-        Invoke-PackageSysinternals
+        Invoke-StagePostman
+        Invoke-PackagePostman
     }
 
     Write-Log ""

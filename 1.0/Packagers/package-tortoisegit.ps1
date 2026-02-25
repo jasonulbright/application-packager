@@ -1,32 +1,23 @@
 <#
-Vendor: Microsoft Corporation
-App: Sysinternals Suite
-CMName: Sysinternals Suite
-VendorUrl: https://learn.microsoft.com/en-us/sysinternals/
+Vendor: TortoiseGit
+App: TortoiseGit (x64)
+CMName: TortoiseGit
+VendorUrl: https://tortoisegit.org/
 
 .SYNOPSIS
-    Packages Sysinternals Suite for MECM.
+    Packages TortoiseGit (x64) MSI for MECM.
 
 .DESCRIPTION
-    Downloads the latest Sysinternals Suite ZIP from Microsoft, stages content to
-    a versioned local folder with file-existence detection metadata, and creates
-    an MECM Application.
+    Downloads the latest TortoiseGit x64 MSI from tortoisegit.org, stages
+    content to a versioned local folder with ARP detection metadata, and
+    creates an MECM Application with registry-based detection.
 
     Supports two-phase operation:
-      -StageOnly    Download ZIP, resolve version from Last-Modified header, write manifest
+      -StageOnly    Download, derive ARP detection from MSI properties, write manifest
       -PackageOnly  Read manifest, copy to network, create MECM application
 
-    Sysinternals Suite is a ZIP archive of standalone tools -- there is no
-    traditional installer. The install wrapper extracts the ZIP to
-    C:\Program Files\Sysinternals. The uninstall wrapper removes the folder.
-
-    The suite uses date-based versioning (e.g. 2026.2.4) derived from the
-    Last-Modified header on the download ZIP. Individual tools have their own
-    independent version numbers.
-
-    NOTE: Each Sysinternals tool shows a EULA dialog on first run. Users can
-    suppress this by passing -accepteula to any tool, or an administrator can
-    pre-accept by setting registry keys under HKCU:\Software\Sysinternals.
+    The version is scraped from the TortoiseGit download page. The download
+    URL is hosted on download.tortoisegit.org.
 
 .PARAMETER SiteCode
     ConfigMgr site code PSDrive name (e.g., "MCM").
@@ -36,11 +27,9 @@ VendorUrl: https://learn.microsoft.com/en-us/sysinternals/
 
 .PARAMETER FileServerPath
     UNC root that contains your Applications folder (example: \\fileserver\sccm$).
-    Content is staged under: <FileServerPath>\Applications\Microsoft\Sysinternals Suite\<Version>
 
 .PARAMETER DownloadRoot
-    Local root folder for staging downloaded installers.
-    Default: C:\temp\ap
+    Local root folder for staging downloaded installers. Default: C:\temp\ap
 
 .PARAMETER EstimatedRuntimeMins
     Estimated runtime in minutes. Default: 15
@@ -55,8 +44,8 @@ VendorUrl: https://learn.microsoft.com/en-us/sysinternals/
     Runs only the Package phase.
 
 .PARAMETER GetLatestVersionOnly
-    Queries the Sysinternals download headers for the latest date-based
-    version, outputs the version string, and exits. No MECM changes are made.
+    Scrapes tortoisegit.org for the latest version, outputs the version string,
+    and exits. No download or MECM changes are made.
 
 .REQUIREMENTS
     - PowerShell 5.1
@@ -89,42 +78,50 @@ if ($StageOnly -and $PackageOnly) {
 }
 
 # --- Configuration ---
-$ZipDownloadUrl = "https://download.sysinternals.com/files/SysinternalsSuite.zip"
-$ZipFileName    = "SysinternalsSuite.zip"
+$DownloadPageUrl = "https://tortoisegit.org/download/"
 
-$VendorFolder = "Microsoft"
-$AppFolder    = "Sysinternals Suite"
+$VendorFolder = "TortoiseGit"
+$AppFolder    = "TortoiseGit"
 
-$BaseDownloadRoot = Join-Path $DownloadRoot "Sysinternals"
+$BaseDownloadRoot = Join-Path $DownloadRoot "TortoiseGit"
 
 # --- Functions ---
 
 
-function Get-LatestSysinternalsVersion {
+function Get-LatestTortoiseGitRelease {
     param([switch]$Quiet)
 
-    Write-Log "ZIP download URL             : $ZipDownloadUrl" -Quiet:$Quiet
+    Write-Log "Download page                : $DownloadPageUrl" -Quiet:$Quiet
 
     try {
-        $headers = (curl.exe --head --silent --show-error $ZipDownloadUrl)
-        if ($LASTEXITCODE -ne 0) { throw "Failed to query Sysinternals download headers." }
+        $html = (curl.exe -L --fail --silent --show-error $DownloadPageUrl) -join ''
+        if ($LASTEXITCODE -ne 0) { throw "Failed to fetch TortoiseGit download page." }
 
-        $lastModLine = $headers | Where-Object { $_ -match '^Last-Modified:' } | Select-Object -First 1
-        if (-not $lastModLine) { throw "No Last-Modified header from Sysinternals download." }
+        # Parse download link for x64 MSI: TortoiseGit-X.X.X.X-64bit.msi
+        # Page uses protocol-relative URLs (//download.tortoisegit.org/...)
+        if ($html -match '((?:https?:)?//download\.tortoisegit\.org/tgit/[\d.]+/TortoiseGit-[\d.]+-64bit\.msi)') {
+            $downloadUrl = $Matches[1]
+            if ($downloadUrl.StartsWith('//')) { $downloadUrl = "https:$downloadUrl" }
+        }
+        else {
+            throw "Could not find 64-bit MSI download link on TortoiseGit page."
+        }
 
-        $lastModValue = ($lastModLine -replace '^Last-Modified:\s*', '').Trim()
-        $date = [datetime]::ParseExact(
-            $lastModValue,
-            'ddd, dd MMM yyyy HH:mm:ss GMT',
-            [System.Globalization.CultureInfo]::InvariantCulture
-        )
-        $version = '{0}.{1}.{2}' -f $date.Year, $date.Month, $date.Day
+        # Extract version from filename
+        if ($downloadUrl -match 'TortoiseGit-([\d.]+)-64bit\.msi') {
+            $version = $Matches[1]
+        }
+        else {
+            throw "Could not parse version from TortoiseGit MSI filename."
+        }
 
-        Write-Log "Latest Sysinternals version  : $version" -Quiet:$Quiet
-        return $version
+        $fileName = "TortoiseGit-${version}-64bit.msi"
+
+        Write-Log "Latest TortoiseGit version   : $version" -Quiet:$Quiet
+        return @{ Version = $version; FileName = $fileName; DownloadUrl = $downloadUrl }
     }
     catch {
-        Write-Log "Failed to get Sysinternals version: $($_.Exception.Message)" -Level ERROR
+        Write-Log "Failed to get TortoiseGit version: $($_.Exception.Message)" -Level ERROR
         return $null
     }
 }
@@ -134,10 +131,10 @@ function Get-LatestSysinternalsVersion {
 # Stage phase
 # ---------------------------------------------------------------------------
 
-function Invoke-StageSysinternals {
+function Invoke-StageTortoiseGit {
     Write-Log ""
     Write-Log ("=" * 60)
-    Write-Log "Sysinternals Suite - STAGE phase"
+    Write-Log "TortoiseGit (x64) - STAGE phase"
     Write-Log ("=" * 60)
     Write-Log ""
 
@@ -148,83 +145,90 @@ function Invoke-StageSysinternals {
 
     Initialize-Folder -Path $BaseDownloadRoot
 
-    # --- Get latest version ---
-    $version = Get-LatestSysinternalsVersion
-    if (-not $version) { throw "Could not determine latest Sysinternals version." }
+    $releaseInfo = Get-LatestTortoiseGitRelease
+    if (-not $releaseInfo) { throw "Could not resolve TortoiseGit version." }
+
+    $version      = $releaseInfo.Version
+    $MsiFileName  = $releaseInfo.FileName
+    $downloadUrl  = $releaseInfo.DownloadUrl
+
+    Write-Log "Version                      : $version"
+    Write-Log "Download URL                 : $downloadUrl"
+    Write-Log "MSI filename                 : $MsiFileName"
+    Write-Log ""
 
     # --- Download ---
-    $localZip = Join-Path $BaseDownloadRoot $ZipFileName
+    $localMsi = Join-Path $BaseDownloadRoot $MsiFileName
+    Write-Log "Local MSI path               : $localMsi"
 
-    Write-Log "Download URL                 : $ZipDownloadUrl"
-    Write-Log "Local ZIP path               : $localZip"
-    Write-Log "Version                      : $version"
-    Write-Log ""
-
-    # Always re-download since URL is static (always latest) and we have a new version
-    Write-Log "Downloading Sysinternals Suite..."
-    Invoke-DownloadWithRetry -Url $ZipDownloadUrl -OutFile $localZip
-
-    # --- Versioned local content folder ---
-    $localContentPath = Join-Path $BaseDownloadRoot $version
-    Initialize-Folder -Path $localContentPath
-
-    $stagedZip = Join-Path $localContentPath $ZipFileName
-    if (-not (Test-Path -LiteralPath $stagedZip)) {
-        Copy-Item -LiteralPath $localZip -Destination $stagedZip -Force -ErrorAction Stop
-        Write-Log "Copied ZIP to staged folder  : $stagedZip"
+    if (-not (Test-Path -LiteralPath $localMsi)) {
+        Write-Log "Downloading TortoiseGit MSI..."
+        Invoke-DownloadWithRetry -Url $downloadUrl -OutFile $localMsi
     }
     else {
-        Write-Log "Staged ZIP exists. Skipping copy."
+        Write-Log "Local MSI exists. Skipping download."
     }
 
+    # --- Extract MSI properties ---
+    $props = Get-MsiPropertyMap -MsiPath $localMsi
+
+    $productVersionRaw = $props["ProductVersion"]
+    $productCode       = $props["ProductCode"]
+
+    if ([string]::IsNullOrWhiteSpace($productVersionRaw)) { throw "MSI ProductVersion missing." }
+    if ([string]::IsNullOrWhiteSpace($productCode))       { throw "MSI ProductCode missing." }
+
+    Write-Log "MSI ProductName              : $($props['ProductName'])"
+    Write-Log "MSI ProductVersion           : $productVersionRaw"
+    Write-Log "MSI Manufacturer             : $($props['Manufacturer'])"
+    Write-Log "MSI ProductCode              : $productCode"
+    Write-Log ""
+
+    # --- Versioned local content folder ---
+    $localContentPath = Join-Path $BaseDownloadRoot $productVersionRaw
+    Initialize-Folder -Path $localContentPath
+
+    $stagedMsi = Join-Path $localContentPath $MsiFileName
+    if (-not (Test-Path -LiteralPath $stagedMsi)) {
+        Copy-Item -LiteralPath $localMsi -Destination $stagedMsi -Force -ErrorAction Stop
+        Write-Log "Copied MSI to staged folder  : $stagedMsi"
+    }
+    else {
+        Write-Log "Staged MSI exists. Skipping copy."
+    }
+
+    # --- Derive ARP detection from MSI properties ---
+    $arpRegistryKey = "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\" + $productCode
+    Write-Log "ARP RegistryKey              : $arpRegistryKey"
+    Write-Log "ARP DisplayVersion           : $productVersionRaw"
+    Write-Log ""
+
     # --- Generate content wrappers ---
-    # Install: extract ZIP to Program Files, no traditional installer
-    $installPs1 = @(
-        "`$zipPath = Join-Path `$PSScriptRoot '$ZipFileName'"
-        "`$installDir = Join-Path `$env:ProgramFiles 'Sysinternals'"
-        "if (-not (Test-Path `$installDir)) { New-Item -Path `$installDir -ItemType Directory -Force | Out-Null }"
-        "Expand-Archive -Path `$zipPath -DestinationPath `$installDir -Force"
-        "exit 0"
-    ) -join "`r`n"
-
-    $uninstallPs1 = @(
-        "`$installDir = Join-Path `$env:ProgramFiles 'Sysinternals'"
-        "if (Test-Path `$installDir) { Remove-Item -Path `$installDir -Recurse -Force }"
-        "exit 0"
-    ) -join "`r`n"
-
+    $wrapperContent = New-MsiWrapperContent -MsiFileName $MsiFileName
     Write-ContentWrappers -OutputPath $localContentPath `
-        -InstallPs1Content $installPs1 `
-        -UninstallPs1Content $uninstallPs1
+        -InstallPs1Content $wrapperContent.Install `
+        -UninstallPs1Content $wrapperContent.Uninstall
 
     # --- Write stage manifest ---
-    $detectionPath = "{0}\Sysinternals" -f $env:ProgramFiles
-
-    $appName   = "Sysinternals Suite $version"
-    $publisher = "Microsoft Corporation"
-
-    Write-Log "Detection path               : $detectionPath"
-    Write-Log "Detection file               : procmon.exe"
-    Write-Log ""
+    $publisher = "TortoiseGit"
+    $appName = "TortoiseGit $productVersionRaw (x64)"
 
     $manifestPath = Join-Path $localContentPath "stage-manifest.json"
     Write-StageManifest -Path $manifestPath -ManifestData @{
         AppName         = $appName
         Publisher       = $publisher
-        SoftwareVersion = $version
-        InstallerFile   = $ZipFileName
+        SoftwareVersion = $productVersionRaw
+        InstallerFile   = $MsiFileName
         Detection       = @{
-            Type          = "File"
-            FilePath      = $detectionPath
-            FileName      = "procmon.exe"
-            PropertyType  = "DateModified"
-            Operator      = "GreaterEquals"
-            ExpectedValue = (Get-Date).ToString("yyyy-MM-dd")
-            Is64Bit       = $true
+            Type                = "RegistryKeyValue"
+            RegistryKeyRelative = $arpRegistryKey
+            ValueName           = "DisplayVersion"
+            ExpectedValue       = $productVersionRaw
+            Is64Bit             = $true
         }
     }
 
-    Set-Content -LiteralPath (Join-Path $BaseDownloadRoot "staged-version.txt") -Value $version -Encoding ASCII -ErrorAction Stop
+    Set-Content -LiteralPath (Join-Path $BaseDownloadRoot "staged-version.txt") -Value $productVersionRaw -Encoding ASCII -ErrorAction Stop
 
     Write-Log ""
     Write-Log "Stage complete               : $localContentPath"
@@ -237,10 +241,10 @@ function Invoke-StageSysinternals {
 # Package phase
 # ---------------------------------------------------------------------------
 
-function Invoke-PackageSysinternals {
+function Invoke-PackageTortoiseGit {
     Write-Log ""
     Write-Log ("=" * 60)
-    Write-Log "Sysinternals Suite - PACKAGE phase"
+    Write-Log "TortoiseGit (x64) - PACKAGE phase"
     Write-Log ("=" * 60)
     Write-Log ""
 
@@ -265,6 +269,7 @@ function Invoke-PackageSysinternals {
     Write-Log "AppName                      : $($manifest.AppName)"
     Write-Log "Publisher                    : $($manifest.Publisher)"
     Write-Log "SoftwareVersion              : $($manifest.SoftwareVersion)"
+    Write-Log "Detection Key                : $($manifest.Detection.RegistryKeyRelative)"
     Write-Log ""
 
     if (-not (Test-NetworkShareAccess -Path $FileServerPath)) {
@@ -305,9 +310,9 @@ function Invoke-PackageSysinternals {
 if ($GetLatestVersionOnly) {
     try {
         $ProgressPreference = 'SilentlyContinue'
-        $v = Get-LatestSysinternalsVersion -Quiet
-        if (-not $v) { exit 1 }
-        Write-Output $v
+        $info = Get-LatestTortoiseGitRelease -Quiet
+        if (-not $info) { exit 1 }
+        Write-Output $info.Version
         exit 0
     }
     catch {
@@ -321,7 +326,7 @@ try {
 
     Write-Log ""
     Write-Log ("=" * 60)
-    Write-Log "Sysinternals Suite Auto-Packager starting"
+    Write-Log "TortoiseGit (x64) Auto-Packager starting"
     Write-Log ("=" * 60)
     Write-Log ""
     Write-Log ("RunAsUser                    : {0}\{1}" -f $env:USERDOMAIN,$env:USERNAME)
@@ -330,18 +335,18 @@ try {
     Write-Log "SiteCode                     : $SiteCode"
     Write-Log "FileServerPath               : $FileServerPath"
     Write-Log "BaseDownloadRoot             : $BaseDownloadRoot"
-    Write-Log "ZipDownloadUrl               : $ZipDownloadUrl"
+    Write-Log "DownloadPageUrl              : $DownloadPageUrl"
     Write-Log ""
 
     if ($StageOnly) {
-        Invoke-StageSysinternals
+        Invoke-StageTortoiseGit
     }
     elseif ($PackageOnly) {
-        Invoke-PackageSysinternals
+        Invoke-PackageTortoiseGit
     }
     else {
-        Invoke-StageSysinternals
-        Invoke-PackageSysinternals
+        Invoke-StageTortoiseGit
+        Invoke-PackageTortoiseGit
     }
 
     Write-Log ""

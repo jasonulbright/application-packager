@@ -1,32 +1,27 @@
 <#
-Vendor: Microsoft Corporation
-App: Sysinternals Suite
-CMName: Sysinternals Suite
-VendorUrl: https://learn.microsoft.com/en-us/sysinternals/
+Vendor: Broadcom
+App: VMware Workstation Pro
+CMName: VMware Workstation
+VendorUrl: https://www.vmware.com/products/desktop-hypervisor/workstation-and-fusion
 
 .SYNOPSIS
-    Packages Sysinternals Suite for MECM.
+    Packages VMware Workstation Pro for MECM.
 
 .DESCRIPTION
-    Downloads the latest Sysinternals Suite ZIP from Microsoft, stages content to
-    a versioned local folder with file-existence detection metadata, and creates
-    an MECM Application.
+    Stages a manually downloaded VMware Workstation Pro installer, generates
+    content wrappers and detection metadata, and creates an MECM Application
+    with file-based version detection.
 
     Supports two-phase operation:
-      -StageOnly    Download ZIP, resolve version from Last-Modified header, write manifest
+      -StageOnly    Read version from installer, generate content wrappers, write manifest
       -PackageOnly  Read manifest, copy to network, create MECM application
 
-    Sysinternals Suite is a ZIP archive of standalone tools -- there is no
-    traditional installer. The install wrapper extracts the ZIP to
-    C:\Program Files\Sysinternals. The uninstall wrapper removes the folder.
+    NOTE: VMware Workstation must be downloaded manually from the Broadcom
+    Support Portal (login required). Place the installer EXE at:
+        C:\temp\ap\VMwareWorkstation\VMware-workstation-full-*.exe
 
-    The suite uses date-based versioning (e.g. 2026.2.4) derived from the
-    Last-Modified header on the download ZIP. Individual tools have their own
-    independent version numbers.
-
-    NOTE: Each Sysinternals tool shows a EULA dialog on first run. Users can
-    suppress this by passing -accepteula to any tool, or an administrator can
-    pre-accept by setting registry keys under HKCU:\Software\Sysinternals.
+    The version is read from the EXE's FileVersionInfo. The installer is a
+    custom bootstrapper that wraps an MSI; it supports /s for silent install.
 
 .PARAMETER SiteCode
     ConfigMgr site code PSDrive name (e.g., "MCM").
@@ -36,17 +31,15 @@ VendorUrl: https://learn.microsoft.com/en-us/sysinternals/
 
 .PARAMETER FileServerPath
     UNC root that contains your Applications folder (example: \\fileserver\sccm$).
-    Content is staged under: <FileServerPath>\Applications\Microsoft\Sysinternals Suite\<Version>
 
 .PARAMETER DownloadRoot
-    Local root folder for staging downloaded installers.
-    Default: C:\temp\ap
+    Local root folder for staging downloaded installers. Default: C:\temp\ap
 
 .PARAMETER EstimatedRuntimeMins
     Estimated runtime in minutes. Default: 15
 
 .PARAMETER MaximumRuntimeMins
-    Maximum allowed runtime in minutes. Default: 30
+    Maximum allowed runtime in minutes. Default: 60
 
 .PARAMETER StageOnly
     Runs only the Stage phase.
@@ -55,8 +48,8 @@ VendorUrl: https://learn.microsoft.com/en-us/sysinternals/
     Runs only the Package phase.
 
 .PARAMETER GetLatestVersionOnly
-    Queries the Sysinternals download headers for the latest date-based
-    version, outputs the version string, and exits. No MECM changes are made.
+    Reads the version from the locally placed installer and outputs it.
+    Returns exit code 1 if no installer is found.
 
 .REQUIREMENTS
     - PowerShell 5.1
@@ -64,6 +57,7 @@ VendorUrl: https://learn.microsoft.com/en-us/sysinternals/
     - RBAC permissions to create Applications and Deployment Types
     - Local administrator
     - Write access to FileServerPath
+    - VMware Workstation installer manually downloaded from Broadcom
 #>
 
 param(
@@ -72,7 +66,7 @@ param(
     [string]$FileServerPath = "\\fileserver\sccm$",
     [string]$DownloadRoot = "C:\temp\ap",
     [int]$EstimatedRuntimeMins = 15,
-    [int]$MaximumRuntimeMins = 30,
+    [int]$MaximumRuntimeMins = 60,
     [string]$LogPath,
     [switch]$GetLatestVersionOnly,
     [switch]$StageOnly,
@@ -89,44 +83,37 @@ if ($StageOnly -and $PackageOnly) {
 }
 
 # --- Configuration ---
-$ZipDownloadUrl = "https://download.sysinternals.com/files/SysinternalsSuite.zip"
-$ZipFileName    = "SysinternalsSuite.zip"
+$VendorFolder = "Broadcom"
+$AppFolder    = "VMware Workstation"
 
-$VendorFolder = "Microsoft"
-$AppFolder    = "Sysinternals Suite"
-
-$BaseDownloadRoot = Join-Path $DownloadRoot "Sysinternals"
+$BaseDownloadRoot = Join-Path $DownloadRoot "VMwareWorkstation"
 
 # --- Functions ---
 
 
-function Get-LatestSysinternalsVersion {
-    param([switch]$Quiet)
+function Find-LocalInstaller {
+    <#
+    .SYNOPSIS
+        Finds the most recent VMware Workstation installer in the download root.
+    #>
+    $exes = Get-ChildItem -Path $BaseDownloadRoot -Filter "VMware-workstation-full-*.exe" -File -ErrorAction SilentlyContinue
+    if (-not $exes -or $exes.Count -eq 0) { return $null }
+    return ($exes | Sort-Object LastWriteTime -Descending | Select-Object -First 1)
+}
 
-    Write-Log "ZIP download URL             : $ZipDownloadUrl" -Quiet:$Quiet
 
-    try {
-        $headers = (curl.exe --head --silent --show-error $ZipDownloadUrl)
-        if ($LASTEXITCODE -ne 0) { throw "Failed to query Sysinternals download headers." }
+function Get-InstallerVersion {
+    param([string]$ExePath)
 
-        $lastModLine = $headers | Where-Object { $_ -match '^Last-Modified:' } | Select-Object -First 1
-        if (-not $lastModLine) { throw "No Last-Modified header from Sysinternals download." }
-
-        $lastModValue = ($lastModLine -replace '^Last-Modified:\s*', '').Trim()
-        $date = [datetime]::ParseExact(
-            $lastModValue,
-            'ddd, dd MMM yyyy HH:mm:ss GMT',
-            [System.Globalization.CultureInfo]::InvariantCulture
-        )
-        $version = '{0}.{1}.{2}' -f $date.Year, $date.Month, $date.Day
-
-        Write-Log "Latest Sysinternals version  : $version" -Quiet:$Quiet
-        return $version
+    $fi = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($ExePath)
+    $v = $fi.FileVersion
+    if ([string]::IsNullOrWhiteSpace($v)) {
+        $v = $fi.ProductVersion
     }
-    catch {
-        Write-Log "Failed to get Sysinternals version: $($_.Exception.Message)" -Level ERROR
-        return $null
+    if ([string]::IsNullOrWhiteSpace($v)) {
+        throw "Could not read version from installer: $ExePath"
     }
+    return $v.Trim()
 }
 
 
@@ -134,10 +121,10 @@ function Get-LatestSysinternalsVersion {
 # Stage phase
 # ---------------------------------------------------------------------------
 
-function Invoke-StageSysinternals {
+function Invoke-StageVMwareWorkstation {
     Write-Log ""
     Write-Log ("=" * 60)
-    Write-Log "Sysinternals Suite - STAGE phase"
+    Write-Log "VMware Workstation Pro - STAGE phase"
     Write-Log ("=" * 60)
     Write-Log ""
 
@@ -148,63 +135,61 @@ function Invoke-StageSysinternals {
 
     Initialize-Folder -Path $BaseDownloadRoot
 
-    # --- Get latest version ---
-    $version = Get-LatestSysinternalsVersion
-    if (-not $version) { throw "Could not determine latest Sysinternals version." }
+    # --- Find locally placed installer ---
+    $installer = Find-LocalInstaller
+    if (-not $installer) {
+        Write-Log ("No VMware Workstation installer found. Please download manually from:" +
+            "`n  https://support.broadcom.com/" +
+            "`nand place at:" +
+            "`n  {0}\VMware-workstation-full-*.exe" -f $BaseDownloadRoot) -Level ERROR
+        exit 1
+    }
 
-    # --- Download ---
-    $localZip = Join-Path $BaseDownloadRoot $ZipFileName
+    $installerFileName = $installer.Name
+    $localExe = $installer.FullName
 
-    Write-Log "Download URL                 : $ZipDownloadUrl"
-    Write-Log "Local ZIP path               : $localZip"
+    # --- Read version from EXE ---
+    $version = Get-InstallerVersion -ExePath $localExe
+
+    Write-Log "Installer                    : $localExe"
     Write-Log "Version                      : $version"
     Write-Log ""
-
-    # Always re-download since URL is static (always latest) and we have a new version
-    Write-Log "Downloading Sysinternals Suite..."
-    Invoke-DownloadWithRetry -Url $ZipDownloadUrl -OutFile $localZip
 
     # --- Versioned local content folder ---
     $localContentPath = Join-Path $BaseDownloadRoot $version
     Initialize-Folder -Path $localContentPath
 
-    $stagedZip = Join-Path $localContentPath $ZipFileName
-    if (-not (Test-Path -LiteralPath $stagedZip)) {
-        Copy-Item -LiteralPath $localZip -Destination $stagedZip -Force -ErrorAction Stop
-        Write-Log "Copied ZIP to staged folder  : $stagedZip"
+    $stagedExe = Join-Path $localContentPath $installerFileName
+    if (-not (Test-Path -LiteralPath $stagedExe)) {
+        Copy-Item -LiteralPath $localExe -Destination $stagedExe -Force -ErrorAction Stop
+        Write-Log "Copied EXE to staged folder  : $stagedExe"
     }
     else {
-        Write-Log "Staged ZIP exists. Skipping copy."
+        Write-Log "Staged EXE exists. Skipping copy."
     }
 
     # --- Generate content wrappers ---
-    # Install: extract ZIP to Program Files, no traditional installer
-    $installPs1 = @(
-        "`$zipPath = Join-Path `$PSScriptRoot '$ZipFileName'"
-        "`$installDir = Join-Path `$env:ProgramFiles 'Sysinternals'"
-        "if (-not (Test-Path `$installDir)) { New-Item -Path `$installDir -ItemType Directory -Force | Out-Null }"
-        "Expand-Archive -Path `$zipPath -DestinationPath `$installDir -Force"
-        "exit 0"
-    ) -join "`r`n"
-
-    $uninstallPs1 = @(
-        "`$installDir = Join-Path `$env:ProgramFiles 'Sysinternals'"
-        "if (Test-Path `$installDir) { Remove-Item -Path `$installDir -Recurse -Force }"
-        "exit 0"
-    ) -join "`r`n"
+    # VMware bootstrapper: /s for silent, /v passes args to inner MSI
+    $wrapperContent = New-ExeWrapperContent `
+        -InstallerFileName $installerFileName `
+        -InstallArgs @"
+'/s', '/v"/qn EULAS_AGREED=1 AUTOSOFTWAREUPDATE=0 DATACOLLECTION=0"'
+"@ `
+        -UninstallCommand "`$env:ProgramFiles\VMware\VMware Workstation\vmware-installer.exe" `
+        -UninstallArgs "'/s', '/v`"/qn`"'"
 
     Write-ContentWrappers -OutputPath $localContentPath `
-        -InstallPs1Content $installPs1 `
-        -UninstallPs1Content $uninstallPs1
+        -InstallPs1Content $wrapperContent.Install `
+        -UninstallPs1Content $wrapperContent.Uninstall
 
     # --- Write stage manifest ---
-    $detectionPath = "{0}\Sysinternals" -f $env:ProgramFiles
+    $detectionPath = "{0}\VMware\VMware Workstation" -f ${env:ProgramFiles(x86)}
 
-    $appName   = "Sysinternals Suite $version"
-    $publisher = "Microsoft Corporation"
+    $appName   = "VMware Workstation Pro $version"
+    $publisher = "Broadcom"
 
     Write-Log "Detection path               : $detectionPath"
-    Write-Log "Detection file               : procmon.exe"
+    Write-Log "Detection file               : vmware.exe"
     Write-Log ""
 
     $manifestPath = Join-Path $localContentPath "stage-manifest.json"
@@ -212,15 +197,15 @@ function Invoke-StageSysinternals {
         AppName         = $appName
         Publisher       = $publisher
         SoftwareVersion = $version
-        InstallerFile   = $ZipFileName
+        InstallerFile   = $installerFileName
         Detection       = @{
             Type          = "File"
             FilePath      = $detectionPath
-            FileName      = "procmon.exe"
-            PropertyType  = "DateModified"
+            FileName      = "vmware.exe"
+            PropertyType  = "Version"
             Operator      = "GreaterEquals"
-            ExpectedValue = (Get-Date).ToString("yyyy-MM-dd")
-            Is64Bit       = $true
+            ExpectedValue = $version
+            Is64Bit       = $false
         }
     }
 
@@ -237,10 +222,10 @@ function Invoke-StageSysinternals {
 # Package phase
 # ---------------------------------------------------------------------------
 
-function Invoke-PackageSysinternals {
+function Invoke-PackageVMwareWorkstation {
     Write-Log ""
     Write-Log ("=" * 60)
-    Write-Log "Sysinternals Suite - PACKAGE phase"
+    Write-Log "VMware Workstation Pro - PACKAGE phase"
     Write-Log ("=" * 60)
     Write-Log ""
 
@@ -304,9 +289,13 @@ function Invoke-PackageSysinternals {
 # --- Latest-only mode ---
 if ($GetLatestVersionOnly) {
     try {
-        $ProgressPreference = 'SilentlyContinue'
-        $v = Get-LatestSysinternalsVersion -Quiet
-        if (-not $v) { exit 1 }
+        Initialize-Folder -Path $BaseDownloadRoot
+        $installer = Find-LocalInstaller
+        if (-not $installer) {
+            Write-Error "No VMware Workstation installer found in $BaseDownloadRoot"
+            exit 1
+        }
+        $v = Get-InstallerVersion -ExePath $installer.FullName
         Write-Output $v
         exit 0
     }
@@ -321,7 +310,7 @@ try {
 
     Write-Log ""
     Write-Log ("=" * 60)
-    Write-Log "Sysinternals Suite Auto-Packager starting"
+    Write-Log "VMware Workstation Pro Auto-Packager starting"
     Write-Log ("=" * 60)
     Write-Log ""
     Write-Log ("RunAsUser                    : {0}\{1}" -f $env:USERDOMAIN,$env:USERNAME)
@@ -330,18 +319,18 @@ try {
     Write-Log "SiteCode                     : $SiteCode"
     Write-Log "FileServerPath               : $FileServerPath"
     Write-Log "BaseDownloadRoot             : $BaseDownloadRoot"
-    Write-Log "ZipDownloadUrl               : $ZipDownloadUrl"
+    Write-Log "(Manual download required)"
     Write-Log ""
 
     if ($StageOnly) {
-        Invoke-StageSysinternals
+        Invoke-StageVMwareWorkstation
     }
     elseif ($PackageOnly) {
-        Invoke-PackageSysinternals
+        Invoke-PackageVMwareWorkstation
     }
     else {
-        Invoke-StageSysinternals
-        Invoke-PackageSysinternals
+        Invoke-StageVMwareWorkstation
+        Invoke-PackageVMwareWorkstation
     }
 
     Write-Log ""

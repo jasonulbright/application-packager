@@ -2,7 +2,7 @@
 
 All notable changes to AppPackager are documented in this file.
 
-## [1.0] - 2026-02-24
+## [1.0] - 2026-02-25
 
 ### Added
 - **Vendor URL debug column** — new "Vendor URL (Debug)" column in the DataGridView, visible when the Debug Columns checkbox is checked; shows the vendor's product page URL for each packager
@@ -11,7 +11,7 @@ All notable changes to AppPackager are documented in this file.
 - `VendorUrl:` metadata tag added to all 97 packager script headers — parsed by `Get-PackagerMetadata` alongside existing `Vendor:`, `App:`, and `CMName:` tags
 - `Description` field added to `Get-PackagerMetadata` — parses the first non-blank line after `.SYNOPSIS` in the script's comment-based help block
 - **Citrix Workspace Switches dialog** — new File menu item "Citrix Workspace Switches..." opens a modal dialog for configuring CWA silent install parameters; includes grouped checkboxes for installation options, plugins/add-ons, update/telemetry, store policy, and ADDLOCAL component selection; persists settings to `citrix-workspace-switches.json`; "Preview Command" button shows assembled command line; tooltips sourced from Citrix vendor documentation
-- 35 new packager scripts (62 -> 97 total):
+- 52 new packager scripts (62 -> 114 total):
   - `package-slack.ps1` — Slack (x64) MSI from Slack CDN redirect URL; ARP registry detection
   - `package-nodejs.ps1` — Node.js LTS (x64) MSI from nodejs.org; version from dist/index.json API (LTS filter); ARP registry detection
   - `package-powershell7.ps1` — PowerShell 7 (x64) MSI from GitHub releases; custom MSI properties for PATH, PS Remoting, context menu; ARP registry detection
@@ -20,9 +20,9 @@ All notable changes to AppPackager are documented in this file.
   - `package-teamviewerhost.ps1` — TeamViewer Host (x64) EXE from TeamViewer CDN; silent /S install; file version detection; unattended-access variant for managed endpoints
   - `package-paintdotnet.ps1` — Paint.NET (x64) MSI extracted from GitHub releases ZIP; custom MSI properties (CHECKFORUPDATES=0); ARP registry detection
   - `package-anydesk.ps1` — AnyDesk EXE from static URL; file version detection (x86 install path)
-  - `package-foxitreader.ps1` — Foxit PDF Reader (x64) EXE from Foxit CDN; version from Chocolatey API; file version detection
+  - `package-foxitreader.ps1` — Foxit PDF Reader (x64) EXE from Foxit CDN redirect; version from redirect URL; file version detection
   - `package-bitwarden.ps1` — Bitwarden Desktop (x64) NSIS EXE from GitHub releases; filter for desktop-v* tags; file version detection
-  - `package-treesizefree.ps1` — TreeSize Free InnoSetup EXE from JAM Software; version from Chocolatey API; file version detection
+  - `package-treesizefree.ps1` — TreeSize Free InnoSetup EXE from JAM Software; version from changelog page; file version detection
   - `package-brave.ps1` — Brave Browser (x64) Chromium standalone EXE from GitHub releases; file version detection; uninstall via Chromium setup.exe in versioned subfolder
   - `package-thunderbird.ps1` — Mozilla Thunderbird (x64) MSI from Mozilla CDN; version from product-details API; file version detection (ARP key includes version+locale, too fragile for registry detection)
   - `package-libreoffice.ps1` — LibreOffice (x64) MSI (~350MB) from Document Foundation CDN; version from endoflife.date API; ARP registry detection; extended default timeouts (30/60 min)
@@ -33,9 +33,9 @@ All notable changes to AppPackager are documented in this file.
   - `package-postgresql17.ps1` — PostgreSQL 17 (x64) BitRock EXE from EnterpriseDB CDN; version from endoflife.date API; file version detection on `postgres.exe`
   - `package-cutepdfwriter.ps1` — CutePDF Writer EXE + Ghostscript converter from cutepdf.com; version from file properties; ARP registry detection (Wow6432Node)
   - `package-winrar.ps1` — WinRAR (x64) EXE from rarlab.com; version scraped from download page; ARP registry detection; copies rarreg.key if present for licensed deployments
-  - `package-sysinternals.ps1` — Sysinternals Suite ZIP from Microsoft; date-based version from Chocolatey API; file existence detection (procmon.exe); extracts to Program Files
+  - `package-sysinternals.ps1` — Sysinternals Suite ZIP from Microsoft; date-based version from Last-Modified header; file existence detection (procmon.exe); extracts to Program Files
   - `package-malwarebytes.ps1` — Malwarebytes offline EXE from Malwarebytes CDN; version from file properties; ARP registry detection (static Inno Setup key)
-  - `package-ccleaner.ps1` — CCleaner Free slim EXE from ccleaner.com; version from Chocolatey API; ARP registry detection
+  - `package-ccleaner.ps1` — CCleaner Free slim EXE from ccleaner.com; version from version-history page; ARP registry detection
   - `package-powershell7lts.ps1` — PowerShell 7 LTS (x64) MSI from GitHub releases; filters for v7.4.x LTS branch; ARP registry detection; same MSI properties as Current channel script
   - `package-gimp.ps1` — GIMP (x64) InnoSetup EXE from GIMP CDN; version from `0.0_LATEST-IS-*` marker file in CDN directory listing; ARP registry detection via stable key `GIMP-3.0_is1`
   - `package-windirstat.ps1` — WinDirStat (x64) MSI from GitHub releases; version from `release/v*` tag; file version detection (WiX auto-generated ProductCode makes ARP unreliable)
@@ -45,20 +45,40 @@ All notable changes to AppPackager are documented in this file.
   - `package-tableaudesktop.ps1` — Tableau Desktop (x64) EXE from Tableau CDN (`tssoftwareregistered/`); version from release notes page scrape; file version detection on `tableau.exe`; replaces deprecated temp-install version
   - `package-tableauprep.ps1` — Tableau Prep Builder (x64) EXE from Tableau CDN (`tssoftware/`); version from release notes page scrape; file version detection on `tableau-prep-builder.exe`; replaces deprecated temp-install version
   - `package-tableaureader.ps1` — Tableau Reader (x64) EXE from Tableau CDN (`tssoftware/`); version from release notes page scrape; file version detection on `tabreader.exe`; free product, no license required; replaces deprecated temp-install version
-  - `package-citrixworkspacecr.ps1` — Citrix Workspace App Current Release (CR) (x64) EXE from Citrix CDN; version from Chocolatey API; ARP registry detection on fixed `CitrixOnlinePluginPackWeb` key; install switches read from `citrix-workspace-switches.json` for enterprise customization (SSO, plugins, ADDLOCAL, store URL, telemetry)
-  - `package-citrixworkspaceltsr.ps1` — Citrix Workspace App LTSR (x64) EXE; version from Chocolatey API with local-file fallback; LTSR download URL resolved from Citrix download page or manual placement; same ARP detection and switches config as CR script
+  - `package-citrixworkspacecr.ps1` — Citrix Workspace App Current Release (CR) (x64) EXE from Citrix CDN; version from Citrix catalog XML; ARP registry detection on fixed `CitrixOnlinePluginPackWeb` key; install switches read from `citrix-workspace-switches.json` for enterprise customization (SSO, plugins, ADDLOCAL, store URL, telemetry)
+  - `package-citrixworkspaceltsr.ps1` — Citrix Workspace App LTSR (x64) EXE; version and download URL from Citrix catalog XML with page-scrape and local-file fallbacks; same ARP detection and switches config as CR script
+  - `package-winmerge.ps1` — WinMerge (x64) InnoSetup EXE from GitHub releases (`WinMerge/winmerge`); file version detection on `WinMergeU.exe`
+  - `package-audacity.ps1` — Audacity (x64) InnoSetup EXE from GitHub releases (`audacity/audacity`, tag prefix `Audacity-`); file version detection on `Audacity.exe`
+  - `package-sharex.ps1` — ShareX InnoSetup EXE from GitHub releases (`ShareX/ShareX`); extra flags `/SP- /NORUN`; file version detection on `ShareX.exe`
+  - `package-wiztree.ps1` — WizTree InnoSetup EXE from `diskanalyzer.com`; version scraped from download page (dots to underscores in URL); file version detection on `WizTree64.exe`
+  - `package-cpuz.ps1` — CPU-Z InnoSetup EXE from `cpuid.com`; version scraped from product page; file version detection on `cpuz_x64.exe`
+  - `package-drawio.ps1` — draw.io MSI from GitHub releases (`jgraph/drawio-desktop`); ARP registry detection derived from MSI ProductCode
+  - `package-mremoteng.ps1` — mRemoteNG MSI from GitHub releases (`mRemoteNG/mRemoteNG`, build number in filename); ARP registry detection derived from MSI ProductCode
+  - `package-tortoisegit.ps1` — TortoiseGit (x64) MSI from `tortoisegit.org`; version scraped from download page; ARP registry detection derived from MSI ProductCode
+  - `package-powertoys.ps1` — PowerToys (x64) EXE from GitHub releases (`microsoft/PowerToys`); custom bootstrapper `/install /quiet /norestart`; file version detection on `PowerToys.exe`
+  - `package-dbeaver.ps1` — DBeaver Community EXE from GitHub releases (`dbeaver/dbeaver`, no `v` tag prefix); NSIS `/allusers /S` for machine-wide install; file version detection on `dbeaver.exe`
+  - `package-soapui.ps1` — SoapUI Open Source EXE from SmartBear CDN (`dl.eviware.com`); version scraped from `soapui.org`; install4j `-q` silent install; file existence detection (versioned install path)
+  - `package-pgadmin4.ps1` — pgAdmin 4 InnoSetup EXE from `ftp.postgresql.org`; version scraped from pgAdmin download page; ARP registry detection via `pgAdmin 4v{MAJOR}_is1` key with GreaterEquals
+  - `package-inkscape.ps1` — Inkscape (x64) MSI from `media.inkscape.org`; version scraped from Inkscape homepage; ARP registry detection derived from MSI ProductCode
+  - `package-tortoisesvn.ps1` — TortoiseSVN (x64) MSI from SourceForge; version and build number scraped from `tortoisesvn.net` download page; ARP registry detection derived from MSI ProductCode
+  - `package-vmwareworkstation.ps1` — VMware Workstation Pro EXE, manual download from Broadcom portal (login required); version from `FileVersionInfo`; file version detection on `vmware.exe` in `Program Files (x86)`; `/s /v"/qn EULAS_AGREED=1"` silent install
+  - `package-postman.ps1` — Postman per-user Squirrel EXE from static CDN URL (always re-downloaded); version from `FileVersionInfo`; file existence detection at `%LOCALAPPDATA%\Postman\Postman.exe`; `InstallForUser` + `OnlyWhenUserLoggedOn`
+  - `package-obsidian.ps1` — Obsidian per-user NSIS EXE from GitHub releases (`obsidianmd/obsidian-releases`); file existence detection at `%LOCALAPPDATA%\Obsidian\Obsidian.exe`; `InstallForUser` + `OnlyWhenUserLoggedOn`
 
 ### Changed
 - `Invoke-PackagerGetLatestVersion` rewritten with async I/O — replaced synchronous `ReadToEnd()` calls with `ReadToEndAsync()` tasks and bounded `WaitForExit(30000)` timeout; prevents GUI hang when grandchild processes (e.g., `curl.exe`, `expand.exe` in M365 scripts) inherit stdout/stderr pipe handles
 - Debug Columns checkbox tooltip updated to reflect new VendorURL column: "Show or hide the CMName, Script, and Vendor URL debug columns"
 - Removed static grid tooltip ("Select packagers using the checkboxes...") — conflicted with per-cell tooltip system
 - GUI version bumped from 0.4.0 to 1.0.0
+- Wireshark staging — removed redundant 60-second `Start-Sleep` after `Start-Process -Wait` (which already blocks until the process exits); reduced registry poll interval from 60s to 5s with 12 retries
 
 ### Fixed
 - LibreOffice version detection — endoflife.date API returns 4-part prerelease versions (e.g. `26.2.1.1`) that don't exist on the CDN `/stable/` path; switched to scraping the CDN directory listing for the actual latest downloadable version
-- Chocolatey API — `Packages()?$filter=` OData endpoint returns empty feeds for Foxit Reader and TreeSize Free; switched both to `FindPackagesById()` which reliably returns latest version
+- Version sources — all 6 scripts using third-party API for version lookup migrated to vendor-native sources (Citrix catalog XML, Foxit download redirect, CCleaner version-history page, Sysinternals Last-Modified header, JAM Software changelog)
 - TeamViewer Host version detection — setup EXE has empty string version properties but populated `FileMajorPart`/`FileMinorPart`/`FileBuildPart` numeric fields; added fallback to build version string from numeric parts
 - GUI "Check Latest" hang — `Invoke-PackagerGetLatestVersion` used synchronous `ReadToEnd()` which blocked indefinitely when M365 ODT packagers spawned `expand.exe` / `curl.exe` as grandchild processes that inherited the stdout pipe handle; rewritten to use `ReadToEndAsync()` with a 30-second process timeout and 5-second task timeout
+- Inkscape version detection — switched from scraping the `/release/` page (JS-heavy, 30-second timeout) to the Inkscape homepage which loads in under 1 second
+- TortoiseGit download URL — `tortoisegit.org` download page uses protocol-relative URLs (`//download.tortoisegit.org/...`); updated regex to handle `//` prefix and prepend `https:` when needed
 
 ---
 
