@@ -8,9 +8,9 @@ All notable changes to AppPackager are documented in this file.
 - **Vendor URL debug column** — new "Vendor URL (Debug)" column in the DataGridView, visible when the Debug Columns checkbox is checked; shows the vendor's product page URL for each packager
 - **Ctrl+Click to open vendor page** — Ctrl+Left-click any non-checkbox cell to open the vendor's product page in the default browser; URL sourced from the new `VendorUrl:` metadata tag in each packager script header
 - **Row hover tooltips** — hovering over any grid row displays the packager's `.SYNOPSIS` description from the script header; uses DataGridView's built-in `CellToolTipTextNeeded` event (replaces the former static grid tooltip)
-- `VendorUrl:` metadata tag added to all 76 packager script headers — parsed by `Get-PackagerMetadata` alongside existing `Vendor:`, `App:`, and `CMName:` tags
+- `VendorUrl:` metadata tag added to all 81 packager script headers — parsed by `Get-PackagerMetadata` alongside existing `Vendor:`, `App:`, and `CMName:` tags
 - `Description` field added to `Get-PackagerMetadata` — parses the first non-blank line after `.SYNOPSIS` in the script's comment-based help block
-- 14 new packager scripts (62 -> 76 total):
+- 19 new packager scripts (62 -> 81 total):
   - `package-slack.ps1` — Slack (x64) MSI from Slack CDN redirect URL; ARP registry detection
   - `package-nodejs.ps1` — Node.js LTS (x64) MSI from nodejs.org; version from dist/index.json API (LTS filter); ARP registry detection
   - `package-powershell7.ps1` — PowerShell 7 (x64) MSI from GitHub releases; custom MSI properties for PATH, PS Remoting, context menu; ARP registry detection
@@ -25,6 +25,11 @@ All notable changes to AppPackager are documented in this file.
   - `package-brave.ps1` — Brave Browser (x64) Chromium standalone EXE from GitHub releases; file version detection; uninstall via Chromium setup.exe in versioned subfolder
   - `package-thunderbird.ps1` — Mozilla Thunderbird (x64) MSI from Mozilla CDN; version from product-details API; file version detection (ARP key includes version+locale, too fragile for registry detection)
   - `package-libreoffice.ps1` — LibreOffice (x64) MSI (~350MB) from Document Foundation CDN; version from endoflife.date API; ARP registry detection; extended default timeouts (30/60 min)
+  - `package-postgresql13.ps1` — PostgreSQL 13 (x64) BitRock EXE from EnterpriseDB CDN; version from endoflife.date API; file version detection on `postgres.exe`; EOL 2025-11-13
+  - `package-postgresql14.ps1` — PostgreSQL 14 (x64) BitRock EXE from EnterpriseDB CDN; version from endoflife.date API; file version detection on `postgres.exe`
+  - `package-postgresql15.ps1` — PostgreSQL 15 (x64) BitRock EXE from EnterpriseDB CDN; version from endoflife.date API; file version detection on `postgres.exe`
+  - `package-postgresql16.ps1` — PostgreSQL 16 (x64) BitRock EXE from EnterpriseDB CDN; version from endoflife.date API; file version detection on `postgres.exe`
+  - `package-postgresql17.ps1` — PostgreSQL 17 (x64) BitRock EXE from EnterpriseDB CDN; version from endoflife.date API; file version detection on `postgres.exe`
 
 ### Changed
 - `Invoke-PackagerGetLatestVersion` rewritten with async I/O — replaced synchronous `ReadToEnd()` calls with `ReadToEndAsync()` tasks and bounded `WaitForExit(30000)` timeout; prevents GUI hang when grandchild processes (e.g., `curl.exe`, `expand.exe` in M365 scripts) inherit stdout/stderr pipe handles
