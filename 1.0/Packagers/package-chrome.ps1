@@ -90,7 +90,7 @@ if ($StageOnly -and $PackageOnly) {
 }
 
 # --- Configuration ---
-$ChromeVersionApiUrl = "https://versionhistory.googleapis.com/v1/chrome/platforms/win64/channels/stable/versions?order_by=version+desc&pageSize=1"
+$ChromeVersionApiUrl = "https://versionhistory.googleapis.com/v1/chrome/platforms/win64/channels/stable/versions/all/releases?order_by=version+desc&filter=fraction=1&pageSize=1"
 $MsiDownloadUrl      = "https://dl.google.com/dl/chrome/install/googlechromestandaloneenterprise64.msi"
 $MsiFileName         = "googlechromestandaloneenterprise64.msi"
 
@@ -112,7 +112,7 @@ function Get-ChromeStableVersion {
         if ($LASTEXITCODE -ne 0) { throw "Failed to query Chrome version API: $ChromeVersionApiUrl" }
 
         $data = ConvertFrom-Json $json
-        $version = $data.versions[0].version
+        $version = $data.releases[0].version
         if ([string]::IsNullOrWhiteSpace($version)) {
             throw "Could not parse Chrome stable version from API response."
         }
