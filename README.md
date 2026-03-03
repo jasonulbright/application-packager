@@ -409,3 +409,11 @@ All packager scripts import the shared module which provides:
 | `New-OdtConfigXml` | Generates full ODT configuration XML for M365 download/install phases |
 | `Get-LatestTemurinRelease` | Queries Adoptium API for latest Eclipse Temurin MSI (JRE/JDK, x64/x86) |
 | `Get-LatestCorrettoRelease` | Queries GitHub releases for latest Amazon Corretto MSI (JDK, x64/x86) |
+
+## License
+
+This project is licensed under the [Business Source License 1.1](LICENSE). See LICENSE for full terms including the Additional Use Grant and Change Date.
+
+## Author
+
+Jason Ulbright
