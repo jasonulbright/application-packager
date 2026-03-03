@@ -2,6 +2,15 @@
 
 All notable changes to AppPackager are documented in this file.
 
+## [1.0.1] - 2026-03-03
+
+### Fixed
+- Chrome version API returning unreleased versions — switched from `/versions` endpoint to `/releases` endpoint with `fraction=1` filter; the old endpoint returned the highest version number in the stable channel, which included versions still rolling out to a small percentage of users (e.g., v146 at 1% while v145 was fully deployed)
+- BSL 1.1 LICENSE header — corrected attribution to credit MariaDB Corporation Ab for the license text copyright and trademark
+- Added License and Author sections to README
+
+---
+
 ## [1.0] - 2026-02-25
 
 ### Added
