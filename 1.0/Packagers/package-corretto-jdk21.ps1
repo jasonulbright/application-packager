@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Amazon
 App: Amazon Corretto JDK 21 (x64)
 CMName: Amazon Corretto JDK 21
 VendorUrl: https://aws.amazon.com/corretto/
+CPE: cpe:2.3:a:amazon:corretto:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://github.com/corretto/corretto-21/releases
+DownloadPageUrl: https://aws.amazon.com/corretto/
 
 .SYNOPSIS
     Packages Amazon Corretto JDK 21 (x64) MSI for MECM.

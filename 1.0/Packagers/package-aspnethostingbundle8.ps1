@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Microsoft Corporation
 App: ASP.NET 8 Server Hosting Bundle (x64)
 CMName: Microsoft .NET 8
 VendorUrl: https://dotnet.microsoft.com/download/dotnet/8.0
+CPE: cpe:2.3:a:microsoft:asp.net_core:8.*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://github.com/dotnet/core/tree/main/release-notes/8.0
+DownloadPageUrl: https://dotnet.microsoft.com/en-us/download/dotnet/8.0
 
 .SYNOPSIS
     Packages ASP.NET 8 Server Hosting Bundle for MECM.

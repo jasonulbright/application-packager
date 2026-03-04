@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: PostgreSQL Global Development Group
 App: PostgreSQL 13 (x64)
 CMName: PostgreSQL 13
 VendorUrl: https://www.postgresql.org/
+CPE: cpe:2.3:a:postgresql:postgresql:13.*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://www.postgresql.org/docs/13/release.html
+DownloadPageUrl: https://www.postgresql.org/download/windows/
 
 .SYNOPSIS
     Packages PostgreSQL 13 (x64) for MECM.

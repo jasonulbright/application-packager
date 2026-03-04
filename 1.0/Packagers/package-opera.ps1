@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Opera Software
 App: Opera Browser (x64)
 CMName: Opera Browser
 VendorUrl: https://www.opera.com/
+CPE: cpe:2.3:a:opera:opera_browser:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://blogs.opera.com/desktop/changelog/
+DownloadPageUrl: https://www.opera.com/download
 
 .SYNOPSIS
     Packages Opera Browser (x64) for MECM.

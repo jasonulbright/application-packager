@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Salesforce (Tableau)
 App: Tableau Reader (x64)
 CMName: Tableau Reader
 VendorUrl: https://www.tableau.com/products/reader
+CPE: cpe:2.3:a:tableau:reader:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://www.tableau.com/support/releases
+DownloadPageUrl: https://www.tableau.com/support/releases
 
 .SYNOPSIS
     Packages Tableau Reader (x64) for MECM.

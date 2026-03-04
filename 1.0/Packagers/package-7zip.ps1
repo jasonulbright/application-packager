@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: 7-Zip
 App: 7-Zip (x64)
 CMName: 7-Zip
 VendorUrl: https://www.7-zip.org/
+CPE: cpe:2.3:a:7-zip:7-zip:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://www.7-zip.org/history.txt
+DownloadPageUrl: https://www.7-zip.org/download.html
 
 .SYNOPSIS
     Packages 7-Zip (x64) MSI for MECM.

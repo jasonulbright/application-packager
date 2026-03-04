@@ -1,8 +1,10 @@
-<#
+﻿<#
 Vendor: Antibody Software
 App: WizTree (x64)
 CMName: WizTree
 VendorUrl: https://diskanalyzer.com/
+ReleaseNotesUrl: https://wiztreefree.com/releasehistory
+DownloadPageUrl: https://wiztreefree.com/download
 
 .SYNOPSIS
     Packages WizTree (x64) for MECM.

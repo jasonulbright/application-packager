@@ -1,8 +1,10 @@
-<#
+﻿<#
 Vendor: Greenshot
 App: Greenshot (x64)
 CMName: Greenshot
 VendorUrl: https://getgreenshot.org/
+DownloadPageUrl: https://getgreenshot.org/downloads/
+ReleaseNotesUrl: https://getgreenshot.org/version-history/
 
 .SYNOPSIS
     Packages Greenshot for MECM.

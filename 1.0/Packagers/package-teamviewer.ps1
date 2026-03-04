@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: TeamViewer
 App: TeamViewer (x64)
 CMName: TeamViewer
 VendorUrl: https://www.teamviewer.com/
+CPE: cpe:2.3:a:teamviewer:teamviewer:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://www.teamviewer.com/en-us/whats-new/
+DownloadPageUrl: https://www.teamviewer.com/en-us/download/windows/
 
 .SYNOPSIS
     Packages TeamViewer (x64) MSI for MECM.

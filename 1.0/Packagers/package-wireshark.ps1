@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Wireshark Foundation
 App: Wireshark (x64)
 CMName: Wireshark
 VendorUrl: https://www.wireshark.org/
+CPE: cpe:2.3:a:wireshark:wireshark:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://www.wireshark.org/docs/relnotes/
+DownloadPageUrl: https://www.wireshark.org/download.html
 
 .SYNOPSIS
     Packages Wireshark (x64) for MECM.

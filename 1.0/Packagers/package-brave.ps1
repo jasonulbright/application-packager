@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Brave Software
 App: Brave Browser (x64)
 CMName: Brave Browser
 VendorUrl: https://brave.com/
+CPE: cpe:2.3:a:brave:brave:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://brave.com/latest/
+DownloadPageUrl: https://brave.com/download/
 
 .SYNOPSIS
     Packages Brave Browser (x64) for MECM.

@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Salesforce (Tableau)
 App: Tableau Desktop (x64)
 CMName: Tableau Desktop
 VendorUrl: https://www.tableau.com/products/desktop
+CPE: cpe:2.3:a:tableau:tableau:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://www.tableau.com/support/releases
+DownloadPageUrl: https://www.tableau.com/support/releases
 
 .SYNOPSIS
     Packages Tableau Desktop (x64) for MECM.

@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Audacity Team
 App: Audacity (x64)
 CMName: Audacity
 VendorUrl: https://www.audacityteam.org/
+CPE: cpe:2.3:a:audacityteam:audacity:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://www.audacityteam.org/releases/
+DownloadPageUrl: https://www.audacityteam.org/download/
 
 .SYNOPSIS
     Packages Audacity (x64) for MECM.

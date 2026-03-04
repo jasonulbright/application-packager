@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: The Document Foundation
 App: LibreOffice (x64)
 CMName: LibreOffice
 VendorUrl: https://www.libreoffice.org/
+CPE: cpe:2.3:a:libreoffice:libreoffice:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://wiki.documentfoundation.org/Releases
+DownloadPageUrl: https://www.libreoffice.org/download/download-libreoffice/
 
 .SYNOPSIS
     Packages LibreOffice (x64) MSI for MECM.

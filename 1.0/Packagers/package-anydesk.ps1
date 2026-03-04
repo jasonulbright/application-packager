@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: AnyDesk Software GmbH
 App: AnyDesk
 CMName: AnyDesk
 VendorUrl: https://anydesk.com/
+CPE: cpe:2.3:a:anydesk:anydesk:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://anydesk.com/en/changelog
+DownloadPageUrl: https://anydesk.com/en/downloads
 
 .SYNOPSIS
     Packages AnyDesk for MECM.

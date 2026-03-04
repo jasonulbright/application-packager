@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Mozilla
 App: Mozilla Firefox (x64)
 CMName: Mozilla Firefox
 VendorUrl: https://www.mozilla.org/firefox/enterprise/
+CPE: cpe:2.3:a:mozilla:firefox:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://www.mozilla.org/en-US/firefox/releases/
+DownloadPageUrl: https://www.mozilla.org/en-US/firefox/enterprise/
 
 .SYNOPSIS
     Packages Mozilla Firefox (x64) MSI for MECM.

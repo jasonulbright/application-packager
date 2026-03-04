@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Google
 App: Google Chrome Enterprise (x64)
 CMName: Google Chrome Enterprise
 VendorUrl: https://chromeenterprise.google/browser/download/
+CPE: cpe:2.3:a:google:chrome:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://chromereleases.googleblog.com/
+DownloadPageUrl: https://chromeenterprise.google/download/
 
 .SYNOPSIS
     Packages Google Chrome Enterprise (x64) MSI for MECM.

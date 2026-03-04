@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Cisco
 App: Cisco Webex (x64)
 CMName: Cisco Webex
 VendorUrl: https://www.webex.com/downloads.html
+CPE: cpe:2.3:a:cisco:webex_meetings:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://www.webex.com/whatsnew.html
+DownloadPageUrl: https://www.webex.com/downloads.html
 
 .SYNOPSIS
     Packages Cisco Webex (x64) MSI for MECM.

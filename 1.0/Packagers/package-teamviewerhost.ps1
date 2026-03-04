@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: TeamViewer
 App: TeamViewer Host (x64)
 CMName: TeamViewer Host
 VendorUrl: https://www.teamviewer.com/
+CPE: cpe:2.3:a:teamviewer:teamviewer:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://www.teamviewer.com/en-us/whats-new/
+DownloadPageUrl: https://www.teamviewer.com/en-us/download/windows/
 
 .SYNOPSIS
     Packages TeamViewer Host (x64) EXE for MECM.

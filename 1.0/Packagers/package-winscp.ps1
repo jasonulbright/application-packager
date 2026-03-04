@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Martin Prikryl
 App: WinSCP (x64)
 CMName: WinSCP
 VendorUrl: https://winscp.net/
+CPE: cpe:2.3:a:winscp:winscp:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://winscp.net/eng/docs/history
+DownloadPageUrl: https://winscp.net/eng/download.php
 
 .SYNOPSIS
     Packages WinSCP (x64) for MECM.

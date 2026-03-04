@@ -1,8 +1,10 @@
-<#
+﻿<#
 Vendor: Acro Software Inc.
 App: CutePDF Writer
 CMName: CutePDF Writer
 VendorUrl: https://www.cutepdf.com/
+ReleaseNotesUrl: https://www.cutepdf.com/Products/CutePDF/writer.asp
+DownloadPageUrl: https://www.cutepdf.com/Products/CutePDF/writer.asp
 
 .SYNOPSIS
     Packages CutePDF Writer for MECM.

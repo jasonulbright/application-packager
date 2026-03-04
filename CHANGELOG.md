@@ -2,6 +2,22 @@
 
 All notable changes to AppPackager are documented in this file.
 
+## [1.1.0] - 2026-03-03
+
+### Added
+- **Vendor Version Monitor** (`VersionMonitor/Start-VersionMonitor.ps1`) — headless companion tool that compares MECM-deployed application versions against vendor releases, flags stale packages, queries the NIST NVD for known CVEs on stale applications, and generates a self-contained HTML report with status badges, CVE pills, and CVSS severity scores
+- `VersionMonitorCommon.psm1` module with functions for packager discovery, MECM version queries, vendor version checking, semver comparison, NVD CVE batch lookup with sliding-window rate limiter and JSON cache, HTML report generation, and drop-folder/webhook notification stubs
+- `monitor-config.json` — monitor configuration for MECM site, NVD API key, rate limits, cache TTL, report/log retention, and notification settings
+- `simulate-overrides.json` — override MECM versions for testing; `-SimulateStale` flag forces specified apps to appear stale for report rendering and CVE lookup testing
+- `CPE:`, `ReleaseNotesUrl:`, `DownloadPageUrl:` header tags added to all 114 packager scripts — parsed by `Get-PackagerMetadata` alongside existing `Vendor:`, `App:`, `CMName:`, and `VendorUrl:` tags; CPE strings enable NVD CVE lookups, URLs appear as clickable links in the HTML report
+- `Get-PackagerMetadata` in `start-apppackager.ps1` extended to parse `CPE`, `ReleaseNotesUrl`, and `DownloadPageUrl` header tags (backward compatible — missing tags default to `$null`)
+
+### Fixed
+- M365 ODT cab extraction — `expand.exe` calls in all 6 M365 packager scripts now use full path `$env:SystemRoot\System32\expand.exe` to avoid conflict with Git Bash's `/usr/bin/expand` (which shadows `expand.exe` when packagers are invoked from a bash-inherited PATH)
+- Version monitor version string validation — strips `+build` and `-release` suffixes (e.g., Temurin `11.0.30+7`, Anaconda `2025.12-2`, Positron `2026.03.0-212`) before validation; 17 packagers that returned semver build metadata no longer fail version checks
+
+---
+
 ## [1.0.1] - 2026-03-03
 
 ### Fixed

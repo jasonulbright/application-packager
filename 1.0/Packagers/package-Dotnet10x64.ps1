@@ -1,8 +1,10 @@
-<#
+﻿<#
 Vendor: Microsoft
 App: .NET 10 Desktop Runtime (x64)
 CMName: Microsoft Windows Desktop Runtime - 10
 VendorUrl: https://dotnet.microsoft.com/download/dotnet/10.0
+ReleaseNotesUrl: https://github.com/dotnet/core/tree/main/release-notes/10.0
+DownloadPageUrl: https://dotnet.microsoft.com/en-us/download/dotnet/10.0
 
 .SYNOPSIS
     Packages .NET 10 Desktop Runtime (x64) for MECM.

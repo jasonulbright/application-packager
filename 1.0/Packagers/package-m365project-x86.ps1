@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Microsoft
 App: M365 Project (x86)
 CMName: M365 Project
 VendorUrl: https://www.microsoft.com/microsoft-365
+CPE: cpe:2.3:a:microsoft:365_apps:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://learn.microsoft.com/en-us/officeupdates/update-history-microsoft365-apps-by-date
+DownloadPageUrl: https://www.microsoft.com/en-us/microsoft-365
 
 .SYNOPSIS
     Packages M365 Project (x86) for MECM using the Office Deployment Tool.
@@ -112,7 +115,7 @@ function Get-M365VersionFromCdn {
         $cabPath = Join-Path $tempDir "v$Architecture.cab"
         Invoke-DownloadWithRetry -Url $CdnCabUrl -OutFile $cabPath -Quiet:$Quiet
 
-        $expandOut = & expand.exe $cabPath -F:VersionDescriptor.xml $tempDir 2>&1
+        $expandOut = & "$env:SystemRoot\System32\expand.exe" $cabPath -F:VersionDescriptor.xml $tempDir 2>&1
         $vdPath = Join-Path $tempDir "VersionDescriptor.xml"
         if (-not (Test-Path -LiteralPath $vdPath)) {
             throw "VersionDescriptor.xml not found in cab file. expand.exe output: $expandOut"

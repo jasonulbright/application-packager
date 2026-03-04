@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Mozilla Foundation
 App: Mozilla Thunderbird (x64)
 CMName: Thunderbird
 VendorUrl: https://www.thunderbird.net/
+CPE: cpe:2.3:a:mozilla:thunderbird:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://www.thunderbird.net/en-US/thunderbird/releases/
+DownloadPageUrl: https://www.thunderbird.net/en-US/
 
 .SYNOPSIS
     Packages Mozilla Thunderbird (x64) MSI for MECM.

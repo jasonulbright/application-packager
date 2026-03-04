@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Microsoft
 App: Visual Studio 2026 Enterprise
 CMName: Visual Studio 2026 Enterprise
 VendorUrl: https://visualstudio.microsoft.com/
+CPE: cpe:2.3:a:microsoft:visual_studio:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://learn.microsoft.com/en-us/visualstudio/releases/2026/release-notes
+DownloadPageUrl: https://visualstudio.microsoft.com/downloads/
 
 .SYNOPSIS
     Packages Visual Studio 2026 Enterprise offline layout for MECM.

@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Zoom Video Communications
 App: Zoom Workplace (x64)
 CMName: Zoom Workplace
 VendorUrl: https://zoom.us/download
+CPE: cpe:2.3:a:zoom:zoom:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://support.zoom.com/hc/en/article?id=zm_kb&sysparm_article=KB0060720
+DownloadPageUrl: https://zoom.us/download
 
 .SYNOPSIS
     Packages Zoom Workplace (x64) for MECM as a per-user install.

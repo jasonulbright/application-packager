@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: FileZilla Project
 App: FileZilla Client (x64)
 CMName: FileZilla Client
 VendorUrl: https://filezilla-project.org/
+CPE: cpe:2.3:a:filezilla-project:filezilla_client:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://filezilla-project.org/versions.php
+DownloadPageUrl: https://filezilla-project.org/download.php
 
 .SYNOPSIS
     Packages FileZilla Client (x64) for MECM.

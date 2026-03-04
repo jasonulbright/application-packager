@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Simon Tatham
 App: PuTTY (x64)
 CMName: PuTTY
 VendorUrl: https://www.chiark.greenend.org.uk/~sgtatham/putty/
+CPE: cpe:2.3:a:putty:putty:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://www.chiark.greenend.org.uk/~sgtatham/putty/changes.html
+DownloadPageUrl: https://www.chiark.greenend.org.uk/~sgtatham/putty/latest.html
 
 .SYNOPSIS
     Packages PuTTY (x64) MSI for MECM.

@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Inkscape Project
 App: Inkscape
 CMName: Inkscape
 VendorUrl: https://inkscape.org/
+CPE: cpe:2.3:a:inkscape:inkscape:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://inkscape.org/release/
+DownloadPageUrl: https://inkscape.org/release/
 
 .SYNOPSIS
     Packages Inkscape MSI for MECM.

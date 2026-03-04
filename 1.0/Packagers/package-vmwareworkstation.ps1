@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Broadcom
 App: VMware Workstation Pro
 CMName: VMware Workstation
 VendorUrl: https://www.vmware.com/products/desktop-hypervisor/workstation-and-fusion
+CPE: cpe:2.3:a:vmware:workstation:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://docs.vmware.com/en/VMware-Workstation-Pro/index.html
+DownloadPageUrl: https://www.vmware.com/products/desktop-hypervisor/workstation-and-fusion
 
 .SYNOPSIS
     Packages VMware Workstation Pro for MECM.

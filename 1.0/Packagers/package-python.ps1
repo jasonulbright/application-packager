@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Python Software Foundation
 App: Python (x64)
 CMName: Python
 VendorUrl: https://www.python.org/downloads/
+CPE: cpe:2.3:a:python:python:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://docs.python.org/3/whatsnew/
+DownloadPageUrl: https://www.python.org/downloads/
 
 .SYNOPSIS
     Packages the latest Python (x64) for MECM.

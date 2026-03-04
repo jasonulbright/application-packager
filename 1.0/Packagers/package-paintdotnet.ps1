@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: dotPDN LLC
 App: Paint.NET (x64)
 CMName: Paint.NET
 VendorUrl: https://www.getpaint.net/
+CPE: cpe:2.3:a:dotpdn:paint.net:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://www.getpaint.net/roadmap.html
+DownloadPageUrl: https://www.getpaint.net/download.html
 
 .SYNOPSIS
     Packages Paint.NET (x64) MSI for MECM.

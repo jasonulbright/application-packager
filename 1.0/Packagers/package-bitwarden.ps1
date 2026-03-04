@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Bitwarden Inc.
 App: Bitwarden Desktop (x64)
 CMName: Bitwarden
 VendorUrl: https://bitwarden.com/
+CPE: cpe:2.3:a:bitwarden:desktop:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://github.com/bitwarden/clients/releases
+DownloadPageUrl: https://bitwarden.com/download/
 
 .SYNOPSIS
     Packages Bitwarden Desktop (x64) for MECM.

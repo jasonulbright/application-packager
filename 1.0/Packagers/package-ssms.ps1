@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Microsoft
 App: SQL Server Management Studio
 CMName: SQL Server Management Studio
 VendorUrl: https://learn.microsoft.com/sql/ssms/download-sql-server-management-studio-ssms
+CPE: cpe:2.3:a:microsoft:sql_server_management_studio:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://learn.microsoft.com/en-us/sql/ssms/release-notes-ssms
+DownloadPageUrl: https://learn.microsoft.com/en-us/sql/ssms/download-sql-server-management-studio-ssms
 
 .SYNOPSIS
     Packages SQL Server Management Studio (SSMS) for MECM.

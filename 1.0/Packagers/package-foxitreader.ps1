@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Foxit Software
 App: Foxit PDF Reader (x64)
 CMName: Foxit PDF Reader
 VendorUrl: https://www.foxit.com/pdf-reader.html
+CPE: cpe:2.3:a:foxit:pdf_reader:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://www.foxit.com/pdf-reader/version-history.html
+DownloadPageUrl: https://www.foxit.com/pdf-reader/
 
 .SYNOPSIS
     Packages Foxit PDF Reader (x64) for MECM.

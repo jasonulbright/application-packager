@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: win.rar GmbH
 App: WinRAR (x64)
 CMName: WinRAR
 VendorUrl: https://www.win-rar.com/
+CPE: cpe:2.3:a:rarlab:winrar:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://www.win-rar.com/whatsnew.html
+DownloadPageUrl: https://www.win-rar.com/download.html
 
 .SYNOPSIS
     Packages WinRAR (x64) for MECM.

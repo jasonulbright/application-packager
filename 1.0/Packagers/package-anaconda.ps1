@@ -1,8 +1,10 @@
-<#
+﻿<#
 Vendor: Anaconda, Inc.
 App: Anaconda Distribution (x64)
 CMName: Anaconda
 VendorUrl: https://www.anaconda.com/download
+ReleaseNotesUrl: https://docs.anaconda.com/anaconda/release-notes/
+DownloadPageUrl: https://www.anaconda.com/download
 
 .SYNOPSIS
     Packages Anaconda Distribution (x64) for MECM.

@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Citrix (Cloud Software Group)
 App: Citrix Workspace (LTSR) (x64)
 CMName: Citrix Workspace LTSR
 VendorUrl: https://www.citrix.com/downloads/workspace-app/
+CPE: cpe:2.3:a:citrix:workspace:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://docs.citrix.com/en-us/citrix-workspace-app-for-windows
+DownloadPageUrl: https://www.citrix.com/downloads/workspace-app/
 
 .SYNOPSIS
     Packages Citrix Workspace App Long Term Service Release (LTSR) for MECM.

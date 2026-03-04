@@ -1,8 +1,10 @@
-<#
+﻿<#
 Vendor: WinDirStat Team
 App: WinDirStat (x64)
 CMName: WinDirStat
 VendorUrl: https://windirstat.net/
+ReleaseNotesUrl: https://github.com/windirstat/windirstat/releases
+DownloadPageUrl: https://windirstat.net/download.html
 
 .SYNOPSIS
     Packages WinDirStat (x64) MSI for MECM.

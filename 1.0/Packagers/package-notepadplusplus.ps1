@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Notepad++ Team
 App: Notepad++ (x64)
 CMName: Notepad++
 VendorUrl: https://notepad-plus-plus.org/
+CPE: cpe:2.3:a:notepad-plus-plus:notepad%2b%2b:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://notepad-plus-plus.org/news/
+DownloadPageUrl: https://notepad-plus-plus.org/downloads/
 
 .SYNOPSIS
     Packages Notepad++ (x64) for MECM.

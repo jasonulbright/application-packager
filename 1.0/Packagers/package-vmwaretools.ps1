@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Broadcom
 App: VMware Tools (x64)
 CMName: VMWare Tools
 VendorUrl: https://www.vmware.com/products/cloud-infrastructure/desktop-hypervisor/workstation-and-fusion
+CPE: cpe:2.3:a:vmware:tools:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://docs.vmware.com/en/VMware-Tools/index.html
+DownloadPageUrl: https://packages.vmware.com/tools/releases/
 
 .SYNOPSIS
     Packages VMware Tools (x64) for MECM.

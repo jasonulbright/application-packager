@@ -236,6 +236,62 @@ All packager scripts accept the same core parameters:
 | package-wiztree.ps1 | Antibody Software | WizTree | File version |
 | package-zoom.ps1 | Zoom Video Communications | Zoom Workplace (x64) | File existence (per-user) |
 
+## Vendor Version Monitor
+
+The Version Monitor is a headless companion tool that compares MECM-deployed application versions against the latest vendor releases, flags stale packages, and optionally queries the NIST NVD for known CVEs. It produces a self-contained HTML report.
+
+![Vendor Version Monitor Report](screenshot-vendor-version-monitor-report-sample.png)
+
+```powershell
+# Full run: MECM + vendor checks + NVD CVE lookups
+.\VersionMonitor\Start-VersionMonitor.ps1
+
+# Vendor version checks only (no MECM or NVD dependency)
+.\VersionMonitor\Start-VersionMonitor.ps1 -SkipMECM -SkipNVD
+
+# Simulate stale versions for testing report rendering and CVE lookups
+.\VersionMonitor\Start-VersionMonitor.ps1 -SimulateStale
+```
+
+The monitor discovers all `package-*.ps1` scripts in the sibling `Packagers/` folder and reads metadata directly from their headers — no separate catalog file needed. CPE strings embedded in packager headers enable NVD CVE lookups for stale applications.
+
+| Feature | Details |
+|---|---|
+| **Packager discovery** | Auto-discovers all 114 packager scripts via relative path |
+| **Version checking** | Calls each packager with `-GetLatestVersionOnly` |
+| **MECM comparison** | Queries ConfigMgr for deployed versions |
+| **NVD CVE lookup** | Queries NIST NVD API for stale apps with CPE headers |
+| **Rate limiting** | Sliding-window rate limiter with configurable limits |
+| **NVD caching** | JSON cache with configurable TTL (default 6 hours) |
+| **HTML report** | Self-contained report with status badges, CVE pills, CVSS scores |
+| **Simulation mode** | Override MECM versions via `simulate-overrides.json` for testing |
+| **Notifications** | Drop folder copy and webhook stub (extensible) |
+| **Log/report cleanup** | Configurable retention for old logs and reports |
+
+Configuration is in `VersionMonitor/monitor-config.json`. Log and report folders default to `VersionMonitor/Logs/` and `VersionMonitor/Reports/` when not specified in config.
+
+### Packager header tags for Version Monitor
+
+Each packager script can include optional metadata tags parsed by the monitor:
+
+```powershell
+<#
+Vendor: Igor Pavlov
+App: 7-Zip (x64)
+CMName: 7-Zip
+VendorUrl: https://www.7-zip.org/
+CPE: cpe:2.3:a:7-zip:7-zip:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://www.7-zip.org/history.txt
+DownloadPageUrl: https://www.7-zip.org/download.html
+#>
+```
+
+| Tag | Purpose |
+|---|---|
+| `CPE` | NVD Common Platform Enumeration string for CVE lookups |
+| `ReleaseNotesUrl` | Link shown in the HTML report's Links column |
+| `DownloadPageUrl` | Link shown in the HTML report's Links column |
+
 ## Content Staging Layout
 
 ### Local staging (Stage phase)
@@ -320,6 +376,15 @@ application-packager/
       package-7zip.ps1                 # One script per application
       package-chrome.ps1
       ...
+    VersionMonitor/
+      Start-VersionMonitor.ps1         # Headless version monitor entry point
+      monitor-config.json              # Monitor configuration (MECM, NVD, report settings)
+      simulate-overrides.json          # Simulated MECM versions for testing
+      Module/
+        VersionMonitorCommon.psm1      # Monitor module (discovery, comparison, NVD, HTML)
+        VersionMonitorCommon.psd1      # Module manifest
+      Logs/                            # Auto-created log files
+      Reports/                         # Auto-created HTML reports
   CHANGELOG.md
   README.md
 ```
@@ -335,6 +400,9 @@ application-packager/
    App: Acme Widget (x64)
    CMName: Acme Widget
    VendorUrl: https://acme.example.com/widget
+   CPE: cpe:2.3:a:acme:widget:*:*:*:*:*:*:*:*
+   ReleaseNotesUrl: https://acme.example.com/releases
+   DownloadPageUrl: https://acme.example.com/download
    #>
    ```
 

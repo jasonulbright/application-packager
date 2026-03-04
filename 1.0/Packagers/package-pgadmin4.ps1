@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: pgAdmin Development Team
 App: pgAdmin 4
 CMName: pgAdmin 4
 VendorUrl: https://www.pgadmin.org/
+CPE: cpe:2.3:a:pgadmin:pgadmin_4:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://www.pgadmin.org/docs/pgadmin4/latest/release_notes.html
+DownloadPageUrl: https://www.pgadmin.org/download/pgadmin-4-windows/
 
 .SYNOPSIS
     Packages pgAdmin 4 for MECM.

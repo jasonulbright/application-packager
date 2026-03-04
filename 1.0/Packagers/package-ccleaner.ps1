@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Piriform Software Ltd.
 App: CCleaner
 CMName: CCleaner
 VendorUrl: https://www.ccleaner.com/
+CPE: cpe:2.3:a:piriform:ccleaner:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://www.ccleaner.com/ccleaner/version-history
+DownloadPageUrl: https://www.ccleaner.com/ccleaner/download
 
 .SYNOPSIS
     Packages CCleaner (Free) for MECM.

@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Slack Technologies
 App: Slack (x64)
 CMName: Slack
 VendorUrl: https://slack.com/
+CPE: cpe:2.3:a:slack:slack:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://slack.com/release-notes/windows
+DownloadPageUrl: https://slack.com/downloads/windows
 
 .SYNOPSIS
     Packages Slack (x64) MSI for MECM.

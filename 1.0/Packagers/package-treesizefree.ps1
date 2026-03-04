@@ -1,8 +1,10 @@
-<#
+﻿<#
 Vendor: JAM Software
 App: TreeSize Free
 CMName: TreeSize Free
 VendorUrl: https://www.jam-software.com/treesize_free
+ReleaseNotesUrl: https://www.jam-software.com/treesize_free/changes.shtml
+DownloadPageUrl: https://www.jam-software.com/treesize_free
 
 .SYNOPSIS
     Packages TreeSize Free for MECM.

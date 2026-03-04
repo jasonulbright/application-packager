@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: PostgreSQL Global Development Group
 App: PostgreSQL 17 (x64)
 CMName: PostgreSQL 17
 VendorUrl: https://www.postgresql.org/
+CPE: cpe:2.3:a:postgresql:postgresql:17.*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://www.postgresql.org/docs/17/release.html
+DownloadPageUrl: https://www.postgresql.org/download/windows/
 
 .SYNOPSIS
     Packages PostgreSQL 17 (x64) for MECM.

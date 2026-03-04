@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Eclipse Adoptium
 App: Eclipse Temurin JRE 8 (x86)
 CMName: Eclipse Temurin JRE 8 (x86)
 VendorUrl: https://adoptium.net/temurin/releases/
+CPE: cpe:2.3:a:eclipse:temurin:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://adoptium.net/temurin/release-notes/
+DownloadPageUrl: https://adoptium.net/temurin/releases/
 
 .SYNOPSIS
     Packages Eclipse Temurin JRE 8 (x86) MSI for MECM.

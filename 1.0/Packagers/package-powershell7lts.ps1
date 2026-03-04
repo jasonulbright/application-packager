@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Microsoft Corporation
 App: PowerShell 7 LTS (x64)
 CMName: PowerShell 7 LTS
 VendorUrl: https://github.com/PowerShell/PowerShell
+CPE: cpe:2.3:a:microsoft:powershell:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://github.com/PowerShell/PowerShell/releases
+DownloadPageUrl: https://github.com/PowerShell/PowerShell/releases
 
 .SYNOPSIS
     Packages PowerShell 7 LTS (x64) MSI for MECM.

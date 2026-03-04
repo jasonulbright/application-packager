@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: The Git Development Community
 App: Git for Windows (x64)
 CMName: Git for Windows
 VendorUrl: https://git-scm.com/
+CPE: cpe:2.3:a:git-scm:git:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://github.com/git-for-windows/git/releases
+DownloadPageUrl: https://git-scm.com/download/win
 
 .SYNOPSIS
     Packages Git for Windows (x64) for MECM.

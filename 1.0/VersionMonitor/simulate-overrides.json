@@ -1,0 +1,8 @@
+{
+    "_comment": "Override MECM versions for testing. Only used with -SimulateStale. Set a version older than current to trigger stale + CVE lookup.",
+    "Overrides": {
+        "package-7zip.ps1": "19.00",
+        "package-chrome.ps1": "120.0.6099.0",
+        "package-putty.ps1": "0.78"
+    }
+}

@@ -1,8 +1,10 @@
-<#
+﻿<#
 Vendor: Obsidian
 App: Obsidian
 CMName: Obsidian
 VendorUrl: https://obsidian.md/
+ReleaseNotesUrl: https://obsidian.md/changelog/
+DownloadPageUrl: https://obsidian.md/download
 
 .SYNOPSIS
     Packages Obsidian for MECM as a per-user install.

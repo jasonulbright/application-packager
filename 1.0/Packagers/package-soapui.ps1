@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: SmartBear Software
 App: SoapUI Open Source
 CMName: SoapUI
 VendorUrl: https://www.soapui.org/
+CPE: cpe:2.3:a:smartbear:soapui:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://www.soapui.org/downloads/latest-release/
+DownloadPageUrl: https://www.soapui.org/downloads/soapui/
 
 .SYNOPSIS
     Packages SoapUI Open Source for MECM.

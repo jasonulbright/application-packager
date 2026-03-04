@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: CPUID
 App: CPU-Z
 CMName: CPU-Z
 VendorUrl: https://www.cpuid.com/softwares/cpu-z.html
+CPE: cpe:2.3:a:cpuid:cpu-z:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://www.cpuid.com/softwares/cpu-z.html
+DownloadPageUrl: https://www.cpuid.com/downloads/cpu-z/
 
 .SYNOPSIS
     Packages CPU-Z for MECM.

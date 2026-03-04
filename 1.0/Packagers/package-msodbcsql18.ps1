@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Microsoft
 App: Microsoft ODBC Driver 18 for SQL Server (x64)
 CMName: Microsoft ODBC Driver 18 for SQL Server
 VendorUrl: https://learn.microsoft.com/sql/connect/odbc/download-odbc-driver-for-sql-server
+CPE: cpe:2.3:a:microsoft:odbc_driver_for_sql_server:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://learn.microsoft.com/en-us/sql/connect/odbc/windows/release-notes-odbc-sql-server-windows
+DownloadPageUrl: https://learn.microsoft.com/en-us/sql/connect/odbc/download-odbc-driver-for-sql-server
 
 .SYNOPSIS
     Packages Microsoft ODBC Driver 18 for SQL Server (x64) for MECM.

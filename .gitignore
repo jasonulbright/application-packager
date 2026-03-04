@@ -16,5 +16,9 @@ Logs/
 AppPackager.windowstate.json
 AppPackager.preferences.json
 
+# VersionMonitor runtime artifacts
+nvd-cache.json
+Reports/
+
 # AI tooling config
 Claude.md

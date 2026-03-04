@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Microsoft
 App: Microsoft Power BI Desktop (x64)
 CMName: Microsoft Power BI Desktop
 VendorUrl: https://www.microsoft.com/download/details.aspx?id=58494
+CPE: cpe:2.3:a:microsoft:power_bi_desktop:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://learn.microsoft.com/en-us/power-bi/fundamentals/desktop-latest-update
+DownloadPageUrl: https://www.microsoft.com/en-us/download/details.aspx?id=58494
 
 .SYNOPSIS
     Packages Microsoft Power BI Desktop (x64) for MECM.

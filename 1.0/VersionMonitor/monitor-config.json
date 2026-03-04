@@ -1,0 +1,29 @@
+{
+    "SchemaVersion": 1,
+    "MECM": {
+        "SiteCode": "MCM",
+        "ServerFQDN": "sccm01.contoso.com"
+    },
+    "DownloadRoot": "c:\\temp\\vm",
+    "NVD": {
+        "ApiKey": "",
+        "RateLimitPerWindow": 5,
+        "WindowSeconds": 30,
+        "CacheTtlMinutes": 360
+    },
+    "Report": {
+        "OutputFolder": "",
+        "FileNamePattern": "VersionMonitor-{0}.html",
+        "KeepReportDays": 90
+    },
+    "Logging": {
+        "LogFolder": "",
+        "KeepLogDays": 30
+    },
+    "Notifications": {
+        "Enabled": false,
+        "DropFolder": "",
+        "WebhookUrl": "",
+        "OnlyOnStale": true
+    }
+}

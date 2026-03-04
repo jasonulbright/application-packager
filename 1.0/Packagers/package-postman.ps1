@@ -1,8 +1,10 @@
-<#
+﻿<#
 Vendor: Postman Inc.
 App: Postman
 CMName: Postman
 VendorUrl: https://www.postman.com/
+ReleaseNotesUrl: https://www.postman.com/release-notes/postman-app/
+DownloadPageUrl: https://www.postman.com/downloads/
 
 .SYNOPSIS
     Packages Postman for MECM as a per-user install.

@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: PostgreSQL Global Development Group
 App: PostgreSQL 16 (x64)
 CMName: PostgreSQL 16
 VendorUrl: https://www.postgresql.org/
+CPE: cpe:2.3:a:postgresql:postgresql:16.*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://www.postgresql.org/docs/16/release.html
+DownloadPageUrl: https://www.postgresql.org/download/windows/
 
 .SYNOPSIS
     Packages PostgreSQL 16 (x64) for MECM.

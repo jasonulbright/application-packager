@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Microsoft
 App: .NET 9 Desktop Runtime (x64)
 CMName: Microsoft Windows Desktop Runtime - 9
 VendorUrl: https://dotnet.microsoft.com/download/dotnet/9.0
+CPE: cpe:2.3:a:microsoft:.net:9.*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://github.com/dotnet/core/tree/main/release-notes/9.0
+DownloadPageUrl: https://dotnet.microsoft.com/en-us/download/dotnet/9.0
 
 .SYNOPSIS
     Packages .NET 9 Desktop Runtime (x64) for MECM.

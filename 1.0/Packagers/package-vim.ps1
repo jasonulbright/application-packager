@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: The Vim Project
 App: Vim (x64)
 CMName: Vim
 VendorUrl: https://www.vim.org/
+CPE: cpe:2.3:a:vim:vim:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://github.com/vim/vim-win32-installer/releases
+DownloadPageUrl: https://github.com/vim/vim-win32-installer/releases
 
 .SYNOPSIS
     Packages Vim/gVim (x64) for MECM.

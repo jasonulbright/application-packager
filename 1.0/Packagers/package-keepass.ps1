@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Dominik Reichl
 App: KeePass
 CMName: KeePass
 VendorUrl: https://keepass.info/
+CPE: cpe:2.3:a:keepass:keepass:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://keepass.info/news/news_all.html
+DownloadPageUrl: https://keepass.info/download.html
 
 .SYNOPSIS
     Packages KeePass 2.x MSI for MECM.

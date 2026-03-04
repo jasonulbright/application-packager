@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: mRemoteNG
 App: mRemoteNG
 CMName: mRemoteNG
 VendorUrl: https://mremoteng.org/
+CPE: cpe:2.3:a:mremoteng:mremoteng:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://github.com/mRemoteNG/mRemoteNG/releases
+DownloadPageUrl: https://mremoteng.org/download
 
 .SYNOPSIS
     Packages mRemoteNG for MECM.

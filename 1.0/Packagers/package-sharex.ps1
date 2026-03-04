@@ -1,8 +1,10 @@
-<#
+﻿<#
 Vendor: ShareX Team
 App: ShareX
 CMName: ShareX
 VendorUrl: https://getsharex.com/
+ReleaseNotesUrl: https://github.com/ShareX/ShareX/releases
+DownloadPageUrl: https://getsharex.com/downloads
 
 .SYNOPSIS
     Packages ShareX for MECM.

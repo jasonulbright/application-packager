@@ -312,11 +312,14 @@ function Get-PackagerMetadata {
     )
 
     $meta = [ordered]@{
-        Vendor      = $null
-        App         = $null
-        CMName      = $null
-        VendorUrl   = $null
-        Description = $null
+        Vendor          = $null
+        App             = $null
+        CMName          = $null
+        VendorUrl       = $null
+        CPE             = $null
+        ReleaseNotesUrl = $null
+        DownloadPageUrl = $null
+        Description     = $null
     }
 
     $lines = Get-Content -LiteralPath $Path -TotalCount 200 -ErrorAction Stop
@@ -328,9 +331,12 @@ function Get-PackagerMetadata {
         if (-not $meta.Vendor    -and $l -match '^\s*(?:#\s*)?Vendor\s*:\s*(.+?)\s*$')    { $meta.Vendor    = $Matches[1].Trim(); continue }
         if (-not $meta.App       -and $l -match '^\s*(?:#\s*)?App\s*:\s*(.+?)\s*$')       { $meta.App       = $Matches[1].Trim(); continue }
         if (-not $meta.CMName    -and $l -match '^\s*(?:#\s*)?CMName\s*:\s*(.+?)\s*$')    { $meta.CMName    = $Matches[1].Trim(); continue }
-        if (-not $meta.VendorUrl -and $l -match '^\s*(?:#\s*)?VendorUrl\s*:\s*(.+?)\s*$') { $meta.VendorUrl = $Matches[1].Trim(); continue }
+        if (-not $meta.VendorUrl       -and $l -match '^\s*(?:#\s*)?VendorUrl\s*:\s*(.+?)\s*$')       { $meta.VendorUrl       = $Matches[1].Trim(); continue }
+        if (-not $meta.CPE             -and $l -match '^\s*(?:#\s*)?CPE\s*:\s*(.+?)\s*$')             { $meta.CPE             = $Matches[1].Trim(); continue }
+        if (-not $meta.ReleaseNotesUrl -and $l -match '^\s*(?:#\s*)?ReleaseNotesUrl\s*:\s*(.+?)\s*$') { $meta.ReleaseNotesUrl = $Matches[1].Trim(); continue }
+        if (-not $meta.DownloadPageUrl -and $l -match '^\s*(?:#\s*)?DownloadPageUrl\s*:\s*(.+?)\s*$') { $meta.DownloadPageUrl = $Matches[1].Trim(); continue }
 
-        if (-not $meta.App       -and $l -match '^\s*(?:#\s*)?Application\s*:\s*(.+?)\s*$') { $meta.App = $Matches[1].Trim(); continue }
+        if (-not $meta.App             -and $l -match '^\s*(?:#\s*)?Application\s*:\s*(.+?)\s*$')     { $meta.App             = $Matches[1].Trim(); continue }
 
         if (-not $meta.Description -and $l -match '^\s*\.SYNOPSIS\s*$') { $inSynopsis = $true; continue }
         if ($inSynopsis -and -not $meta.Description) {
@@ -343,13 +349,16 @@ function Get-PackagerMetadata {
     if (-not $meta.CMName) { $meta.CMName = $meta.App }
 
     return [pscustomobject]@{
-        Vendor      = $meta.Vendor
-        Application = $meta.App
-        CMName      = $meta.CMName
-        VendorUrl   = $meta.VendorUrl
-        Description = $meta.Description
-        Script      = (Split-Path -Leaf $Path)
-        FullPath    = $Path
+        Vendor          = $meta.Vendor
+        Application     = $meta.App
+        CMName          = $meta.CMName
+        VendorUrl       = $meta.VendorUrl
+        CPE             = $meta.CPE
+        ReleaseNotesUrl = $meta.ReleaseNotesUrl
+        DownloadPageUrl = $meta.DownloadPageUrl
+        Description     = $meta.Description
+        Script          = (Split-Path -Leaf $Path)
+        FullPath        = $Path
     }
 }
 

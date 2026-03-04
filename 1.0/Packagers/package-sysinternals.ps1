@@ -1,8 +1,10 @@
-<#
+﻿<#
 Vendor: Microsoft Corporation
 App: Sysinternals Suite
 CMName: Sysinternals Suite
 VendorUrl: https://learn.microsoft.com/en-us/sysinternals/
+ReleaseNotesUrl: https://learn.microsoft.com/en-us/sysinternals/
+DownloadPageUrl: https://learn.microsoft.com/en-us/sysinternals/downloads/
 
 .SYNOPSIS
     Packages Sysinternals Suite for MECM.

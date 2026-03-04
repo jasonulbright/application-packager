@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Microsoft
 App: Microsoft Teams Enterprise (x64)
 CMName: Microsoft Teams Enterprise
 VendorUrl: https://www.microsoft.com/microsoft-teams/download-app
+CPE: cpe:2.3:a:microsoft:teams:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://learn.microsoft.com/en-us/officeupdates/teams-app-versioning
+DownloadPageUrl: https://learn.microsoft.com/en-us/microsoftteams/get-clients
 
 .SYNOPSIS
     Packages Microsoft Teams Enterprise (system-wide) MSIX for MECM.

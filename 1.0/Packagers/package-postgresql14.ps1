@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: PostgreSQL Global Development Group
 App: PostgreSQL 14 (x64)
 CMName: PostgreSQL 14
 VendorUrl: https://www.postgresql.org/
+CPE: cpe:2.3:a:postgresql:postgresql:14.*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://www.postgresql.org/docs/14/release.html
+DownloadPageUrl: https://www.postgresql.org/download/windows/
 
 .SYNOPSIS
     Packages PostgreSQL 14 (x64) for MECM.

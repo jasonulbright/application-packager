@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Microsoft Corporation
 App: Visual Studio Code (x64)
 CMName: VS Code
 VendorUrl: https://code.visualstudio.com/
+CPE: cpe:2.3:a:microsoft:visual_studio_code:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://code.visualstudio.com/updates
+DownloadPageUrl: https://code.visualstudio.com/download
 
 .SYNOPSIS
     Packages Visual Studio Code (x64) for MECM.

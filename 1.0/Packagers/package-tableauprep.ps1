@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Salesforce (Tableau)
 App: Tableau Prep Builder (x64)
 CMName: Tableau Prep Builder
 VendorUrl: https://www.tableau.com/products/prep
+CPE: cpe:2.3:a:tableau:prep_builder:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://www.tableau.com/support/releases
+DownloadPageUrl: https://www.tableau.com/support/releases
 
 .SYNOPSIS
     Packages Tableau Prep Builder (x64) for MECM.

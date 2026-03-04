@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Microsoft Corporation
 App: PowerToys
 CMName: PowerToys
 VendorUrl: https://github.com/microsoft/PowerToys
+CPE: cpe:2.3:a:microsoft:powertoys:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://github.com/microsoft/PowerToys/releases
+DownloadPageUrl: https://github.com/microsoft/PowerToys/releases
 
 .SYNOPSIS
     Packages Microsoft PowerToys for MECM.

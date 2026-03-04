@@ -1,8 +1,11 @@
-<#
+﻿<#
 Vendor: Microsoft Corporation
 App: Microsoft Edge WebView2 Runtime (x64)
 CMName: Microsoft Edge WebView2 Runtime
 VendorUrl: https://developer.microsoft.com/microsoft-edge/webview2/
+CPE: cpe:2.3:a:microsoft:edge_webview2:*:*:*:*:*:*:*:*
+ReleaseNotesUrl: https://learn.microsoft.com/en-us/microsoft-edge/webview2/release-notes/
+DownloadPageUrl: https://developer.microsoft.com/en-us/microsoft-edge/webview2/
 
 .SYNOPSIS
     Packages Microsoft Edge WebView2 Runtime (x64) for MECM.
