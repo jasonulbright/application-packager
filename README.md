@@ -480,7 +480,7 @@ All packager scripts import the shared module which provides:
 
 ## License
 
-This project is licensed under the [Business Source License 1.1](LICENSE). See LICENSE for full terms including the Additional Use Grant and Change Date.
+This project is licensed under the [MIT License](LICENSE).
 
 ## Author
 
