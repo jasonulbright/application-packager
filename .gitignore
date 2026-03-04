@@ -18,7 +18,7 @@ AppPackager.preferences.json
 
 # VersionMonitor runtime artifacts
 nvd-cache.json
-Reports/
+**/Reports/*.html
 
 # AI tooling config
 Claude.md
