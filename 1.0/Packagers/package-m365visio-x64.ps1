@@ -93,7 +93,7 @@ $CdnCabUrl       = "$CdnBaseUrl/v64.cab"
 $OdtSetupUrl     = "https://officecdn.microsoft.com/pr/wsus/setup.exe"
 
 $VendorFolder    = "Microsoft"
-$AppFolder       = "M365 Visio"
+$AppFolder       = "M365 Visio (x64)"
 $BaseDownloadRoot = Join-Path $DownloadRoot "M365Visio-x64"
 
 $DetectionExe    = "VISIO.EXE"

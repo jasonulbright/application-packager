@@ -93,7 +93,7 @@ $CdnCabUrl       = "$CdnBaseUrl/v32.cab"
 $OdtSetupUrl     = "https://officecdn.microsoft.com/pr/wsus/setup.exe"
 
 $VendorFolder    = "Microsoft"
-$AppFolder       = "M365 Apps for Enterprise"
+$AppFolder       = "M365 Apps for Enterprise (x86)"
 $BaseDownloadRoot = Join-Path $DownloadRoot "M365Apps-x86"
 
 $DetectionExe    = "WINWORD.EXE"
