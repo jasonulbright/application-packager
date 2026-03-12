@@ -2,6 +2,13 @@
 
 All notable changes to AppPackager are documented in this file.
 
+## [1.1.1] - 2026-03-12
+
+### Fixed
+- M365 network output folder collision — all 6 M365 packager scripts (Apps x64/x86, Visio x64/x86, Project x64/x86) used architecture-agnostic `$AppFolder` values (e.g., `M365 Apps for Enterprise`), causing x64 and x86 variants of the same product to write to the same network share folder and overwrite each other; added `(x64)`/`(x86)` suffix to each `$AppFolder` so every variant gets its own network content path
+
+---
+
 ## [1.1.0] - 2026-03-03
 
 ### Added
