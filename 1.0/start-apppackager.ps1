@@ -39,6 +39,7 @@
       - PowerShell 5.1
       - .NET Framework 4.8.2
       - Windows Forms (System.Windows.Forms)
+      - 7-Zip (required by Tableau packagers for Burn manifest extraction)
 
     Startup behavior:
       - No MECM queries on launch
