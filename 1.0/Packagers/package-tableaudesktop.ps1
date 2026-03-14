@@ -24,8 +24,8 @@ DownloadPageUrl: https://www.tableau.com/support/releases
     installer is the same for trial and licensed deployments; licensing is
     handled via online sign-in after installation.
 
-    Detection uses file version on tableau.exe in the version-specific install
-    directory (e.g., C:\Program Files\Tableau\Tableau 2025.3).
+    Detection uses the DisplayVersion registry value under the WOW6432Node
+    uninstall key (ProductCode extracted dynamically from the Burn manifest).
 
 .PARAMETER SiteCode
     ConfigMgr site code PSDrive name (e.g., "MCM").
@@ -220,17 +220,38 @@ function Invoke-StageTableauDesktop {
         -InstallPs1Content $installContent `
         -UninstallPs1Content $uninstallContent
 
-    # --- Write stage manifest ---
-    # Tableau Desktop installs to C:\Program Files\Tableau\Tableau <year>.<quarter>
-    $versionParts = $version.Split('.')
-    $yearQuarter = "{0}.{1}" -f $versionParts[0], $versionParts[1]
-    $detectionPath = "{0}\Tableau\Tableau {1}" -f $env:ProgramFiles, $yearQuarter
+    # --- Extract ProductCode and MSI version from Burn manifest ---
+    $extractPath = Join-Path $BaseDownloadRoot "_extract"
+    if (Test-Path -LiteralPath $extractPath) { Remove-Item -LiteralPath $extractPath -Recurse -Force }
+    $sevenZip = "C:\Program Files\7-Zip\7z.exe"
+    Write-Log "Extracting Burn manifest from installer..."
+    $proc = Start-Process -FilePath $sevenZip -ArgumentList @('x', "`"$localExe`"", "-o`"$extractPath`"", '-y') -Wait -PassThru -NoNewWindow
+    if ($proc.ExitCode -gt 1) { throw "7z extraction failed with exit code $($proc.ExitCode)" }
 
+    $manifestXml = Join-Path $extractPath "u23"
+    if (-not (Test-Path -LiteralPath $manifestXml)) { throw "Burn manifest (u23) not found in extracted payload" }
+    $xmlContent = [System.IO.File]::ReadAllText($manifestXml)
+    $xml = [xml]$xmlContent
+
+    $ns = New-Object System.Xml.XmlNamespaceManager($xml.NameTable)
+    $ns.AddNamespace('ba', 'http://schemas.microsoft.com/wix/2010/BootstrapperApplicationData')
+    $pkgNode = $xml.SelectSingleNode("//ba:WixPackageProperties[@Package='Tableau']", $ns)
+    if (-not $pkgNode) { throw "Could not find Tableau package node in Burn manifest" }
+
+    $productCode = $pkgNode.GetAttribute('ProductCode')
+    $msiVersion  = $pkgNode.GetAttribute('Version')
+    Write-Log "ProductCode (from manifest)  : $productCode"
+    Write-Log "MSI Version (from manifest)  : $msiVersion"
+
+    Remove-Item -LiteralPath $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+
+    # --- Write stage manifest ---
     $appName   = "Tableau Desktop $version (x64)"
     $publisher = "Salesforce (Tableau)"
+    $arpKey = "SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\$productCode"
 
-    Write-Log "Detection path               : $detectionPath"
-    Write-Log "Detection file               : tableau.exe"
+    Write-Log "Detection registry key       : $arpKey"
+    Write-Log "Detection DisplayVersion     : $msiVersion"
     Write-Log ""
 
     $manifestPath = Join-Path $localContentPath "stage-manifest.json"
@@ -240,13 +261,12 @@ function Invoke-StageTableauDesktop {
         SoftwareVersion = $version
         InstallerFile   = $installerFileName
         Detection       = @{
-            Type          = "File"
-            FilePath      = $detectionPath
-            FileName      = "tableau.exe"
-            PropertyType  = "Version"
-            Operator      = "GreaterEquals"
-            ExpectedValue = $version
-            Is64Bit       = $true
+            Type                = "RegistryKeyValue"
+            RegistryKeyRelative = $arpKey
+            ValueName           = "DisplayVersion"
+            ExpectedValue       = $msiVersion
+            Operator            = "IsEquals"
+            Is64Bit             = $false
         }
     }
 
