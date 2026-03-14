@@ -2,6 +2,13 @@
 
 All notable changes to AppPackager are documented in this file.
 
+## [1.1.2] - 2026-03-14
+
+### Fixed
+- Tableau detection broken — all 3 Tableau packager scripts (Desktop, Prep Builder, Reader) used file-based detection (`tableau.exe` / `tableau-prep-builder.exe` / `tabreader.exe` in version-specific install directories) which stopped working when Tableau changed binary locations; switched to WOW6432Node registry detection using `DisplayVersion` under the MSI ProductCode uninstall key, with ProductCode and MSI version extracted dynamically from the WiX Burn manifest (`u23`) during the Stage phase via 7-Zip
+
+---
+
 ## [1.1.1] - 2026-03-12
 
 ### Fixed
