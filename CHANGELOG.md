@@ -2,6 +2,18 @@
 
 All notable changes to AppPackager are documented in this file.
 
+## [1.1.3] - 2026-03-14
+
+### Changed
+- Flattened repo structure — moved all contents from `1.0/` subfolder to repository root; `Packagers/`, `VersionMonitor/`, and `start-apppackager.ps1` now live at the top level
+- Updated README project structure and "Adding a New Packager" instructions to reflect new layout
+
+### Fixed
+- Removed duplicate `Get-7ZipNetworkAppRoot` function from `package-7zip.ps1` — now uses shared `Get-NetworkAppRoot` from `AppPackagerCommon` like all other packagers
+- Added local administrator and 7-Zip to requirements in `start-apppackager.ps1` (NSIS packagers require admin for temp install/uninstall metadata discovery)
+
+---
+
 ## [1.1.2] - 2026-03-14
 
 ### Fixed
