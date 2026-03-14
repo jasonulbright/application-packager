@@ -365,33 +365,32 @@ Five detection types are supported: `RegistryKeyValue`, `RegistryKey`, `File`, `
 
 ```
 application-packager/
-  1.0/
-    start-apppackager.ps1              # WinForms GUI
-    apppackager-logo.jpg               # GUI window icon / logo
-    apppackager.ico                    # Application icon
-    Packagers/
-      AppPackagerCommon.psm1           # Shared module (logging, wrappers, MECM helpers)
-      AppPackagerCommon.psd1           # Module manifest
-      packager-preferences.json        # Universal packager settings (CompanyName, etc.)
-      package-7zip.ps1                 # One script per application
-      package-chrome.ps1
-      ...
-    VersionMonitor/
-      Start-VersionMonitor.ps1         # Headless version monitor entry point
-      monitor-config.json              # Monitor configuration (MECM, NVD, report settings)
-      simulate-overrides.json          # Simulated MECM versions for testing
-      Module/
-        VersionMonitorCommon.psm1      # Monitor module (discovery, comparison, NVD, HTML)
-        VersionMonitorCommon.psd1      # Module manifest
-      Logs/                            # Auto-created log files
-      Reports/                         # Auto-created HTML reports
+  start-apppackager.ps1              # WinForms GUI
+  apppackager-logo.jpg               # GUI window icon / logo
+  apppackager.ico                    # Application icon
+  Packagers/
+    AppPackagerCommon.psm1           # Shared module (logging, wrappers, MECM helpers)
+    AppPackagerCommon.psd1           # Module manifest
+    packager-preferences.json        # Universal packager settings (CompanyName, etc.)
+    package-7zip.ps1                 # One script per application
+    package-chrome.ps1
+    ...
+  VersionMonitor/
+    Start-VersionMonitor.ps1         # Headless version monitor entry point
+    monitor-config.json              # Monitor configuration (MECM, NVD, report settings)
+    simulate-overrides.json          # Simulated MECM versions for testing
+    Module/
+      VersionMonitorCommon.psm1      # Monitor module (discovery, comparison, NVD, HTML)
+      VersionMonitorCommon.psd1      # Module manifest
+    Logs/                            # Auto-created log files
+    Reports/                         # Auto-created HTML reports
   CHANGELOG.md
   README.md
 ```
 
 ## Adding a New Packager
 
-1. Create a new file in `1.0/Packagers/` named `package-<appname>.ps1`
+1. Create a new file in `Packagers/` named `package-<appname>.ps1`
 
 2. Add metadata tags in the script header (parsed by the GUI):
    ```powershell
