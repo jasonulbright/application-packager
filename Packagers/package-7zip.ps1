@@ -154,21 +154,6 @@ function Get-7ZipDisplayVersion {
 }
 
 
-function Get-7ZipNetworkAppRoot {
-    param([Parameter(Mandatory)][string]$FileServerPath)
-
-    $appsRoot   = Join-Path $FileServerPath "Applications"
-    $vendorPath = Join-Path $appsRoot $VendorFolder
-    $appPath    = Join-Path $vendorPath $AppFolder
-
-    Initialize-Folder -Path $appsRoot
-    Initialize-Folder -Path $vendorPath
-    Initialize-Folder -Path $appPath
-
-    return $appPath
-}
-
-
 # ---------------------------------------------------------------------------
 # Stage phase
 # ---------------------------------------------------------------------------
@@ -334,7 +319,7 @@ function Invoke-Package7Zip {
         throw "Network root path not accessible: $FileServerPath"
     }
 
-    $networkAppRoot = Get-7ZipNetworkAppRoot -FileServerPath $FileServerPath
+    $networkAppRoot = Get-NetworkAppRoot -FileServerPath $FileServerPath -VendorFolder $VendorFolder -AppFolder $AppFolder
     $networkContentPath = Join-Path $networkAppRoot $manifest.SoftwareVersion
     Initialize-Folder -Path $networkContentPath
 
