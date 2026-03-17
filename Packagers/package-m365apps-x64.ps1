@@ -286,6 +286,7 @@ function Invoke-StageM365Apps {
             PropertyType  = "Version"
             Operator      = "GreaterEquals"
             ExpectedValue = $version
+            Is64Bit       = $true
         }
     }
 

@@ -2,6 +2,13 @@
 
 All notable changes to AppPackager are documented in this file.
 
+## [1.1.4] - 2026-03-17
+
+### Fixed
+- M365 x64 detection broken on 64-bit systems — all 3 M365 x64 packager scripts (Apps, Project, Visio) omitted `Is64Bit = $true` on the File detection clause, causing MECM to check the 32-bit filesystem path (`Program Files (x86)`) instead of the native `Program Files` path; detection always failed because 64-bit Office installs WINWORD.EXE/WINPROJ.EXE/VISIO.EXE to the native path only
+
+---
+
 ## [1.1.3] - 2026-03-14
 
 ### Changed

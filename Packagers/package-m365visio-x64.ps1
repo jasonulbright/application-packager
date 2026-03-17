@@ -263,6 +263,7 @@ function Invoke-StageM365Visio {
             PropertyType  = "Version"
             Operator      = "GreaterEquals"
             ExpectedValue = $version
+            Is64Bit       = $true
         }
     }
 
