@@ -2,6 +2,17 @@
 
 All notable changes to AppPackager are documented in this file.
 
+## [1.1.5] - 2026-03-17
+
+### Added
+- New packager: `package-xencenter.ps1` — scrapes xenserver.com/downloads for latest XenCenter MSI, MSI ProductCode ARP detection, `/qn /norestart`
+- New packager: `package-xenservervmtools.ps1` — scrapes xenserver.com/downloads for latest VM Tools (Management Agent x64) MSI, MSI ProductCode ARP detection, `ALLOWAUTOUPDATE=NO IDENTIFYAUTOUPDATE=NO /qn /norestart`
+
+### Fixed
+- NVD CVE query returned all historical CVEs for a product instead of only those affecting the deployed version — `Invoke-NvdCveQuery` now uses `versionStart` (MECM version) and `versionEnd` (vendor version) parameters to scope results to the vulnerable window; cache key updated to include version range
+
+---
+
 ## [1.1.4] - 2026-03-17
 
 ### Fixed

@@ -284,12 +284,19 @@ function Write-NvdCache {
 function Invoke-NvdCveQuery {
     param(
         [Parameter(Mandatory)][string]$CPE,
-        [string]$VersionFloor,
+        [string]$VersionStart,
+        [string]$VersionEnd,
         [string]$ApiKey
     )
 
     $baseUrl = 'https://services.nvd.nist.gov/rest/json/cves/2.0'
     $url = "{0}?virtualMatchString={1}&resultsPerPage=100" -f $baseUrl, [uri]::EscapeDataString($CPE)
+    if ($VersionStart) {
+        $url += "&versionStart={0}&versionStartType=including" -f [uri]::EscapeDataString($VersionStart)
+    }
+    if ($VersionEnd) {
+        $url += "&versionEnd={0}&versionEndType=excluding" -f [uri]::EscapeDataString($VersionEnd)
+    }
     if ($ApiKey) { $url += "&apiKey=$ApiKey" }
 
     $tmpFile = Join-Path $env:TEMP ("nvd-{0}.json" -f (Get-Random))
@@ -376,7 +383,7 @@ function Invoke-NvdBatchQuery {
             continue
         }
 
-        $cacheKey = $cpe
+        $cacheKey = "{0}|{1}|{2}" -f $cpe, $app.MecmVersion, $app.VendorVersion
         if ($cache.ContainsKey($cacheKey) -and $cache[$cacheKey].QueriedAt) {
             try {
                 $cachedAt = [datetime]::Parse($cache[$cacheKey].QueriedAt)
@@ -404,7 +411,10 @@ function Invoke-NvdBatchQuery {
         }
 
         Write-Log ("Querying NVD for {0} ({1})" -f $app.Script, $cpe)
-        $result = Invoke-NvdCveQuery -CPE $cpe -ApiKey $ApiKey
+        $queryParams = @{ CPE = $cpe; ApiKey = $ApiKey }
+        if ($app.MecmVersion) { $queryParams['VersionStart'] = $app.MecmVersion }
+        if ($app.VendorVersion) { $queryParams['VersionEnd'] = $app.VendorVersion }
+        $result = Invoke-NvdCveQuery @queryParams
         $requestTimes.Enqueue((Get-Date))
         $now = Get-Date
 
