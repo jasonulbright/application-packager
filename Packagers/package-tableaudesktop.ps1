@@ -24,7 +24,7 @@ DownloadPageUrl: https://www.tableau.com/support/releases
     installer is the same for trial and licensed deployments; licensing is
     handled via online sign-in after installation.
 
-    Detection uses the DisplayVersion registry value under the WOW6432Node
+    Detection uses the DisplayVersion registry value under the standard Uninstall node
     uninstall key (ProductCode extracted dynamically from the Burn manifest).
 
 .PARAMETER SiteCode
@@ -248,7 +248,7 @@ function Invoke-StageTableauDesktop {
     # --- Write stage manifest ---
     $appName   = "Tableau Desktop $version (x64)"
     $publisher = "Salesforce (Tableau)"
-    $arpKey = "SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\$productCode"
+    $arpKey = "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\$productCode"
 
     Write-Log "Detection registry key       : $arpKey"
     Write-Log "Detection DisplayVersion     : $msiVersion"

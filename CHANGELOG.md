@@ -2,6 +2,13 @@
 
 All notable changes to AppPackager are documented in this file.
 
+## [1.1.6] - 2026-03-23
+
+### Fixed
+- Tableau detection registry path — all 3 Tableau packager scripts (Desktop, Prep Builder, Reader) used `WOW6432Node` uninstall key but the ProductCode GUID registers under the standard `Uninstall` node; corrected ARP key path and help text
+
+---
+
 ## [1.1.5] - 2026-03-17
 
 ### Added

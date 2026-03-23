@@ -22,7 +22,7 @@ DownloadPageUrl: https://www.tableau.com/support/releases
     The latest version is resolved by scraping the Tableau release notes page.
     Tableau Reader is free (no license required).
 
-    Detection uses the DisplayVersion registry value under the WOW6432Node
+    Detection uses the DisplayVersion registry value under the standard Uninstall node
     uninstall key (ProductCode extracted dynamically from the Burn manifest).
 
 .PARAMETER SiteCode
@@ -246,7 +246,7 @@ function Invoke-StageTableauReader {
     # --- Write stage manifest ---
     $appName   = "Tableau Reader $version (x64)"
     $publisher = "Salesforce (Tableau)"
-    $arpKey = "SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\$productCode"
+    $arpKey = "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\$productCode"
 
     Write-Log "Detection registry key       : $arpKey"
     Write-Log "Detection DisplayVersion     : $msiVersion"
