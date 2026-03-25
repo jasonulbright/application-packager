@@ -1,5 +1,5 @@
 ﻿<#
-Vendor: Microsoft Corporation
+Vendor: Microsoft
 App: PowerShell 7 LTS (x64)
 CMName: PowerShell 7 LTS
 VendorUrl: https://github.com/PowerShell/PowerShell

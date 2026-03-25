@@ -1,17 +1,17 @@
 ﻿<#
 Vendor: Google
-App: Google Chrome Enterprise (x64)
-CMName: Google Chrome Enterprise
+App: Google Chrome
+CMName: Google Chrome
 VendorUrl: https://chromeenterprise.google/browser/download/
 CPE: cpe:2.3:a:google:chrome:*:*:*:*:*:*:*:*
 ReleaseNotesUrl: https://chromereleases.googleblog.com/
 DownloadPageUrl: https://chromeenterprise.google/download/
 
 .SYNOPSIS
-    Packages Google Chrome Enterprise (x64) MSI for MECM.
+    Packages Google Chrome MSI for MECM.
 
 .DESCRIPTION
-    Downloads the latest Google Chrome Enterprise x64 MSI from Google's static
+    Downloads the latest Google Chrome MSI from Google's static
     enterprise download URL, stages content to a versioned local folder with
     ARP detection metadata, and creates an MECM Application with registry-based
     detection.
@@ -35,7 +35,7 @@ DownloadPageUrl: https://chromeenterprise.google/download/
 
 .PARAMETER FileServerPath
     UNC root that contains your Applications folder (example: \\fileserver\sccm$).
-    Content is staged under: <FileServerPath>\Applications\Google\Chrome Enterprise\<Version>
+    Content is staged under: <FileServerPath>\Applications\Google\Google Chrome\<Version>
 
 .PARAMETER DownloadRoot
     Local root folder for staging downloaded installers.
@@ -98,7 +98,7 @@ $MsiDownloadUrl      = "https://dl.google.com/dl/chrome/install/googlechromestan
 $MsiFileName         = "googlechromestandaloneenterprise64.msi"
 
 $VendorFolder = "Google"
-$AppFolder    = "Chrome Enterprise"
+$AppFolder    = "Google Chrome"
 
 $BaseDownloadRoot = Join-Path $DownloadRoot "Chrome"
 
@@ -137,7 +137,7 @@ function Get-ChromeStableVersion {
 function Invoke-StageChrome {
     Write-Log ""
     Write-Log ("=" * 60)
-    Write-Log "Google Chrome Enterprise (x64) - STAGE phase"
+    Write-Log "Google Chrome - STAGE phase"
     Write-Log ("=" * 60)
     Write-Log ""
 
@@ -152,7 +152,7 @@ function Invoke-StageChrome {
     $localMsi = Join-Path $BaseDownloadRoot $MsiFileName
     Write-Log "Local MSI path               : $localMsi"
     Write-Log ""
-    Write-Log "Downloading Chrome Enterprise MSI..."
+    Write-Log "Downloading Google Chrome MSI..."
     Invoke-DownloadWithRetry -Url $MsiDownloadUrl -OutFile $localMsi
 
     # --- Extract MSI properties ---
@@ -201,7 +201,7 @@ function Invoke-StageChrome {
 
     # --- Write stage manifest ---
     $publisher = "Google LLC"
-    $appName = "Google Chrome Enterprise $productVersionRaw"
+    $appName = "Google Chrome $productVersionRaw"
 
     $manifestPath = Join-Path $localContentPath "stage-manifest.json"
     Write-StageManifest -Path $manifestPath -ManifestData @{
@@ -232,7 +232,7 @@ function Invoke-StageChrome {
 function Invoke-PackageChrome {
     Write-Log ""
     Write-Log ("=" * 60)
-    Write-Log "Google Chrome Enterprise (x64) - PACKAGE phase"
+    Write-Log "Google Chrome - PACKAGE phase"
     Write-Log ("=" * 60)
     Write-Log ""
 
@@ -325,7 +325,7 @@ try {
 
     Write-Log ""
     Write-Log ("=" * 60)
-    Write-Log "Google Chrome Enterprise (x64) Auto-Packager starting"
+    Write-Log "Google Chrome Auto-Packager starting"
     Write-Log ("=" * 60)
     Write-Log ""
     Write-Log ("RunAsUser                    : {0}\{1}" -f $env:USERDOMAIN,$env:USERNAME)

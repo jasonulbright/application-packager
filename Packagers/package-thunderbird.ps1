@@ -1,5 +1,5 @@
 ﻿<#
-Vendor: Mozilla Foundation
+Vendor: Mozilla
 App: Mozilla Thunderbird (x64)
 CMName: Thunderbird
 VendorUrl: https://www.thunderbird.net/

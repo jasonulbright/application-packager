@@ -1,5 +1,5 @@
 ﻿<#
-Vendor: Microsoft Corporation
+Vendor: Microsoft
 App: Sysinternals Suite
 CMName: Sysinternals Suite
 VendorUrl: https://learn.microsoft.com/en-us/sysinternals/

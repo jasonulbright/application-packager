@@ -1,5 +1,5 @@
 ﻿<#
-Vendor: Microsoft Corporation
+Vendor: Microsoft
 App: .NET 8 Desktop Runtime (x86+x64)
 CMName: Microsoft Windows Desktop Runtime - 8
 VendorUrl: https://dotnet.microsoft.com/download/dotnet/8.0

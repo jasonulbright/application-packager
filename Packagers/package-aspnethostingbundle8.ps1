@@ -1,5 +1,5 @@
 ﻿<#
-Vendor: Microsoft Corporation
+Vendor: Microsoft
 App: ASP.NET 8 Server Hosting Bundle (x64)
 CMName: Microsoft .NET 8
 VendorUrl: https://dotnet.microsoft.com/download/dotnet/8.0

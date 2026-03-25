@@ -81,6 +81,7 @@ function Read-Preferences {
         EstimatedRuntimeMins = 15
         MaximumRuntimeMins   = 30
         CompanyName          = ""
+        HiddenApplications   = @()
     }
 
     $path = Get-PreferencesPath
@@ -97,6 +98,7 @@ function Read-Preferences {
         if ($null -ne $data.EstimatedRuntimeMins)  { $defaults.EstimatedRuntimeMins = [int]$data.EstimatedRuntimeMins }
         if ($null -ne $data.MaximumRuntimeMins)    { $defaults.MaximumRuntimeMins   = [int]$data.MaximumRuntimeMins }
         if ($null -ne $data.CompanyName)            { $defaults.CompanyName          = [string]$data.CompanyName }
+        if ($null -ne $data.HiddenApplications)    { $defaults.HiddenApplications  = @($data.HiddenApplications) }
     }
     catch { }
 
@@ -1092,6 +1094,159 @@ function Save-CwaSwitches {
     Set-Content -LiteralPath $path -Value $json -Encoding UTF8
 }
 
+function Show-ApplicationsDialog {
+    param(
+        [Parameter(Mandatory)][System.Windows.Forms.Form]$Owner,
+        [Parameter(Mandatory)][string]$PackagersRoot,
+        [AllowEmptyCollection()][string[]]$HiddenApplications = @()
+    )
+
+    $dlg = New-Object System.Windows.Forms.Form
+    $dlg.Text = "Applications"
+    $dlg.Size = New-Object System.Drawing.Size(520, 620)
+    $dlg.StartPosition = "CenterParent"
+    $dlg.FormBorderStyle = "FixedDialog"
+    $dlg.MaximizeBox = $false
+    $dlg.MinimizeBox = $false
+    $dlg.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+
+    $lblInfo = New-Object System.Windows.Forms.Label
+    $lblInfo.Text = "Select which applications appear in the main grid. Uncheck to hide."
+    $lblInfo.Location = New-Object System.Drawing.Point(12, 12)
+    $lblInfo.Size = New-Object System.Drawing.Size(480, 20)
+    $lblInfo.ForeColor = [System.Drawing.Color]::FromArgb(100, 100, 100)
+    $dlg.Controls.Add($lblInfo)
+
+    $tree = New-Object System.Windows.Forms.TreeView
+    $tree.Location = New-Object System.Drawing.Point(12, 38)
+    $tree.Size = New-Object System.Drawing.Size(480, 490)
+    $tree.Anchor = "Top,Left,Right,Bottom"
+    $tree.CheckBoxes = $true
+    $tree.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+    $tree.ShowLines = $true
+    $tree.ShowPlusMinus = $true
+    $tree.ShowRootLines = $true
+    $tree.FullRowSelect = $true
+    $dlg.Controls.Add($tree)
+
+    # Populate tree grouped by vendor
+    $items = Get-Packagers -Root $PackagersRoot
+    $vendors = $items | Group-Object Vendor | Sort-Object Name
+    foreach ($group in $vendors) {
+        $vendorNode = New-Object System.Windows.Forms.TreeNode
+        $vendorNode.Text = if ($group.Name) { $group.Name } else { "(No Vendor)" }
+        $vendorNode.Tag = "vendor"
+
+        $allChecked = $true
+        foreach ($app in ($group.Group | Sort-Object Application)) {
+            $appNode = New-Object System.Windows.Forms.TreeNode
+            $appNode.Text = $app.Application
+            $appNode.Tag = $app.Script
+            $isHidden = $HiddenApplications -contains $app.Script
+            $appNode.Checked = -not $isHidden
+            if ($isHidden) { $allChecked = $false }
+            $vendorNode.Nodes.Add($appNode) | Out-Null
+        }
+
+        $vendorNode.Checked = $allChecked
+        $tree.Nodes.Add($vendorNode) | Out-Null
+    }
+
+    $tree.ExpandAll()
+
+    # Propagate vendor checkbox to children
+    $suppressEvent = $false
+    $tree.Add_AfterCheck({
+        param($s, $e)
+        if ($suppressEvent) { return }
+        $suppressEvent = $true
+        try {
+            if ($e.Node.Tag -eq "vendor") {
+                foreach ($child in $e.Node.Nodes) {
+                    $child.Checked = $e.Node.Checked
+                }
+            }
+            else {
+                # Update parent vendor node
+                $parent = $e.Node.Parent
+                if ($parent) {
+                    $allChecked = $true
+                    foreach ($child in $parent.Nodes) {
+                        if (-not $child.Checked) { $allChecked = $false; break }
+                    }
+                    $parent.Checked = $allChecked
+                }
+            }
+        }
+        finally { $suppressEvent = $false }
+    })
+
+    # Buttons
+    $btnSelectAll = New-Object System.Windows.Forms.Button
+    $btnSelectAll.Text = "Select All"
+    $btnSelectAll.Location = New-Object System.Drawing.Point(12, 538)
+    $btnSelectAll.Size = New-Object System.Drawing.Size(100, 34)
+    $btnSelectAll.Anchor = "Bottom,Left"
+    $btnSelectAll.Add_Click({
+        foreach ($vendor in $tree.Nodes) {
+            $vendor.Checked = $true
+            foreach ($child in $vendor.Nodes) { $child.Checked = $true }
+        }
+    })
+    $dlg.Controls.Add($btnSelectAll)
+
+    $btnSelectNone = New-Object System.Windows.Forms.Button
+    $btnSelectNone.Text = "Select None"
+    $btnSelectNone.Location = New-Object System.Drawing.Point(120, 538)
+    $btnSelectNone.Size = New-Object System.Drawing.Size(100, 34)
+    $btnSelectNone.Anchor = "Bottom,Left"
+    $btnSelectNone.Add_Click({
+        foreach ($vendor in $tree.Nodes) {
+            $vendor.Checked = $false
+            foreach ($child in $vendor.Nodes) { $child.Checked = $false }
+        }
+    })
+    $dlg.Controls.Add($btnSelectNone)
+
+    $btnOk = New-Object System.Windows.Forms.Button
+    $btnOk.Text = "OK"
+    $btnOk.DialogResult = [System.Windows.Forms.DialogResult]::OK
+    $btnOk.Location = New-Object System.Drawing.Point(280, 538)
+    $btnOk.Size = New-Object System.Drawing.Size(100, 34)
+    $btnOk.Anchor = "Bottom,Right"
+    $dlg.Controls.Add($btnOk)
+
+    $btnCancel = New-Object System.Windows.Forms.Button
+    $btnCancel.Text = "Cancel"
+    $btnCancel.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
+    $btnCancel.Location = New-Object System.Drawing.Point(392, 538)
+    $btnCancel.Size = New-Object System.Drawing.Size(100, 34)
+    $btnCancel.Anchor = "Bottom,Right"
+    $dlg.Controls.Add($btnCancel)
+
+    $dlg.AcceptButton = $btnOk
+    $dlg.CancelButton = $btnCancel
+
+    $result = $dlg.ShowDialog($Owner)
+
+    if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
+        # Collect unchecked scripts
+        $hidden = New-Object System.Collections.Generic.List[string]
+        foreach ($vendor in $tree.Nodes) {
+            foreach ($child in $vendor.Nodes) {
+                if (-not $child.Checked) {
+                    $hidden.Add([string]$child.Tag)
+                }
+            }
+        }
+        $dlg.Dispose()
+        return @{ Changed = $true; HiddenApplications = $hidden.ToArray() }
+    }
+
+    $dlg.Dispose()
+    return @{ Changed = $false; HiddenApplications = $HiddenApplications }
+}
+
 function Show-CwaSwitchesDialog {
     param([Parameter(Mandatory)][System.Windows.Forms.Form]$Owner)
 
@@ -1640,7 +1795,50 @@ $menuCwaSwitches.Add_Click({
 $menuExit = New-Object System.Windows.Forms.ToolStripMenuItem "Exit"
 $menuExit.Add_Click({ $form.Close() })
 
+$menuApps = New-Object System.Windows.Forms.ToolStripMenuItem "Applications..."
+$menuApps.Add_Click({
+    $result = Show-ApplicationsDialog -Owner $form -PackagersRoot $PackagersRoot -HiddenApplications @($script:Prefs.HiddenApplications)
+    if ($result.Changed) {
+        $script:Prefs.HiddenApplications = $result.HiddenApplications
+        Save-Preferences -Prefs $script:Prefs
+        # Re-filter the grid
+        $hidden = [System.Collections.Generic.HashSet[string]]::new([string[]]@($script:Prefs.HiddenApplications), [System.StringComparer]::OrdinalIgnoreCase)
+        foreach ($row in $dt.Rows) {
+            $scriptName = [string]$row["Script"]
+            if ($hidden.Contains($scriptName)) {
+                $row.Delete()
+            }
+        }
+        $dt.AcceptChanges()
+        # Add back any newly-shown apps that were hidden before
+        $currentScripts = @()
+        foreach ($r in $dt.Rows) { $currentScripts += [string]$r["Script"] }
+        $allItems = Get-Packagers -Root $PackagersRoot
+        foreach ($m in $allItems) {
+            if ($currentScripts -notcontains $m.Script -and -not $hidden.Contains($m.Script)) {
+                $row = $dt.NewRow()
+                $row["Selected"] = $false
+                $row["Vendor"] = $m.Vendor
+                $row["Application"] = $m.Application
+                $row["CurrentVersion"] = ""
+                $row["LatestVersion"] = ""
+                $row["Status"] = $m.Status
+                $row["CMName"] = $m.CMName
+                $row["Script"] = $m.Script
+                $row["FullPath"] = $m.FullPath
+                $row["VendorURL"] = $m.VendorUrl
+                $row["Description"] = $m.Description
+                $dt.Rows.Add($row) | Out-Null
+            }
+        }
+        $grid.Refresh()
+        $statusLabel.Text = ("{0} application(s) visible, {1} hidden." -f $dt.Rows.Count, $hidden.Count)
+        Add-LogLine -TextBox $txtLog -Message ("Application visibility updated: {0} visible, {1} hidden." -f $dt.Rows.Count, $hidden.Count)
+    }
+})
+
 $menuFile.DropDownItems.Add($menuPrefs) | Out-Null
+$menuFile.DropDownItems.Add($menuApps) | Out-Null
 $menuFile.DropDownItems.Add($menuCwaSwitches) | Out-Null
 $menuFile.DropDownItems.Add((New-Object System.Windows.Forms.ToolStripSeparator)) | Out-Null
 $menuFile.DropDownItems.Add($menuExit) | Out-Null
@@ -2394,6 +2592,37 @@ $btnMecm.Add_Click({
         $grid.EndEdit()
         $grid.Refresh()
 
+        # Auto-discovery: on first MECM check, offer to hide apps not found in MECM
+        if (@($script:Prefs.HiddenApplications).Count -eq 0) {
+            $notFound = @()
+            foreach ($r in $dt.Rows) {
+                if ([string]$r["Status"] -eq "Not found in MECM") {
+                    $notFound += [string]$r["Script"]
+                }
+            }
+            if ($notFound.Count -gt 0 -and $notFound.Count -lt $dt.Rows.Count) {
+                $answer = [System.Windows.Forms.MessageBox]::Show(
+                    ("{0} application(s) were not found in MECM.`n`nHide them from the grid? You can change this later via File > Applications." -f $notFound.Count),
+                    "Hide Unused Applications",
+                    [System.Windows.Forms.MessageBoxButtons]::YesNo,
+                    [System.Windows.Forms.MessageBoxIcon]::Question
+                )
+                if ($answer -eq [System.Windows.Forms.DialogResult]::Yes) {
+                    $script:Prefs.HiddenApplications = $notFound
+                    Save-Preferences -Prefs $script:Prefs
+                    $hiddenSet = [System.Collections.Generic.HashSet[string]]::new([string[]]$notFound, [System.StringComparer]::OrdinalIgnoreCase)
+                    $toRemove = @()
+                    foreach ($r in $dt.Rows) {
+                        if ($hiddenSet.Contains([string]$r["Script"])) { $toRemove += $r }
+                    }
+                    foreach ($r in $toRemove) { $r.Delete() }
+                    $dt.AcceptChanges()
+                    $grid.Refresh()
+                    Add-LogLine -TextBox $txtLog -Message ("{0} application(s) hidden. Manage via File > Applications." -f $notFound.Count)
+                }
+            }
+        }
+
         $statusLabel.Text = "MECM query complete."
     }
     finally {
@@ -2605,7 +2834,10 @@ $form.Add_Shown({
     Add-LogLine -TextBox $txtLog -Message ("Loading packagers from: {0}" -f $PackagersRoot)
 
     $items = Get-Packagers -Root $PackagersRoot
+    $hidden = [System.Collections.Generic.HashSet[string]]::new([string[]]@($script:Prefs.HiddenApplications), [System.StringComparer]::OrdinalIgnoreCase)
+    $hiddenCount = 0
     foreach ($m in $items) {
+        if ($hidden.Contains($m.Script)) { $hiddenCount++; continue }
         $row = $dt.NewRow()
         $row["Selected"] = $false
         $row["Vendor"] = $m.Vendor
@@ -2621,7 +2853,11 @@ $form.Add_Shown({
         $dt.Rows.Add($row) | Out-Null
     }
 
-    $statusLabel.Text = ("Loaded {0} packager(s). Ready." -f $dt.Rows.Count)
+    if ($hiddenCount -gt 0) {
+        $statusLabel.Text = ("{0} packager(s) loaded, {1} hidden. Ready." -f $dt.Rows.Count, $hiddenCount)
+    } else {
+        $statusLabel.Text = ("Loaded {0} packager(s). Ready." -f $dt.Rows.Count)
+    }
 })
 
 Restore-WindowState -Form $form

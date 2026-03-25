@@ -1,5 +1,5 @@
 ﻿<#
-Vendor: Microsoft Corporation
+Vendor: Microsoft
 App: PowerToys
 CMName: PowerToys
 VendorUrl: https://github.com/microsoft/PowerToys

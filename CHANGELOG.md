@@ -2,6 +2,19 @@
 
 All notable changes to AppPackager are documented in this file.
 
+## [1.1.7] - 2026-03-25
+
+### Added
+- **File > Applications** menu — TreeView dialog with checkboxes grouped by vendor, allows hiding unused packager scripts from the main grid. Preferences persist to `AppPackager.preferences.json` as `HiddenApplications`. Select All / Select None buttons included.
+- **Auto-discovery on first Check MECM** — after the initial MECM query, prompts to hide applications not found in MECM. Can be changed later via File > Applications.
+
+### Changed
+- Normalized vendor names across packager script headers: "Microsoft Corporation" to "Microsoft" (9 scripts), "Mozilla Foundation" to "Mozilla" (1 script). The `-Publisher` parameter in MECM app creation retains the legal entity name.
+- Renamed "Google Chrome Enterprise" to "Google Chrome" in `package-chrome.ps1` — matches ARP display name. Header, CMName, synopsis, description, log messages, and folder name updated.
+- Renamed "Microsoft Edge Enterprise" to "Microsoft Edge" in `package-edge.ps1` — matches ARP display name. Header, CMName, synopsis, description, and log messages updated. MSI filename (`MicrosoftEdgeEnterpriseX64.msi`) unchanged as it is the vendor's download filename.
+
+---
+
 ## [1.1.6] - 2026-03-23
 
 ### Fixed

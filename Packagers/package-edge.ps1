@@ -1,17 +1,17 @@
 ﻿<#
-Vendor: Microsoft Corporation
-App: Microsoft Edge Enterprise (x64)
-CMName: Microsoft Edge Enterprise
+Vendor: Microsoft
+App: Microsoft Edge
+CMName: Microsoft Edge
 VendorUrl: https://www.microsoft.com/edge/business/download
 CPE: cpe:2.3:a:microsoft:edge_chromium:*:*:*:*:*:*:*:*
 ReleaseNotesUrl: https://learn.microsoft.com/en-us/deployedge/microsoft-edge-relnote-stable-channel
 DownloadPageUrl: https://www.microsoft.com/en-us/edge/business/download
 
 .SYNOPSIS
-    Packages Microsoft Edge Enterprise (x64) MSI for MECM.
+    Packages Microsoft Edge MSI for MECM.
 
 .DESCRIPTION
-    Downloads the latest Microsoft Edge Enterprise x64 MSI from the official
+    Downloads the latest Microsoft Edge MSI from the official
     Microsoft link, stages content to a versioned local folder with compound
     file-based detection metadata, and creates an MECM Application with
     file-version detection (OR connector).
@@ -137,7 +137,7 @@ function Get-LatestEdgeVersion {
 function Invoke-StageEdge {
     Write-Log ""
     Write-Log ("=" * 60)
-    Write-Log "Microsoft Edge Enterprise (x64) - STAGE phase"
+    Write-Log "Microsoft Edge - STAGE phase"
     Write-Log ("=" * 60)
     Write-Log ""
 
@@ -194,7 +194,7 @@ function Invoke-StageEdge {
     $detectionPath1 = "C:\Program Files (x86)\Microsoft\Edge\Application"
     $detectionPath2 = "C:\Program Files (x86)\Microsoft\EdgeUpdate\Install"
 
-    $appName   = "Microsoft Edge Enterprise - $version"
+    $appName   = "Microsoft Edge - $version"
     $publisher = "Microsoft Corporation"
 
     Write-Log ""
@@ -249,7 +249,7 @@ function Invoke-StageEdge {
 function Invoke-PackageEdge {
     Write-Log ""
     Write-Log ("=" * 60)
-    Write-Log "Microsoft Edge Enterprise (x64) - PACKAGE phase"
+    Write-Log "Microsoft Edge - PACKAGE phase"
     Write-Log ("=" * 60)
     Write-Log ""
 
@@ -337,7 +337,7 @@ try {
 
     Write-Log ""
     Write-Log ("=" * 60)
-    Write-Log "Microsoft Edge Enterprise (x64) Auto-Packager starting"
+    Write-Log "Microsoft Edge Auto-Packager starting"
     Write-Log ("=" * 60)
     Write-Log ""
     Write-Log ("RunAsUser                    : {0}\{1}" -f $env:USERDOMAIN,$env:USERNAME)

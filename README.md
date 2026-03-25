@@ -70,6 +70,8 @@ Or with custom parameters:
 
 Settings that rarely change (Site Code, File Share Root, Download Root, Est/Max Runtime, Company Name) are managed via **File > Preferences** and persisted to `AppPackager.preferences.json`. Company Name is also synced to `packager-preferences.json` for use by ODT-based packagers. The Comment field remains on the main form for per-run entry. Window size and position are persisted automatically across sessions.
 
+**File > Applications** lets you show or hide individual packager scripts from the main grid, grouped by vendor in a checkbox TreeView. Hidden applications are persisted to `AppPackager.preferences.json`. On the first Check MECM run, the tool offers to auto-hide applications not found in your MECM environment.
+
 ![Preferences](prefs_screenshot.png)
 
 Citrix Workspace App install switches are configured via **File > Citrix Workspace Switches...**. The dialog provides grouped checkboxes for installation options, plugins/add-ons, update/telemetry, store policy, and ADDLOCAL component selection. Settings are persisted to `citrix-workspace-switches.json` and applied during Stage for both CR and LTSR packagers.

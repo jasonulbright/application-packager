@@ -1,5 +1,5 @@
 ﻿<#
-Vendor: Microsoft Corporation
+Vendor: Microsoft
 App: Microsoft Edge WebView2 Runtime (x64)
 CMName: Microsoft Edge WebView2 Runtime
 VendorUrl: https://developer.microsoft.com/microsoft-edge/webview2/

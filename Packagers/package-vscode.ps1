@@ -1,5 +1,5 @@
 ﻿<#
-Vendor: Microsoft Corporation
+Vendor: Microsoft
 App: Visual Studio Code (x64)
 CMName: VS Code
 VendorUrl: https://code.visualstudio.com/
