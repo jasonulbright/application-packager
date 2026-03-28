@@ -1,0 +1,7 @@
+{
+  "ProjectType": "mecm-tool",
+  "Status": "active",
+  "Category": "MECM",
+  "ValidationSchedule": "daily",
+  "Notes": "115 packager scripts. Browser scripts need daily validation. Monthly release cycle apps need twice-monthly checks."
+}
