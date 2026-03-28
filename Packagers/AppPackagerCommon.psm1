@@ -368,12 +368,27 @@ function Find-UninstallEntry {
 # ---------------------------------------------------------------------------
 
 function Write-StageManifest {
+    <#
+    .SYNOPSIS
+        Writes a stage-manifest.json file.
+
+    .DESCRIPTION
+        Serializes ManifestData to JSON with schema metadata.
+
+        Schema v2 adds optional fields for PSADT/deployment tool integration:
+          InstallerType     "MSI" or "EXE"
+          InstallArgs       Silent install arguments
+          UninstallArgs     Silent uninstall arguments
+          UninstallCommand  Full uninstall command (for EXE products)
+          ProductCode       MSI ProductCode GUID (for MSI products)
+          RunningProcess    Array of process names to close before install
+    #>
     param(
         [Parameter(Mandatory)][string]$Path,
         [Parameter(Mandatory)][hashtable]$ManifestData
     )
 
-    $ManifestData['SchemaVersion'] = 1
+    $ManifestData['SchemaVersion'] = 2
     $ManifestData['StagedAt'] = (Get-Date -Format 'o')
 
     $json = $ManifestData | ConvertTo-Json -Depth 6

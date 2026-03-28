@@ -204,6 +204,10 @@ function Invoke-StageTreeSizeFree {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $InstallerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "/VERYSILENT /NORESTART /MERGETASKS=!desktopicon"
+        UninstallArgs   = "/VERYSILENT /NORESTART"
+        RunningProcess  = @("TreeSizeFree")
         Detection       = @{
             Type          = "File"
             FilePath      = $detectionPath

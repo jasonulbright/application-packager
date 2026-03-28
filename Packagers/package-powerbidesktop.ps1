@@ -231,6 +231,10 @@ function Invoke-StagePowerBI {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $ExeFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "-quiet ACCEPT_EULA=1"
+        UninstallArgs   = "/qn /norestart"
+        RunningProcess  = @("PBIDesktop")
         Detection       = @{
             Type          = "File"
             FilePath      = $detectionPath

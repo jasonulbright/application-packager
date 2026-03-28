@@ -260,6 +260,11 @@ function Invoke-StageTableauPrep {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $installerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "/install /quiet /norestart ACCEPTEULA=1 SENDTELEMETRY=0"
+        UninstallArgs   = "/uninstall /quiet /norestart"
+        ProductCode     = $productCode
+        RunningProcess  = @("tabprep")
         Detection       = @{
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = $arpKey

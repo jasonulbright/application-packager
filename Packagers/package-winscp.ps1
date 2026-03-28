@@ -358,6 +358,10 @@ function Invoke-StageWinSCP {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $installerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "/VERYSILENT /NORESTART /ALLUSERS"
+        UninstallArgs   = "/VERYSILENT /NORESTART"
+        RunningProcess  = @("WinSCP")
         Detection       = @{
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = $regRelative

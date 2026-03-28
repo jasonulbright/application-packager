@@ -201,6 +201,10 @@ function Invoke-StageVMwareWorkstation {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $installerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = '/s /v"/qn EULAS_AGREED=1 AUTOSOFTWAREUPDATE=0 DATACOLLECTION=0"'
+        UninstallArgs   = '/s /v"/qn"'
+        RunningProcess  = @("vmware", "vmplayer")
         Detection       = @{
             Type          = "File"
             FilePath      = $detectionPath

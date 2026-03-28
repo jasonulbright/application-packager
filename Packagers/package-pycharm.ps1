@@ -1,22 +1,20 @@
-﻿<#
-Vendor: The R Foundation
-App: R for Windows (x64)
-CMName: R for Windows
-VendorUrl: https://cran.r-project.org/
-CPE: cpe:2.3:a:r-project:r:*:*:*:*:*:*:*:*
-ReleaseNotesUrl: https://cran.r-project.org/bin/windows/base/NEWS.html
-DownloadPageUrl: https://cran.r-project.org/bin/windows/base/
+<#
+Vendor: JetBrains
+App: PyCharm Community Edition (x64)
+CMName: PyCharm Community
+VendorUrl: https://www.jetbrains.com/pycharm/
+CPE: cpe:2.3:a:jetbrains:pycharm:*:*:*:*:community:*:*:*
+ReleaseNotesUrl: https://www.jetbrains.com/pycharm/whatsnew/
+DownloadPageUrl: https://www.jetbrains.com/pycharm/download/
 
 .SYNOPSIS
-    Packages R for Windows (x64) for MECM.
+    Packages PyCharm Community Edition (x64) for MECM.
 
 .DESCRIPTION
-    Queries the r-hub versions API for the latest R release, downloads the
-    64-bit EXE installer from CRAN, stages content to a versioned local folder
-    with file-existence detection metadata, and creates an MECM Application.
-
-    R installs to a version-specific directory (C:\Program Files\R\R-X.Y.Z\),
-    so detection targets the R.exe binary in that versioned path.
+    Queries the JetBrains releases API for the latest PyCharm Community Edition,
+    downloads the Windows EXE installer, stages content to a versioned local
+    folder with file-based version detection metadata, and creates an MECM
+    Application with file-based detection.
 
     Supports two-phase operation:
       -StageOnly    Download, generate content wrappers, write manifest
@@ -31,11 +29,11 @@ DownloadPageUrl: https://cran.r-project.org/bin/windows/base/
 
 .PARAMETER FileServerPath
     UNC root that contains your Applications folder (example: \\fileserver\sccm$).
-    Content is staged under: <FileServerPath>\Applications\The R Foundation\R for Windows\<Version>
+    Content is staged under: <FileServerPath>\Applications\JetBrains\PyCharm Community\<Version>
 
 .PARAMETER DownloadRoot
     Local root folder for staging downloaded installers.
-    Each packager creates a subfolder under this path (e.g., <DownloadRoot>\R).
+    Each packager creates a subfolder under this path (e.g., <DownloadRoot>\PyCharm).
     Default: C:\temp\ap
 
 .PARAMETER EstimatedRuntimeMins
@@ -55,7 +53,8 @@ DownloadPageUrl: https://cran.r-project.org/bin/windows/base/
     create MECM application with file-based detection.
 
 .PARAMETER GetLatestVersionOnly
-    Outputs only the latest available R version string and exits.
+    Queries the JetBrains API for the latest PyCharm Community version, outputs
+    the version string, and exits. No download or MECM changes are made.
 
 .REQUIREMENTS
     - PowerShell 5.1
@@ -71,7 +70,7 @@ param(
     [string]$FileServerPath = "\\fileserver\sccm$",
     [string]$DownloadRoot = "C:\temp\ap",
     [int]$EstimatedRuntimeMins = 15,
-    [int]$MaximumRuntimeMins = 30,
+    [int]$MaximumRuntimeMins = 60,
     [string]$LogPath,
     [switch]$GetLatestVersionOnly,
     [switch]$StageOnly,
@@ -88,55 +87,50 @@ if ($StageOnly -and $PackageOnly) {
 }
 
 # --- Configuration ---
-$VersionApiUrl = "https://api.r-hub.io/rversions/r-release-win"
+$JetBrainsApiUrl = "https://data.services.jetbrains.com/products/releases?code=PCC&latest=true&type=release"
 
-$VendorFolder = "The R Foundation"
-$AppFolder    = "R for Windows"
+$VendorFolder = "JetBrains"
+$AppFolder    = "PyCharm Community"
 
-$BaseDownloadRoot = Join-Path $DownloadRoot "R"
+$BaseDownloadRoot = Join-Path $DownloadRoot "PyCharm"
 
 # --- Functions ---
 
 
-function Get-LatestRVersion {
-    <#
-    .SYNOPSIS
-        Queries the r-hub versions API for the latest R for Windows release.
-        Returns a PSCustomObject with Version, FileName, and DownloadUrl.
-    #>
+function Get-LatestPyCharmRelease {
     param([switch]$Quiet)
 
-    Write-Log "R versions API               : $VersionApiUrl" -Quiet:$Quiet
+    Write-Log "JetBrains API URL            : $JetBrainsApiUrl" -Quiet:$Quiet
 
     try {
-        $json = (curl.exe -L --fail --silent --show-error $VersionApiUrl) -join ''
-        if ($LASTEXITCODE -ne 0) { throw "Failed to fetch R version info: $VersionApiUrl" }
+        $json = (curl.exe -L --fail --silent --show-error $JetBrainsApiUrl) -join ''
+        if ($LASTEXITCODE -ne 0) { throw "Failed to fetch PyCharm release info" }
 
-        $release = ConvertFrom-Json $json
+        $releases = ConvertFrom-Json $json
+        $latest = $releases.PCC[0]
 
-        $version = $release.version
-        if ([string]::IsNullOrWhiteSpace($version)) {
-            throw "No version found in API response."
-        }
+        if (-not $latest) { throw "No PyCharm Community releases found in API response." }
 
-        $downloadUrl = $release.URL
-        if ([string]::IsNullOrWhiteSpace($downloadUrl)) {
-            throw "No download URL found in API response."
-        }
+        $version = $latest.version
+        $build   = $latest.build
 
-        # Extract filename from URL (e.g., R-4.5.2-win.exe)
-        $fileName = [System.IO.Path]::GetFileName($downloadUrl)
+        # Find Windows EXE download
+        $downloadUrl = $latest.downloads.windows.link
+        if (-not $downloadUrl) { throw "No Windows download link found for PyCharm $version." }
 
-        Write-Log "Latest R version             : $version" -Quiet:$Quiet
+        $fileName = "pycharm-community-${version}.exe"
+
+        Write-Log "Latest PyCharm version       : $version (build $build)" -Quiet:$Quiet
 
         return [PSCustomObject]@{
             Version     = $version
+            Build       = $build
             FileName    = $fileName
             DownloadUrl = $downloadUrl
         }
     }
     catch {
-        Write-Log "Failed to get R version info: $($_.Exception.Message)" -Level ERROR
+        Write-Log "Failed to get PyCharm release info: $($_.Exception.Message)" -Level ERROR
         return $null
     }
 }
@@ -146,10 +140,10 @@ function Get-LatestRVersion {
 # Stage phase
 # ---------------------------------------------------------------------------
 
-function Invoke-StageR {
+function Invoke-StagePyCharm {
     Write-Log ""
     Write-Log ("=" * 60)
-    Write-Log "R for Windows (x64) - STAGE phase"
+    Write-Log "PyCharm Community Edition - STAGE phase"
     Write-Log ("=" * 60)
     Write-Log ""
 
@@ -161,16 +155,15 @@ function Invoke-StageR {
     Initialize-Folder -Path $BaseDownloadRoot
 
     # --- Get version ---
-    $release = Get-LatestRVersion
-    if (-not $release) { throw "Could not resolve R version." }
+    $releaseInfo = Get-LatestPyCharmRelease
+    if (-not $releaseInfo) { throw "Could not resolve PyCharm release info." }
 
-    $version         = $release.Version
-    $installerFileName = $release.FileName
-    $downloadUrl     = $release.DownloadUrl
+    $version           = $releaseInfo.Version
+    $installerFileName = $releaseInfo.FileName
+    $downloadUrl       = $releaseInfo.DownloadUrl
 
     Write-Log "Version                      : $version"
     Write-Log "Installer filename           : $installerFileName"
-    Write-Log "Download URL                 : $downloadUrl"
     Write-Log ""
 
     # --- Download ---
@@ -178,7 +171,9 @@ function Invoke-StageR {
     Write-Log "Local installer path         : $localExe"
 
     if (-not (Test-Path -LiteralPath $localExe)) {
-        Write-Log "Downloading R installer..."
+        Write-Log "Download URL                 : $downloadUrl"
+        Write-Log ""
+        Write-Log "Downloading installer..."
         Invoke-DownloadWithRetry -Url $downloadUrl -OutFile $localExe
     }
     else {
@@ -199,28 +194,42 @@ function Invoke-StageR {
     }
 
     # --- Generate content wrappers ---
-    $uninstallCmd = '{0}\R\R-{1}\unins000.exe' -f $env:ProgramFiles, $version
+    # PyCharm uses NSIS installer: /S for silent, /D= for install dir (no quotes, must be last)
+    $installContent = (
+        ('$exePath = Join-Path $PSScriptRoot ''{0}''' -f $installerFileName),
+        '$proc = Start-Process -FilePath $exePath -ArgumentList @(''/S'') -Wait -PassThru -NoNewWindow',
+        'exit $proc.ExitCode'
+    ) -join "`r`n"
 
-    $wrapperContent = New-ExeWrapperContent `
-        -InstallerFileName $installerFileName `
-        -InstallArgs "'/VERYSILENT', '/NORESTART'" `
-        -UninstallCommand $uninstallCmd `
-        -UninstallArgs "'/VERYSILENT'"
+    # Uninstall via the bundled uninstaller
+    $uninstallContent = (
+        '$uninstaller = ''C:\Program Files\JetBrains\PyCharm Community Edition *\bin\Uninstall.exe''',
+        '$uninstPath = (Resolve-Path $uninstaller -ErrorAction SilentlyContinue | Select-Object -First 1).Path',
+        'if ($uninstPath) {',
+        '    $proc = Start-Process -FilePath $uninstPath -ArgumentList @(''/S'') -Wait -PassThru -NoNewWindow',
+        '    exit $proc.ExitCode',
+        '} else {',
+        '    Write-Error "PyCharm uninstaller not found"',
+        '    exit 1',
+        '}'
+    ) -join "`r`n"
 
     Write-ContentWrappers -OutputPath $localContentPath `
-        -InstallPs1Content $wrapperContent.Install `
-        -UninstallPs1Content $wrapperContent.Uninstall
+        -InstallPs1Content $installContent `
+        -UninstallPs1Content $uninstallContent
 
-    # --- Write stage manifest ---
-    $detectionPath = '{0}\R\R-{1}\bin' -f $env:ProgramFiles, $version
-
-    $appName   = "R for Windows - $version (x64)"
-    $publisher = "The R Foundation"
+    # --- Detection: file-based on pycharm64.exe ---
+    $detectionPath = "C:\Program Files\JetBrains\PyCharm Community Edition $version\bin"
+    $detectionFile = "pycharm64.exe"
 
     Write-Log ""
     Write-Log "Detection path               : $detectionPath"
-    Write-Log "Detection file               : R.exe"
+    Write-Log "Detection file               : $detectionFile"
     Write-Log ""
+
+    # --- Write stage manifest ---
+    $appName   = "PyCharm Community - $version"
+    $publisher = "JetBrains"
 
     $manifestPath = Join-Path $localContentPath "stage-manifest.json"
     Write-StageManifest -Path $manifestPath -ManifestData @{
@@ -229,20 +238,18 @@ function Invoke-StageR {
         SoftwareVersion = $version
         InstallerFile   = $installerFileName
         InstallerType   = "EXE"
-        InstallArgs     = "/VERYSILENT /NORESTART"
-        UninstallArgs   = "/VERYSILENT"
-        RunningProcess  = @("Rgui", "Rterm")
+        InstallArgs     = "/S"
+        UninstallCommand = "C:\Program Files\JetBrains\PyCharm Community Edition $version\bin\Uninstall.exe"
+        UninstallArgs   = "/S"
+        RunningProcess  = @("pycharm64")
         Detection       = @{
-            Type         = "File"
-            FilePath     = $detectionPath
-            FileName     = "R.exe"
-            PropertyType = "Existence"
-            Is64Bit      = $true
+            Type          = "File"
+            FilePath      = $detectionPath
+            FileName      = $detectionFile
+            PropertyType  = "Existence"
+            Is64Bit       = $true
         }
     }
-
-    # Save version marker for Package phase
-    Set-Content -LiteralPath (Join-Path $BaseDownloadRoot "staged-version.txt") -Value $version -Encoding ASCII -ErrorAction Stop
 
     Write-Log ""
     Write-Log "Stage complete               : $localContentPath"
@@ -255,10 +262,10 @@ function Invoke-StageR {
 # Package phase
 # ---------------------------------------------------------------------------
 
-function Invoke-PackageR {
+function Invoke-PackagePyCharm {
     Write-Log ""
     Write-Log ("=" * 60)
-    Write-Log "R for Windows (x64) - PACKAGE phase"
+    Write-Log "PyCharm Community Edition - PACKAGE phase"
     Write-Log ("=" * 60)
     Write-Log ""
 
@@ -270,12 +277,10 @@ function Invoke-PackageR {
     # --- Resolve version from local staging ---
     Initialize-Folder -Path $BaseDownloadRoot
 
-    $versionFile = Join-Path $BaseDownloadRoot "staged-version.txt"
-    if (-not (Test-Path -LiteralPath $versionFile)) {
-        throw "Version marker not found - run Stage phase first: $versionFile"
-    }
-    $version = (Get-Content -LiteralPath $versionFile -Raw -ErrorAction Stop).Trim()
+    $releaseInfo = Get-LatestPyCharmRelease -Quiet
+    if (-not $releaseInfo) { throw "Could not resolve PyCharm version for Package phase." }
 
+    $version          = $releaseInfo.Version
     $localContentPath = Join-Path $BaseDownloadRoot $version
     $manifestPath     = Join-Path $localContentPath "stage-manifest.json"
 
@@ -285,8 +290,7 @@ function Invoke-PackageR {
     Write-Log "AppName                      : $($manifest.AppName)"
     Write-Log "Publisher                    : $($manifest.Publisher)"
     Write-Log "SoftwareVersion              : $($manifest.SoftwareVersion)"
-    Write-Log "Detection Path               : $($manifest.Detection.FilePath)"
-    Write-Log "Detection File               : $($manifest.Detection.FileName)"
+    Write-Log "Detection Type               : $($manifest.Detection.Type)"
     Write-Log ""
 
     # --- Network share ---
@@ -308,12 +312,14 @@ function Invoke-PackageR {
         $dest = Join-Path $networkContentPath $f.Name
         if (-not (Test-Path -LiteralPath $dest)) {
             Copy-Item -LiteralPath $f.FullName -Destination $dest -Force -ErrorAction Stop
-            Write-Log "Copied to network            : $($f.Name)"
+            Write-Log "Copied                       : $($f.Name)"
         }
         else {
-            Write-Log "Already on network           : $($f.Name)"
+            Write-Log "Exists, skipped              : $($f.Name)"
         }
     }
+
+    Write-Log ""
 
     # --- MECM application ---
     New-MECMApplicationFromManifest `
@@ -323,59 +329,36 @@ function Invoke-PackageR {
         -NetworkContentPath $networkContentPath `
         -EstimatedRuntimeMins $EstimatedRuntimeMins `
         -MaximumRuntimeMins $MaximumRuntimeMins
+
+    Write-Log ""
+    Write-Log ("=" * 60)
+    Write-Log "Package complete"
+    Write-Log ("=" * 60)
 }
 
 
-# --- Latest-only mode ---
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+$prefs = Get-PackagerPreferences
+if ($prefs.CompanyName) {
+    Write-Log "Company name                 : $($prefs.CompanyName)"
+}
+
 if ($GetLatestVersionOnly) {
-    try {
-        $ProgressPreference = 'SilentlyContinue'
-        $rel = Get-LatestRVersion -Quiet
-        if (-not $rel) { exit 1 }
-        Write-Output $rel.Version
-        exit 0
-    }
-    catch {
-        exit 1
-    }
+    $releaseInfo = Get-LatestPyCharmRelease -Quiet
+    if ($releaseInfo) { Write-Output $releaseInfo.Version }
+    exit 0
 }
 
-# --- Main ---
-try {
-    $startLocation = Get-Location
-
-    Write-Log ""
-    Write-Log ("=" * 60)
-    Write-Log "R for Windows (x64) Auto-Packager starting"
-    Write-Log ("=" * 60)
-    Write-Log ""
-    Write-Log ("RunAsUser                    : {0}\{1}" -f $env:USERDOMAIN,$env:USERNAME)
-    Write-Log ("Machine                      : {0}" -f $env:COMPUTERNAME)
-    Write-Log "Start location               : $startLocation"
-    Write-Log "SiteCode                     : $SiteCode"
-    Write-Log "FileServerPath               : $FileServerPath"
-    Write-Log "BaseDownloadRoot             : $BaseDownloadRoot"
-    Write-Log "VersionApiUrl                : $VersionApiUrl"
-    Write-Log ""
-
-    if ($StageOnly) {
-        Invoke-StageR
-    }
-    elseif ($PackageOnly) {
-        Invoke-PackageR
-    }
-    else {
-        Invoke-StageR
-        Invoke-PackageR
-    }
-
-    Write-Log ""
-    Write-Log "Script execution complete."
+if ($PackageOnly) {
+    Invoke-PackagePyCharm
+    exit 0
 }
-catch {
-    Write-Log "SCRIPT FAILED: $($_.Exception.Message)" -Level ERROR
-    exit 1
-}
-finally {
-    Set-Location $startLocation -ErrorAction SilentlyContinue
+
+$localContentPath = Invoke-StagePyCharm
+
+if (-not $StageOnly) {
+    Invoke-PackagePyCharm
 }

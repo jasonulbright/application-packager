@@ -237,6 +237,10 @@ function Invoke-StageWinRAR {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $installerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "/S"
+        UninstallArgs   = "/S"
+        RunningProcess  = @("WinRAR")
         Detection       = @{
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = $arpRegistryKey

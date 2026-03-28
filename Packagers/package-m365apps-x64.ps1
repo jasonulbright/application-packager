@@ -279,6 +279,10 @@ function Invoke-StageM365Apps {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = "setup.exe"
+        InstallerType   = "ODT"
+        InstallArgs     = "/configure install.xml"
+        UninstallArgs   = "/configure uninstall.xml"
+        RunningProcess  = @("WINWORD", "EXCEL", "OUTLOOK", "POWERPNT", "MSACCESS", "ONENOTE", "MSPUB")
         Detection       = @{
             Type          = "File"
             FilePath      = $DetectionPath

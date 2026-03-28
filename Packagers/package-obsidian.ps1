@@ -214,6 +214,10 @@ function Invoke-StageObsidian {
         Publisher                = $publisher
         SoftwareVersion          = $version
         InstallerFile            = $installerFileName
+        InstallerType            = "EXE"
+        InstallArgs              = "/S"
+        UninstallArgs            = "/S"
+        RunningProcess           = @("Obsidian")
         InstallationBehaviorType = "InstallForUser"
         LogonRequirementType     = "OnlyWhenUserLoggedOn"
         Detection                = @{

@@ -242,6 +242,11 @@ function Invoke-StagePowerShell7Lts {
         Publisher       = $publisher
         SoftwareVersion = $productVersionRaw
         InstallerFile   = $MsiFileName
+        InstallerType   = "MSI"
+        InstallArgs     = "/quiet /norestart ADD_EXPLORER_CONTEXT_MENU_OPENPOWERSHELL=1 ENABLE_PSREMOTING=1 REGISTER_MANIFEST=1 ADD_PATH=1 USE_MU=0 ENABLE_MU=0"
+        UninstallArgs   = "/qn /norestart"
+        ProductCode     = $productCode
+        RunningProcess  = @("pwsh")
         Detection       = @{
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = $arpRegistryKey

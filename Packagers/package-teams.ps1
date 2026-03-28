@@ -255,6 +255,10 @@ function Invoke-StageTeams {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFiles  = @($BootstrapperFileName, $MsixFileName)
+        InstallerType   = "EXE"
+        InstallArgs     = "-p -o MSTeams-x64.msix"
+        UninstallArgs   = "-x"
+        RunningProcess  = @("ms-teams")
         Detection       = @{
             Type           = "Script"
             ScriptLanguage = "PowerShell"

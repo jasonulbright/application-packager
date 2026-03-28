@@ -257,6 +257,10 @@ function Invoke-StageCutePDF {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $WriterFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-"
+        UninstallArgs   = "/uninstall /s"
+        RunningProcess  = @()
         Detection       = @{
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = $arpRegistryKey

@@ -196,6 +196,10 @@ function Invoke-StageCCleaner {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $InstallerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "/S"
+        UninstallArgs   = "/S"
+        RunningProcess  = @("CCleaner", "CCleaner64")
         Detection       = @{
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = $arpRegistryKey

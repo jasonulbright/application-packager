@@ -216,6 +216,11 @@ function Invoke-StageInkscape {
         Publisher       = $publisher
         SoftwareVersion = $productVersionRaw
         InstallerFile   = $MsiFileName
+        InstallerType   = "MSI"
+        InstallArgs     = "/qn /norestart"
+        UninstallArgs   = "/qn /norestart"
+        ProductCode     = $productCode
+        RunningProcess  = @("inkscape")
         Detection       = @{
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = $arpRegistryKey

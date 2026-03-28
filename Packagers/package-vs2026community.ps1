@@ -230,6 +230,10 @@ function Invoke-StageVS2026Community {
         Publisher                = $publisher
         SoftwareVersion          = $version
         InstallerFile            = $BootstrapperName
+        InstallerType            = "EXE"
+        InstallArgs              = "--noWeb"
+        UninstallArgs            = "uninstall --quiet"
+        RunningProcess           = @("devenv")
         LogonRequirementType     = "OnlyWhenUserLoggedOn"
         RequireUserInteraction   = $true
         Detection                = @{

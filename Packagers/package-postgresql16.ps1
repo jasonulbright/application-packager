@@ -213,6 +213,10 @@ function Invoke-StagePostgreSQL {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $installerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "--mode unattended --unattendedmodeui none --superpassword P0stgres!MECM --serverport 5432 --install_runtimes 0 --disable-components stackbuilder"
+        UninstallArgs   = "--mode unattended"
+        RunningProcess  = @("postgres", "pgAdmin4")
         Detection       = @{
             Type          = "File"
             FilePath      = $detectionPath

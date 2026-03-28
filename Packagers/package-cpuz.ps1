@@ -204,6 +204,10 @@ function Invoke-StageCpuZ {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $installerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "/VERYSILENT /NORESTART"
+        UninstallArgs   = "/VERYSILENT /NORESTART"
+        RunningProcess  = @("cpuz")
         Detection       = @{
             Type          = "File"
             FilePath      = $detectionPath

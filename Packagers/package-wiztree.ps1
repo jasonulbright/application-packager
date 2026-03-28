@@ -206,6 +206,10 @@ function Invoke-StageWizTree {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $installerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "/VERYSILENT /NORESTART"
+        UninstallArgs   = "/VERYSILENT /NORESTART"
+        RunningProcess  = @("WizTree", "WizTree64")
         Detection       = @{
             Type          = "File"
             FilePath      = $detectionPath

@@ -255,11 +255,16 @@ function Invoke-StageGit {
 
     $manifestPath = Join-Path $localContentPath "stage-manifest.json"
     Write-StageManifest -Path $manifestPath -ManifestData @{
-        AppName         = $appName
-        Publisher       = $publisher
-        SoftwareVersion = $version
-        InstallerFile   = $installerFileName
-        Detection       = @{
+        AppName          = $appName
+        Publisher        = $publisher
+        SoftwareVersion  = $version
+        InstallerFile    = $installerFileName
+        InstallerType    = "EXE"
+        InstallArgs      = "/VERYSILENT /NORESTART /NOCANCEL /SP-"
+        UninstallCommand = "C:\Program Files\Git\unins000.exe"
+        UninstallArgs    = "/VERYSILENT /NORESTART"
+        RunningProcess   = @("git", "bash", "mintty")
+        Detection        = @{
             Type           = "Script"
             ScriptLanguage = "PowerShell"
             ScriptText     = $detectionScript

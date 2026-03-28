@@ -248,6 +248,11 @@ function Invoke-StageKeePass {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $msiFileName
+        InstallerType   = "MSI"
+        InstallArgs     = "/qn /norestart"
+        UninstallArgs   = "/qn /norestart"
+        ProductCode     = $productCode
+        RunningProcess  = @("KeePass")
         Detection       = @{
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = $arpRegistryKey

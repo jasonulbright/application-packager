@@ -276,6 +276,10 @@ function Invoke-StageZoom {
         Publisher                = $publisher
         SoftwareVersion          = $version
         InstallerFile            = $InstallerFileName
+        InstallerType            = "EXE"
+        InstallArgs              = "/silent /install"
+        UninstallArgs            = "/silent"
+        RunningProcess           = @("Zoom")
         InstallationBehaviorType = "InstallForUser"
         LogonRequirementType     = "OnlyWhenUserLoggedOn"
         Detection                = @{

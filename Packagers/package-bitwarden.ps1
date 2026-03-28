@@ -221,6 +221,10 @@ function Invoke-StageBitwarden {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $installerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "/allusers /S"
+        UninstallArgs   = "/allusers /S"
+        RunningProcess  = @("Bitwarden")
         Detection       = @{
             Type          = "File"
             FilePath      = $detectionPath

@@ -241,6 +241,10 @@ function Invoke-StageRStudio {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $installerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "/S"
+        UninstallArgs   = "/S"
+        RunningProcess  = @("rstudio")
         Detection       = @{
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = $arpKey

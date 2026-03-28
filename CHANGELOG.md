@@ -2,6 +2,18 @@
 
 All notable changes to AppPackager are documented in this file.
 
+## [1.2.0] - 2026-03-28
+
+### Added
+- **Manifest schema v2** -- `stage-manifest.json` now supports optional fields for deployment tool integration (PSADT, Intune, custom wrappers): `InstallerType`, `InstallArgs`, `UninstallArgs`, `UninstallCommand`, `ProductCode`, `RunningProcess`. All fields are optional -- v1 manifests still work. ([#1](https://github.com/jasonulbright/application-packager/issues/1))
+- New packager: `package-pycharm.ps1` -- JetBrains PyCharm Community Edition. Queries JetBrains releases API, NSIS silent install (`/S`), file-based existence detection on `pycharm64.exe`.
+
+### Changed
+- `Write-StageManifest` bumps SchemaVersion from 1 to 2. Existing packagers continue to work -- new fields are additive.
+- Gold standard `package-7zip.ps1` updated with full v2 fields: `InstallerType`, `InstallArgs`, `UninstallArgs`, `ProductCode`, `RunningProcess`.
+
+---
+
 ## [1.1.7] - 2026-03-25
 
 ### Added

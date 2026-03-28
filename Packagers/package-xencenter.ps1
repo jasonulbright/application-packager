@@ -224,6 +224,11 @@ function Invoke-StageXenCenter {
         Publisher       = $publisher
         SoftwareVersion = $productVersionRaw
         InstallerFile   = $MsiFileName
+        InstallerType   = "MSI"
+        InstallArgs     = "/qn /norestart"
+        UninstallArgs   = "/qn /norestart"
+        ProductCode     = $productCode
+        RunningProcess  = @("XenCenter")
         Detection       = @{
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = $arpEntry.RegistryKeyRelative

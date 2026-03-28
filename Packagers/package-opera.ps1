@@ -216,6 +216,10 @@ function Invoke-StageOpera {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $installerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "/silent /allusers=1 /launchopera=0 /setdefaultbrowser=0"
+        UninstallArgs   = "--uninstall /silent"
+        RunningProcess  = @("opera")
         Detection       = @{
             Type          = "File"
             FilePath      = $detectionPath

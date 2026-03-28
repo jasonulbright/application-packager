@@ -235,11 +235,16 @@ function Invoke-StageFileZilla {
 
     $manifestPath = Join-Path $localContentPath "stage-manifest.json"
     Write-StageManifest -Path $manifestPath -ManifestData @{
-        AppName         = $appName
-        Publisher       = $publisher
-        SoftwareVersion = $version
-        InstallerFile   = $installerFileName
-        Detection       = @{
+        AppName          = $appName
+        Publisher        = $publisher
+        SoftwareVersion  = $version
+        InstallerFile    = $installerFileName
+        InstallerType    = "EXE"
+        InstallArgs      = "/S"
+        UninstallCommand = "C:\Program Files\FileZilla FTP Client\uninstall.exe"
+        UninstallArgs    = "/S"
+        RunningProcess   = @("filezilla")
+        Detection        = @{
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = $arpRegistryKey
             ValueName           = "DisplayVersion"

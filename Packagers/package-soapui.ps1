@@ -205,6 +205,10 @@ function Invoke-StageSoapUI {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $installerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "-q"
+        UninstallArgs   = "-q"
+        RunningProcess  = @("SoapUI")
         Detection       = @{
             Type         = "File"
             FilePath     = $detectionPath

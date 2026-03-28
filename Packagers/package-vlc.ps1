@@ -221,6 +221,10 @@ function Invoke-StageVLC {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $msiFileName
+        InstallerType   = "MSI"
+        InstallArgs     = "/qn /norestart"
+        UninstallArgs   = "/qn /norestart"
+        RunningProcess  = @("vlc")
         Detection       = @{
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = $arpKey

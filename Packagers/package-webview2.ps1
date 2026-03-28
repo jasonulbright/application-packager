@@ -217,6 +217,10 @@ function Invoke-StageWebView2 {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $ExeFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "/silent /install"
+        UninstallArgs   = "/silent /uninstall"
+        RunningProcess  = @()
         Detection       = @{
             Type          = "File"
             FilePath      = $detectionPath

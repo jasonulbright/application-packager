@@ -213,11 +213,16 @@ function Invoke-StageFoxitReader {
 
     $manifestPath = Join-Path $localContentPath "stage-manifest.json"
     Write-StageManifest -Path $manifestPath -ManifestData @{
-        AppName         = $appName
-        Publisher       = $publisher
-        SoftwareVersion = $version
-        InstallerFile   = $installerFileName
-        Detection       = @{
+        AppName          = $appName
+        Publisher        = $publisher
+        SoftwareVersion  = $version
+        InstallerFile    = $installerFileName
+        InstallerType    = "EXE"
+        InstallArgs      = "/VERYSILENT /NORESTART /MERGETASKS=""!desktopicon"""
+        UninstallCommand = "C:\Program Files\Foxit Software\Foxit PDF Reader\unins000.exe"
+        UninstallArgs    = "/VERYSILENT /NORESTART"
+        RunningProcess   = @("FoxitPDFReader")
+        Detection        = @{
             Type          = "File"
             FilePath      = $detectionPath
             FileName      = "FoxitPDFReader.exe"

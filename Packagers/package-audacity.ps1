@@ -202,6 +202,10 @@ function Invoke-StageAudacity {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $installerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "/VERYSILENT /NORESTART"
+        UninstallArgs   = "/VERYSILENT /NORESTART"
+        RunningProcess  = @("Audacity")
         Detection       = @{
             Type          = "File"
             FilePath      = $detectionPath

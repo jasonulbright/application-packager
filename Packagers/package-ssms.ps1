@@ -217,6 +217,10 @@ function Invoke-StageSsms {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $BootstrapperName
+        InstallerType   = "EXE"
+        InstallArgs     = "--quiet --norestart"
+        UninstallArgs   = "uninstall --quiet --norestart"
+        RunningProcess  = @("Ssms")
         Detection       = @{
             Type          = "File"
             FilePath      = $detectionPath

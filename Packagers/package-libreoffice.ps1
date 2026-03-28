@@ -242,6 +242,11 @@ function Invoke-StageLibreOffice {
         Publisher       = $publisher
         SoftwareVersion = $productVersionRaw
         InstallerFile   = $MsiFileName
+        InstallerType   = "MSI"
+        InstallArgs     = "/quiet /norestart ADDLOCAL=ALL CREATEDESKTOPLINK=0 ISCHECKFORPRODUCTUPDATES=0"
+        UninstallArgs   = "/quiet /norestart"
+        ProductCode     = $productCode
+        RunningProcess  = @("soffice")
         Detection       = @{
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = $arpRegistryKey

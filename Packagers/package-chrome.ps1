@@ -209,6 +209,11 @@ function Invoke-StageChrome {
         Publisher       = $publisher
         SoftwareVersion = $productVersionRaw
         InstallerFile   = $MsiFileName
+        InstallerType   = "MSI"
+        InstallArgs     = "/qn /norestart"
+        UninstallArgs   = "/qn /norestart"
+        ProductCode     = $productCode
+        RunningProcess  = @("chrome")
         Detection       = @{
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = $arpRegistryKey

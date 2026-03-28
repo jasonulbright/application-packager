@@ -204,6 +204,10 @@ function Invoke-StageFirefox {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $msiFileName
+        InstallerType   = "MSI"
+        InstallArgs     = "/qn /norestart"
+        UninstallArgs   = "/qn /norestart"
+        RunningProcess  = @("firefox")
         Detection       = @{
             Type          = "File"
             FilePath      = $detectionPath

@@ -214,6 +214,10 @@ function Invoke-StagePostman {
         Publisher                = $publisher
         SoftwareVersion          = $version
         InstallerFile            = $InstallerFileName
+        InstallerType            = "EXE"
+        InstallArgs              = "-s"
+        UninstallArgs            = "--uninstall -s"
+        RunningProcess           = @("Postman")
         InstallationBehaviorType = "InstallForUser"
         LogonRequirementType     = "OnlyWhenUserLoggedOn"
         Detection                = @{

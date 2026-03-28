@@ -200,11 +200,16 @@ function Invoke-StageDBeaver {
 
     $manifestPath = Join-Path $localContentPath "stage-manifest.json"
     Write-StageManifest -Path $manifestPath -ManifestData @{
-        AppName         = $appName
-        Publisher       = $publisher
-        SoftwareVersion = $version
-        InstallerFile   = $installerFileName
-        Detection       = @{
+        AppName          = $appName
+        Publisher        = $publisher
+        SoftwareVersion  = $version
+        InstallerFile    = $installerFileName
+        InstallerType    = "EXE"
+        InstallArgs      = "/allusers /S"
+        UninstallCommand = "C:\Program Files\DBeaver\uninstall.exe"
+        UninstallArgs    = "/S"
+        RunningProcess   = @("dbeaver")
+        Detection        = @{
             Type          = "File"
             FilePath      = $detectionPath
             FileName      = "dbeaver.exe"

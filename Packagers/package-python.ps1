@@ -239,6 +239,10 @@ function Invoke-StagePython {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $installerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "/quiet InstallAllUsers=1 PrependPath=1 Include_test=0"
+        UninstallArgs   = "/uninstall /quiet"
+        RunningProcess  = @("python", "pythonw")
         Detection       = @{
             Type         = "File"
             FilePath     = $detectionPath

@@ -231,6 +231,10 @@ function Invoke-StageVMwareTools {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $installerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = '/S /v"/qn REBOOT=R ADDLOCAL=ALL REMOVE=FileIntrospection,NetworkIntrospection"'
+        UninstallArgs   = '/S /v"/qn REBOOT=R REMOVE=ALL"'
+        RunningProcess  = @("vmtoolsd")
         Detection       = @{
             Type          = "File"
             FilePath      = $detectionPath

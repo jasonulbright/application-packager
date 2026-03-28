@@ -231,6 +231,10 @@ function Invoke-StageAnaconda {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $installerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "/S /InstallationType=AllUsers /AddToPath=0 /RegisterPython=0 /D=C:\ProgramData\anaconda3"
+        UninstallArgs   = "/S"
+        RunningProcess  = @("anaconda-navigator", "python", "jupyter-notebook")
         Detection       = @{
             Type         = "File"
             FilePath     = $detectionPath

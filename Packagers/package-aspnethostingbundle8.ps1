@@ -220,6 +220,10 @@ function Invoke-StageASPNETHostingBundle8 {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $installerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "/install /quiet /norestart"
+        UninstallArgs   = "/uninstall /quiet /norestart"
+        RunningProcess  = @()
         Detection       = @{
             Type                = "RegistryKey"
             RegistryKeyRelative = $registryKey

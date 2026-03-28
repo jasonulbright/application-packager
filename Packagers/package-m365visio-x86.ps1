@@ -256,6 +256,10 @@ function Invoke-StageM365Visio {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = "setup.exe"
+        InstallerType   = "ODT"
+        InstallArgs     = "/configure install.xml"
+        UninstallArgs   = "/configure uninstall.xml"
+        RunningProcess  = @("VISIO")
         Detection       = @{
             Type          = "File"
             FilePath      = $DetectionPath

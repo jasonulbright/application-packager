@@ -292,7 +292,7 @@ Describe 'Write-StageManifest' {
 
         Test-Path -LiteralPath $path | Should -BeTrue
         $json = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
-        $json.SchemaVersion | Should -Be 1
+        $json.SchemaVersion | Should -Be 2
         $json.StagedAt | Should -Not -BeNullOrEmpty
         $json.AppName | Should -Be 'Test App - 1.0'
         $json.Publisher | Should -Be 'Test Vendor'
@@ -872,5 +872,188 @@ Describe 'Stage manifest with Corretto JDK 21 ARP detection' {
         $manifest.Detection.Type  | Should -Be 'RegistryKeyValue'
         $manifest.Detection.ExpectedValue | Should -Be '21.0.10.7'
         $manifest.Detection.Is64Bit | Should -BeTrue
+    }
+}
+
+# ============================================================================
+# Schema v2 — PSADT / deployment tool integration fields
+# ============================================================================
+
+Describe 'Schema v2: MSI manifest with install/uninstall/process fields' {
+    BeforeAll {
+        $script:v2Path = Join-Path $TestDrive 'v2-msi-manifest.json'
+
+        Write-StageManifest -Path $v2Path -ManifestData @{
+            AppName         = '7-Zip - 26.00 (x64)'
+            Publisher       = 'Igor Pavlov'
+            SoftwareVersion = '26.00'
+            InstallerFile   = '7z2600-x64.msi'
+            InstallerType   = 'MSI'
+            InstallArgs     = '/qn /norestart'
+            UninstallArgs   = '/qn /norestart'
+            ProductCode     = '{23170F69-40C1-2702-2600-000001000000}'
+            RunningProcess  = @('7zFM', '7zG')
+            Detection       = @{
+                Type                = 'RegistryKeyValue'
+                RegistryKeyRelative = 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{23170F69-40C1-2702-2600-000001000000}'
+                ValueName           = 'DisplayVersion'
+                DisplayVersion      = '26.00.00.0'
+                Is64Bit             = $true
+            }
+        }
+        $script:v2Manifest = Read-StageManifest -Path $v2Path
+    }
+
+    It 'emits SchemaVersion 2' {
+        $v2Manifest.SchemaVersion | Should -Be 2
+    }
+
+    It 'includes InstallerType' {
+        $v2Manifest.InstallerType | Should -Be 'MSI'
+    }
+
+    It 'includes InstallArgs' {
+        $v2Manifest.InstallArgs | Should -Be '/qn /norestart'
+    }
+
+    It 'includes UninstallArgs' {
+        $v2Manifest.UninstallArgs | Should -Be '/qn /norestart'
+    }
+
+    It 'includes ProductCode' {
+        $v2Manifest.ProductCode | Should -Be '{23170F69-40C1-2702-2600-000001000000}'
+    }
+
+    It 'includes RunningProcess as array' {
+        $v2Manifest.RunningProcess | Should -HaveCount 2
+        $v2Manifest.RunningProcess | Should -Contain '7zFM'
+        $v2Manifest.RunningProcess | Should -Contain '7zG'
+    }
+
+    It 'still includes all v1 fields' {
+        $v2Manifest.AppName         | Should -Not -BeNullOrEmpty
+        $v2Manifest.Publisher       | Should -Not -BeNullOrEmpty
+        $v2Manifest.SoftwareVersion | Should -Not -BeNullOrEmpty
+        $v2Manifest.InstallerFile   | Should -Not -BeNullOrEmpty
+        $v2Manifest.Detection       | Should -Not -BeNullOrEmpty
+        $v2Manifest.StagedAt        | Should -Not -BeNullOrEmpty
+    }
+}
+
+Describe 'Schema v2: EXE manifest with UninstallCommand and RunningProcess' {
+    BeforeAll {
+        $script:v2ExePath = Join-Path $TestDrive 'v2-exe-manifest.json'
+
+        Write-StageManifest -Path $v2ExePath -ManifestData @{
+            AppName          = 'PyCharm Community - 2025.2.6'
+            Publisher        = 'JetBrains'
+            SoftwareVersion  = '2025.2.6'
+            InstallerFile    = 'pycharm-community-2025.2.6.exe'
+            InstallerType    = 'EXE'
+            InstallArgs      = '/S'
+            UninstallCommand = 'C:\Program Files\JetBrains\PyCharm Community Edition 2025.2.6\bin\Uninstall.exe'
+            UninstallArgs    = '/S'
+            RunningProcess   = @('pycharm64')
+            Detection        = @{
+                Type         = 'File'
+                FilePath     = 'C:\Program Files\JetBrains\PyCharm Community Edition 2025.2.6\bin'
+                FileName     = 'pycharm64.exe'
+                PropertyType = 'Existence'
+                Is64Bit      = $true
+            }
+        }
+        $script:v2ExeManifest = Read-StageManifest -Path $v2ExePath
+    }
+
+    It 'includes InstallerType EXE' {
+        $v2ExeManifest.InstallerType | Should -Be 'EXE'
+    }
+
+    It 'includes UninstallCommand for EXE products' {
+        $v2ExeManifest.UninstallCommand | Should -Match 'Uninstall\.exe'
+    }
+
+    It 'includes InstallArgs' {
+        $v2ExeManifest.InstallArgs | Should -Be '/S'
+    }
+
+    It 'includes RunningProcess' {
+        $v2ExeManifest.RunningProcess | Should -Contain 'pycharm64'
+    }
+}
+
+Describe 'Schema v2: backward compatibility with v1 manifests (no v2 fields)' {
+    It 'v1-style manifest without v2 fields round-trips cleanly' {
+        $path = Join-Path $TestDrive 'v1-compat.json'
+
+        Write-StageManifest -Path $path -ManifestData @{
+            AppName         = 'Legacy App - 1.0'
+            Publisher       = 'Legacy Corp'
+            SoftwareVersion = '1.0'
+            InstallerFile   = 'setup.msi'
+            Detection       = @{
+                Type                = 'RegistryKeyValue'
+                RegistryKeyRelative = 'SOFTWARE\Legacy\App'
+                ValueName           = 'DisplayVersion'
+                ExpectedValue       = '1.0'
+            }
+        }
+
+        $manifest = Read-StageManifest -Path $path
+
+        # v2 fields should be absent (not null-filled or defaulted)
+        $manifest.PSObject.Properties.Name | Should -Not -Contain 'InstallerType'
+        $manifest.PSObject.Properties.Name | Should -Not -Contain 'InstallArgs'
+        $manifest.PSObject.Properties.Name | Should -Not -Contain 'RunningProcess'
+
+        # v1 fields still work
+        $manifest.AppName | Should -Be 'Legacy App - 1.0'
+        $manifest.SchemaVersion | Should -Be 2
+    }
+}
+
+# ============================================================================
+# PyCharm packager script structure
+# ============================================================================
+
+Describe 'package-pycharm.ps1 script structure' {
+    BeforeAll {
+        $script:pycharmContent = Get-Content "$PSScriptRoot\package-pycharm.ps1" -Raw
+    }
+
+    It 'parses without errors' {
+        $errors = $null
+        [System.Management.Automation.Language.Parser]::ParseFile(
+            "$PSScriptRoot\package-pycharm.ps1", [ref]$null, [ref]$errors)
+        $errors.Count | Should -Be 0
+    }
+
+    It 'has Vendor header' {
+        $pycharmContent | Should -Match 'Vendor: JetBrains'
+    }
+
+    It 'uses JetBrains releases API' {
+        $pycharmContent | Should -Match 'data\.services\.jetbrains\.com'
+    }
+
+    It 'uses /S for silent install' {
+        $pycharmContent | Should -Match "'/S'"
+    }
+
+    It 'writes v2 manifest fields' {
+        $pycharmContent | Should -Match 'InstallerType.*=.*"EXE"'
+        $pycharmContent | Should -Match 'InstallArgs'
+        $pycharmContent | Should -Match 'UninstallCommand'
+        $pycharmContent | Should -Match 'RunningProcess'
+    }
+
+    It 'has Stage and Package functions' {
+        $pycharmContent | Should -Match 'function Invoke-StagePyCharm'
+        $pycharmContent | Should -Match 'function Invoke-PackagePyCharm'
+    }
+
+    It 'supports -StageOnly and -PackageOnly switches' {
+        $pycharmContent | Should -Match '\[switch\]\$StageOnly'
+        $pycharmContent | Should -Match '\[switch\]\$PackageOnly'
     }
 }

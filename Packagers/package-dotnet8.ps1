@@ -254,6 +254,10 @@ function Invoke-StageDotNet8 {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFiles  = @($x64FileName, $x86FileName)
+        InstallerType   = "EXE"
+        InstallArgs     = "/install /quiet /norestart"
+        UninstallArgs   = "/uninstall /quiet /norestart"
+        RunningProcess  = @()
         Detection       = @{
             Type      = "Compound"
             Connector = "And"

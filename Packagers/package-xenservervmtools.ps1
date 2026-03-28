@@ -228,6 +228,11 @@ function Invoke-StageVMTools {
         Publisher       = $publisher
         SoftwareVersion = $productVersionRaw
         InstallerFile   = $MsiFileName
+        InstallerType   = "MSI"
+        InstallArgs     = "ALLOWAUTOUPDATE=NO IDENTIFYAUTOUPDATE=NO /qn /norestart"
+        UninstallArgs   = "/qn /norestart"
+        ProductCode     = $productCode
+        RunningProcess  = @()
         Detection       = @{
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = $arpEntry.RegistryKeyRelative

@@ -236,6 +236,11 @@ function Invoke-StagePuTTY {
         Publisher       = $publisher
         SoftwareVersion = $displayVersion
         InstallerFile   = $msiFileName
+        InstallerType   = "MSI"
+        InstallArgs     = "/qn /norestart"
+        UninstallArgs   = "/qn /norestart"
+        ProductCode     = $productCode
+        RunningProcess  = @("putty", "pageant", "plink")
         Detection       = @{
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = $arpRegistryKey

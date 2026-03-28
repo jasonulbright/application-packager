@@ -225,6 +225,10 @@ function Invoke-StagePositron {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $installerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART"
+        UninstallArgs   = "/VERYSILENT"
+        RunningProcess  = @("Positron")
         Detection       = @{
             Type         = "File"
             FilePath     = $detectionPath

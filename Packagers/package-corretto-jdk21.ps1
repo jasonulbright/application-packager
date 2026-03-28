@@ -185,6 +185,11 @@ function Invoke-StageCorrettoJDK21 {
         Publisher       = $Publisher
         SoftwareVersion = $displayVersion
         InstallerFile   = $msiFileName
+        InstallerType   = "MSI"
+        InstallArgs     = "/qn /norestart"
+        UninstallArgs   = "/qn /norestart"
+        ProductCode     = $productCode
+        RunningProcess  = @("java", "javaw")
         Detection       = @{
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = $arpRegistryKey

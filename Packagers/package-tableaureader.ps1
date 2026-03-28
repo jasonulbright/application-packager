@@ -258,6 +258,11 @@ function Invoke-StageTableauReader {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $installerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "/install /quiet /norestart ACCEPTEULA=1 SENDTELEMETRY=0"
+        UninstallArgs   = "/uninstall /quiet /norestart"
+        ProductCode     = $productCode
+        RunningProcess  = @("tabreader")
         Detection       = @{
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = $arpKey

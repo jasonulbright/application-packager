@@ -186,6 +186,11 @@ function Invoke-StageTemurinJDK8X86 {
         Publisher       = $Publisher
         SoftwareVersion = $displayVersion
         InstallerFile   = $msiFileName
+        InstallerType   = "MSI"
+        InstallArgs     = "/qn /norestart"
+        UninstallArgs   = "/qn /norestart"
+        ProductCode     = $productCode
+        RunningProcess  = @("java", "javaw")
         Detection       = @{
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = $arpRegistryKey

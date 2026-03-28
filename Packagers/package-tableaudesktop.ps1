@@ -260,6 +260,11 @@ function Invoke-StageTableauDesktop {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $installerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "/install /quiet /norestart ACCEPTEULA=1 REMOVEINSTALLEDAPP=1 SENDTELEMETRY=0"
+        UninstallArgs   = "/uninstall /quiet /norestart"
+        ProductCode     = $productCode
+        RunningProcess  = @("tableau")
         Detection       = @{
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = $arpKey

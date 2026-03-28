@@ -248,6 +248,10 @@ function Invoke-StageTeamViewerHost {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $InstallerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "/S"
+        UninstallArgs   = "/S"
+        RunningProcess  = @("TeamViewer_Service", "TeamViewer")
         Detection       = @{
             Type          = "File"
             FilePath      = $detectionPath

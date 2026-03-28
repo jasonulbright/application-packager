@@ -256,6 +256,10 @@ function Invoke-StageM365Project {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = "setup.exe"
+        InstallerType   = "ODT"
+        InstallArgs     = "/configure install.xml"
+        UninstallArgs   = "/configure uninstall.xml"
+        RunningProcess  = @("WINPROJ")
         Detection       = @{
             Type          = "File"
             FilePath      = $DetectionPath

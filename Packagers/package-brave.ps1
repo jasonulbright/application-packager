@@ -221,6 +221,10 @@ function Invoke-StageBrave {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $InstallerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "--install --silent --system-level"
+        UninstallArgs   = "--uninstall --system-level --force-uninstall"
+        RunningProcess  = @("brave")
         Detection       = @{
             Type          = "File"
             FilePath      = $detectionPath

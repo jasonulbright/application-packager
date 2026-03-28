@@ -204,6 +204,10 @@ function Invoke-StagePgAdmin4 {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $installerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "/VERYSILENT /NORESTART"
+        UninstallArgs   = "/VERYSILENT /NORESTART"
+        RunningProcess  = @("pgAdmin4")
         Detection       = @{
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = $arpRegistryKey

@@ -205,6 +205,10 @@ function Invoke-StageAnyDesk {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $InstallerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "--install --silent"
+        UninstallArgs   = "--remove --silent"
+        RunningProcess  = @("AnyDesk")
         Detection       = @{
             Type          = "File"
             FilePath      = $detectionPath

@@ -229,6 +229,10 @@ function Invoke-StageVim {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $installerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "/S"
+        UninstallArgs   = "/S"
+        RunningProcess  = @("gvim", "vim")
         Detection       = @{
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = $arpRegistryKey

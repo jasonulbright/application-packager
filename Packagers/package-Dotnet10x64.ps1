@@ -218,6 +218,10 @@ function Invoke-StageDotNet10 {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $installerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "/install /quiet /norestart"
+        UninstallArgs   = "/uninstall /quiet /norestart"
+        RunningProcess  = @()
         Detection       = @{
             Type         = "File"
             FilePath     = $detectionPath

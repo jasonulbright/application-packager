@@ -254,6 +254,11 @@ function Invoke-Stage7Zip {
         Publisher       = $publisher
         SoftwareVersion = $displayVersion
         InstallerFile   = $MsiFileName
+        InstallerType   = "MSI"
+        InstallArgs     = "/qn /norestart"
+        UninstallArgs   = "/qn /norestart"
+        ProductCode     = $productCode
+        RunningProcess  = @("7zFM", "7zG")
         Detection       = @{
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = $arpEntry.RegistryKeyRelative

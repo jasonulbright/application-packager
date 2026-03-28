@@ -208,6 +208,10 @@ function Invoke-StageEdge {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $MsiFileName
+        InstallerType   = "MSI"
+        InstallArgs     = "/qn /norestart"
+        UninstallArgs   = "/qn /norestart"
+        RunningProcess  = @("msedge")
         Detection       = @{
             Type      = "Compound"
             Connector = "Or"

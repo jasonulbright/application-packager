@@ -384,6 +384,10 @@ function Invoke-StageWireshark {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $installerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "/S /desktopicon=no /quicklaunchicon=no"
+        UninstallArgs   = "/S"
+        RunningProcess  = @("Wireshark")
         Detection       = @{
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = $registryKeyName

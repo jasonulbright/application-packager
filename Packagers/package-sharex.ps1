@@ -201,6 +201,10 @@ function Invoke-StageShareX {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $installerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "/SP- /VERYSILENT /NORESTART /NORUN"
+        UninstallArgs   = "/VERYSILENT /NORESTART"
+        RunningProcess  = @("ShareX")
         Detection       = @{
             Type          = "File"
             FilePath      = $detectionPath

@@ -210,6 +210,10 @@ function Invoke-StageWinDirStat {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $MsiFileName
+        InstallerType   = "MSI"
+        InstallArgs     = "/qn /norestart"
+        UninstallArgs   = "/qn /norestart"
+        RunningProcess  = @("windirstat")
         Detection       = @{
             Type          = "File"
             FilePath      = $detectionPath

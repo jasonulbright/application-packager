@@ -319,6 +319,10 @@ function Invoke-StageCitrixCR {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $InstallerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "/silent /noreboot"
+        UninstallArgs   = "/silent /uninstall"
+        RunningProcess  = @("SelfService", "AuthManSvr", "Receiver")
         Detection       = @{
             Type          = "RegistryKeyValue"
             Hive          = "HKLM"

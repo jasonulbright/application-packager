@@ -203,6 +203,10 @@ function Invoke-StageWinMerge {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $installerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "/VERYSILENT /NORESTART"
+        UninstallArgs   = "/VERYSILENT /NORESTART"
+        RunningProcess  = @("WinMergeU")
         Detection       = @{
             Type          = "File"
             FilePath      = $detectionPath

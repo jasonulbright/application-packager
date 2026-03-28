@@ -204,6 +204,10 @@ function Invoke-StageVSCode {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $installerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "/VERYSILENT /NORESTART /FORCECLOSEAPPLICATIONS /MERGETASKS=!runcode"
+        UninstallArgs   = "/SILENT"
+        RunningProcess  = @("Code")
         Detection       = @{
             Type         = "File"
             FilePath     = $detectionPath

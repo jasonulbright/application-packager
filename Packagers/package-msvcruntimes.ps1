@@ -253,6 +253,10 @@ function Invoke-StageMsvcRedist {
         Publisher            = $publisher
         SoftwareVersion      = $shortVersion
         InstallerFiles       = @($FileNameX86, $FileNameX64)
+        InstallerType        = "EXE"
+        InstallArgs          = "/install /quiet /norestart"
+        UninstallArgs        = "/uninstall /quiet /norestart"
+        RunningProcess       = @()
         PostExecutionBehavior = "ForceReboot"
         Detection            = @{
             Type      = "Compound"

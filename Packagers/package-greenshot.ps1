@@ -223,11 +223,16 @@ function Invoke-StageGreenshot {
 
     $manifestPath = Join-Path $localContentPath "stage-manifest.json"
     Write-StageManifest -Path $manifestPath -ManifestData @{
-        AppName         = $appName
-        Publisher       = $publisher
-        SoftwareVersion = $version
-        InstallerFile   = $installerFileName
-        Detection       = @{
+        AppName          = $appName
+        Publisher        = $publisher
+        SoftwareVersion  = $version
+        InstallerFile    = $installerFileName
+        InstallerType    = "EXE"
+        InstallArgs      = "/SP- /ALLUSERS /VERYSILENT /SUPPRESSMESSAGEBOXES /NORUN /FORCECLOSEAPPLICATIONS /NORESTART /LOG"
+        UninstallCommand = "C:\Program Files\Greenshot\unins000.exe"
+        UninstallArgs    = "/SILENT"
+        RunningProcess   = @("Greenshot")
+        Detection        = @{
             Type         = "File"
             FilePath     = $detectionPath
             FileName     = "Greenshot.exe"

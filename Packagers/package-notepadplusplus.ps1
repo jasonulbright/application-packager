@@ -230,6 +230,10 @@ function Invoke-StageNotepadPlusPlus {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $installerFileName
+        InstallerType   = "EXE"
+        InstallArgs     = "/S /noUpdater"
+        UninstallArgs   = "/S"
+        RunningProcess  = @("notepad++")
         Detection       = @{
             Type          = "File"
             FilePath      = $detectionPath

@@ -215,6 +215,10 @@ function Invoke-StageSysinternals {
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = $ZipFileName
+        InstallerType   = "EXE"
+        InstallArgs     = ""
+        UninstallArgs   = ""
+        RunningProcess  = @()
         Detection       = @{
             Type          = "File"
             FilePath      = $detectionPath
