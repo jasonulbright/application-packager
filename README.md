@@ -30,14 +30,14 @@ The GUI (`start-apppackager.ps1`) provides a visual front-end that discovers pac
 
 1. Clone the repository:
    ```
-   git clone https://github.com/anon061035/application-packager.git
+   git clone https://github.com/jasonulbright/application-packager.git
    ```
 
 2. Open PowerShell **as Administrator**.
 
 3. Navigate to the project directory:
    ```powershell
-   cd application-packager\1.0
+   cd application-packager
    ```
 
 4. For the Package phase, ensure the ConfigMgr PSDrive is available in your session:
@@ -119,7 +119,7 @@ All packager scripts accept the same core parameters:
 | `-GetLatestVersionOnly` | Output the latest version string and exit |
 | `-LogPath` | Path to a structured log file (timestamps + severity levels) |
 
-## Supported Applications (114)
+## Supported Applications (115)
 
 | Script | Vendor | Application | Detection Type |
 |---|---|---|---|
@@ -189,6 +189,7 @@ All packager scripts accept the same core parameters:
 | package-postgresql16.ps1 | PostgreSQL Global Development Group | PostgreSQL 16 (x64) | File version |
 | package-postgresql17.ps1 | PostgreSQL Global Development Group | PostgreSQL 17 (x64) | File version |
 | package-putty.ps1 | Simon Tatham | PuTTY (x64) | RegistryKeyValue |
+| package-pycharm.ps1 | JetBrains | PyCharm Community Edition (x64) | File existence |
 | package-python.ps1 | Python Software Foundation | Python (x64) | File existence |
 | package-r.ps1 | The R Foundation | R for Windows (x64) | File existence |
 | package-rstudio.ps1 | Posit Software, PBC | RStudio Desktop (x64) | RegistryKeyValue |
@@ -259,7 +260,7 @@ The monitor discovers all `package-*.ps1` scripts in the sibling `Packagers/` fo
 
 | Feature | Details |
 |---|---|
-| **Packager discovery** | Auto-discovers all 114 packager scripts via relative path |
+| **Packager discovery** | Auto-discovers all 115 packager scripts via relative path |
 | **Version checking** | Calls each packager with `-GetLatestVersionOnly` |
 | **MECM comparison** | Queries ConfigMgr for deployed versions |
 | **NVD CVE lookup** | Queries NIST NVD API for stale apps with CPE headers |
@@ -344,17 +345,22 @@ Written by the Stage phase, read by the Package phase. Contains all metadata nee
 
 ```json
 {
-  "SchemaVersion": 1,
-  "StagedAt": "2026-02-23T04:00:00Z",
-  "AppName": "7-Zip - 25.01 (x64)",
+  "SchemaVersion": 2,
+  "StagedAt": "2026-03-28T10:00:00Z",
+  "AppName": "7-Zip - 26.00 (x64)",
   "Publisher": "Igor Pavlov",
-  "SoftwareVersion": "25.01",
-  "InstallerFile": "7zip-x64.msi",
+  "SoftwareVersion": "26.00",
+  "InstallerFile": "7z2600-x64.msi",
+  "InstallerType": "MSI",
+  "InstallArgs": "/qn /norestart",
+  "UninstallArgs": "/qn /norestart",
+  "ProductCode": "{23170F69-40C1-2702-2600-000001000000}",
+  "RunningProcess": ["7zFM", "7zG"],
   "Detection": {
     "Type": "RegistryKeyValue",
     "RegistryKeyRelative": "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{23170F69-...}",
     "ValueName": "DisplayVersion",
-    "ExpectedValue": "25.01.00.0",
+    "ExpectedValue": "26.00.00.0",
     "Operator": "IsEquals",
     "Is64Bit": true
   }
@@ -362,6 +368,8 @@ Written by the Stage phase, read by the Package phase. Contains all metadata nee
 ```
 
 Five detection types are supported: `RegistryKeyValue`, `RegistryKey`, `File`, `Script`, and `Compound` (multiple clauses with AND/OR connectors).
+
+Schema v2 adds optional fields for deployment tool integration (PSADT, Intune, custom wrappers): `InstallerType`, `InstallArgs`, `UninstallArgs`, `UninstallCommand`, `ProductCode`, `RunningProcess`. All fields are optional -- v1 manifests are still accepted.
 
 ## Project Structure
 
@@ -374,9 +382,12 @@ application-packager/
     AppPackagerCommon.psm1           # Shared module (logging, wrappers, MECM helpers)
     AppPackagerCommon.psd1           # Module manifest
     packager-preferences.json        # Universal packager settings (CompanyName, etc.)
-    package-7zip.ps1                 # One script per application
+    AppPackagerCommon.Tests.ps1      # Pester unit tests (89 tests)
+    package-7zip.ps1                 # One script per application (115 total)
     package-chrome.ps1
     ...
+  Tests/
+    Test-AllPackagers.ps1            # Automated install/uninstall validation harness
   VersionMonitor/
     Start-VersionMonitor.ps1         # Headless version monitor entry point
     monitor-config.json              # Monitor configuration (MECM, NVD, report settings)
