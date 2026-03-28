@@ -1,7 +1,0 @@
-{
-  "ProjectType": "mecm-tool",
-  "Status": "active",
-  "Category": "MECM",
-  "ValidationSchedule": "daily",
-  "Notes": "115 packager scripts. Browser scripts need daily validation. Monthly release cycle apps need twice-monthly checks. PSADT scaffolding (New-PSADTPackage) is tracked as future enhancement. Greenshot and Brave silent install args need investigation -- showed GUI during automated testing. 25-script rollout in progress: Phase 1 (module prep) COMPLETE, Batch 1 (Chrome/MSODBCSQL18/MSOleDb/Webex) COMPLETE, Batch 2 (Dotnet9/Dotnet10/VSCode/WebView2) NEXT. QA tools research pending (Selenium, Edge WebDriver, ChromeDriver). 2.0 backlog: JSON application definitions, generic packager engine, move orchestration into GUI. Pending: C# + Fluent UI conversion."
-}
