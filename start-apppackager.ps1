@@ -986,8 +986,8 @@ function Show-PreferencesDialog {
     $cmbCH.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
     $cmbCH.Width = 200
     $cmbCH.Location = New-Object System.Drawing.Point($fieldX, $y)
-    $cmbCH.Items.AddRange(@('Monthly Enterprise Channel', 'Current Channel'))
-    $channelDisplayMap = @{ 'MonthlyEnterprise' = 'Monthly Enterprise Channel'; 'Current' = 'Current Channel' }
+    $cmbCH.Items.AddRange(@('Monthly Enterprise Channel', 'Current Channel', 'Semi-Annual Enterprise Channel'))
+    $channelDisplayMap = @{ 'MonthlyEnterprise' = 'Monthly Enterprise Channel'; 'Current' = 'Current Channel'; 'SemiAnnual' = 'Semi-Annual Enterprise Channel' }
     $currentDisplay = $channelDisplayMap[$script:Prefs.M365Channel]
     if (-not $currentDisplay) { $currentDisplay = 'Monthly Enterprise Channel' }
     $cmbCH.SelectedItem = $currentDisplay
@@ -1020,7 +1020,7 @@ function Show-PreferencesDialog {
         if (-not [int]::TryParse($txtEst.Text.Trim(), [ref]$estVal)) { $estVal = 15 }
         if (-not [int]::TryParse($txtMax.Text.Trim(), [ref]$maxVal)) { $maxVal = 30 }
 
-        $channelReverseMap = @{ 'Monthly Enterprise Channel' = 'MonthlyEnterprise'; 'Current Channel' = 'Current' }
+        $channelReverseMap = @{ 'Monthly Enterprise Channel' = 'MonthlyEnterprise'; 'Current Channel' = 'Current'; 'Semi-Annual Enterprise Channel' = 'SemiAnnual' }
         $selectedChannel = $channelReverseMap[$cmbCH.SelectedItem]
         if (-not $selectedChannel) { $selectedChannel = 'MonthlyEnterprise' }
 
@@ -2541,7 +2541,7 @@ $btnLatest.Add_Click({
 
                 $channelSuffix = ''
                 if ($script -match 'm365') {
-                    $chMap = @{ 'MonthlyEnterprise' = 'MEC'; 'Current' = 'CC' }
+                    $chMap = @{ 'MonthlyEnterprise' = 'MEC'; 'Current' = 'CC'; 'SemiAnnual' = 'SAEC' }
                     $channelSuffix = ' [{0}]' -f ($chMap[$script:Prefs.M365Channel])
                 }
                 Add-LogLine -TextBox $txtLog -Message ("Latest version: {0}{1}" -f $latest, $channelSuffix)

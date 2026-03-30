@@ -5,16 +5,13 @@ All notable changes to AppPackager are documented in this file.
 ## [1.2.2] - 2026-03-30
 
 ### Changed
-- **M365 channel selector** -- Semi-Annual Enterprise Channel replaced with user-selectable channel in Preferences dialog. Two options: Monthly Enterprise Channel (default) and Current Channel. SAEC is being retired by Microsoft on April 6, 2026.
+- **M365 channel selector** -- Preferences dialog now includes an M365 Channel dropdown with three options: Monthly Enterprise Channel (default), Current Channel, and Semi-Annual Enterprise Channel. SAEC is being removed from the Office Deployment Service UI on April 6, 2026 but remains supported for kiosk devices.
 - Channel preference persisted to `AppPackager.preferences.json` as `M365Channel` and passed through all invocation paths (Check Latest, Stage, Package).
 - `New-OdtConfigXml` accepts `-Channel` parameter instead of hardcoding `SemiAnnual`.
 - All 6 M365 packager scripts (`package-m365apps-x64/x86`, `package-m365project-x64/x86`, `package-m365visio-x64/x86`) resolve channel GUID and ODT name from the `-M365Channel` parameter.
 - CM Application name and Deployment Type name now include channel: e.g., `M365 Apps for Enterprise - 16.0.19725.20170 (x64) [Monthly Enterprise Channel]`.
 - Software Center display name (`-LocalizedApplicationName`) includes bitness but not channel: e.g., `M365 Apps for Enterprise (x64)`.
 - Check Latest log output shows channel abbreviation: e.g., `Latest version: 16.0.19725.20170 [MEC]`.
-
-### Removed
-- All Semi-Annual Enterprise Channel references (`7ffbc6bf-bc32-4f92-8982-f9dd17fd3114`, `SemiAnnual`, `SAEC`).
 
 ---
 
