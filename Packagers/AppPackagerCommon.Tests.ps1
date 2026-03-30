@@ -376,8 +376,8 @@ Describe 'New-OdtConfigXml' {
             $xml | Should -Match 'Version="16\.0\.19127\.20532"'
         }
 
-        It 'includes Channel SemiAnnual' {
-            $xml | Should -Match 'Channel="SemiAnnual"'
+        It 'includes Channel MonthlyEnterprise (default)' {
+            $xml | Should -Match 'Channel="MonthlyEnterprise"'
         }
 
         It 'includes the SourcePath' {

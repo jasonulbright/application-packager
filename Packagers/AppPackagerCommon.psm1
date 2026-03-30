@@ -743,13 +743,20 @@ function New-MECMApplicationFromManifest {
         }
 
         Write-Log "Creating CM Application      : $appName"
-        $cmApp = New-CMApplication `
-            -Name $appName `
-            -Publisher $Manifest.Publisher `
-            -SoftwareVersion $Manifest.SoftwareVersion `
-            -Description $Comment `
-            -AutoInstall $true `
-            -ErrorAction Stop
+        $cmAppParams = @{
+            Name             = $appName
+            Publisher        = $Manifest.Publisher
+            SoftwareVersion  = $Manifest.SoftwareVersion
+            Description      = $Comment
+            AutoInstall      = $true
+            ErrorAction      = 'Stop'
+        }
+        # Set Software Center display name if provided (omits channel/arch details)
+        if ($Manifest.DisplayName) {
+            $cmAppParams['LocalizedApplicationName'] = $Manifest.DisplayName
+            Write-Log "Software Center name         : $($Manifest.DisplayName)"
+        }
+        $cmApp = New-CMApplication @cmAppParams
 
         Write-Log "Application CI_ID            : $($cmApp.CI_ID)"
 
@@ -891,6 +898,10 @@ function New-OdtConfigXml {
         SourcePath attribute for the Add element. For download: local content
         folder path. For install: ".".
 
+    .PARAMETER Channel
+        ODT channel name. Valid values: MonthlyEnterprise, Current.
+        Default: MonthlyEnterprise.
+
     .PARAMETER CompanyName
         Value for the AppSettings Company name. Omit or pass empty to skip
         the AppSettings block entirely.
@@ -900,6 +911,8 @@ function New-OdtConfigXml {
         [Parameter(Mandatory)][string]$Version,
         [Parameter(Mandatory)][string[]]$ProductIds,
         [string]$SourcePath,
+        [ValidateSet('MonthlyEnterprise','Current')]
+        [string]$Channel = 'MonthlyEnterprise',
         [string]$CompanyName
     )
 
@@ -908,7 +921,7 @@ function New-OdtConfigXml {
         $addAttrs += 'SourcePath="{0}"' -f $SourcePath
     }
     $addAttrs += 'OfficeClientEdition="{0}"' -f $OfficeClientEdition
-    $addAttrs += 'Channel="SemiAnnual"'
+    $addAttrs += 'Channel="{0}"' -f $Channel
     $addAttrs += 'OfficeMgmtCOM="TRUE"'
     $addAttrs += 'Version="{0}"' -f $Version
     $addAttrs += 'MigrateArch="TRUE"'

@@ -12,8 +12,8 @@ DownloadPageUrl: https://www.microsoft.com/en-us/microsoft-365
 
 .DESCRIPTION
     Downloads the latest Office Deployment Tool, uses it to download the offline
-    source files for M365 Apps for Enterprise (x64) from the Semi-Annual Enterprise
-    Channel, stages content to a versioned local folder with file-based detection
+    source files for M365 Apps for Enterprise (x64) from the configured update
+    channel (Monthly Enterprise or Current), stages content to a versioned local folder with file-based detection
     metadata, and creates an MECM Application.
 
     Detection uses WINWORD.EXE file version >= packaged version in the
@@ -69,6 +69,8 @@ param(
     [int]$EstimatedRuntimeMins = 15,
     [int]$MaximumRuntimeMins = 30,
     [string]$LogPath,
+    [ValidateSet('MonthlyEnterprise','Current')]
+    [string]$M365Channel = "MonthlyEnterprise",
     [switch]$GetLatestVersionOnly,
     [switch]$StageOnly,
     [switch]$PackageOnly
@@ -84,8 +86,15 @@ if ($StageOnly -and $PackageOnly) {
 }
 
 # --- Configuration ---
-$ChannelGuid     = "7ffbc6bf-bc32-4f92-8982-f9dd17fd3114"   # Semi-Annual Enterprise Channel
-$ChannelName     = "SemiAnnual"
+# Channel resolution from preference
+$ChannelMap = @{
+    'MonthlyEnterprise' = @{ Guid = '55336b82-a18d-4dd6-b5f6-9e5095c314a6'; Name = 'MonthlyEnterprise'; Display = 'Monthly Enterprise Channel' }
+    'Current'           = @{ Guid = '492350f6-3a01-4f97-b9c0-c7c6ddf67d60'; Name = 'Current';           Display = 'Current Channel' }
+}
+$ch = $ChannelMap[$M365Channel]
+if (-not $ch) { Write-Log "Invalid M365Channel: $M365Channel" -Level ERROR; exit 1 }
+$ChannelGuid     = $ch.Guid
+$ChannelName     = $ch.Name
 $ProductId       = "O365ProPlusRetail"
 $Architecture    = "64"
 $CdnBaseUrl      = "https://officecdn.microsoft.com/pr/$ChannelGuid/Office/Data"
@@ -106,7 +115,7 @@ $ProductIds      = @($ProductId)
 function Get-M365VersionFromCdn {
     <#
     .SYNOPSIS
-        Queries the Office CDN for the current Semi-Annual Enterprise Channel version.
+        Queries the Office CDN for the current channel version.
     #>
     param([switch]$Quiet)
 
@@ -132,7 +141,7 @@ function Get-M365VersionFromCdn {
             throw "Build version not found in VersionDescriptor.xml."
         }
 
-        Write-Log "SAEC version from CDN        : $version" -Quiet:$Quiet
+        Write-Log "CDN version        : $version" -Quiet:$Quiet
 
         # Clean up temp
         Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
@@ -185,7 +194,7 @@ function Invoke-StageM365Apps {
 
     Initialize-Folder -Path $BaseDownloadRoot
 
-    # --- Get current SAEC version ---
+    # --- Get current channel version ---
     $version = Get-M365VersionFromCdn
     if (-not $version) { throw "Could not determine M365 version from CDN." }
 
@@ -205,7 +214,7 @@ function Invoke-StageM365Apps {
 
     # --- Write download config XML ---
     $downloadXmlPath = Join-Path $BaseDownloadRoot "download.xml"
-    $downloadXml = New-OdtConfigXml -OfficeClientEdition $Architecture -Version $version -ProductIds $ProductIds -SourcePath $localContentPath -CompanyName $companyName
+    $downloadXml = New-OdtConfigXml -OfficeClientEdition $Architecture -Version $version -ProductIds $ProductIds -SourcePath $localContentPath -Channel $ChannelName -CompanyName $companyName
     Set-Content -LiteralPath $downloadXmlPath -Value $downloadXml -Encoding ASCII -ErrorAction Stop
     Write-Log "Written download.xml         : $downloadXmlPath"
 
@@ -228,7 +237,7 @@ function Invoke-StageM365Apps {
 
     # --- Write install.xml (silent, offline, for endpoint) ---
     $installXmlPath = Join-Path $localContentPath "install.xml"
-    $installXml = New-OdtConfigXml -OfficeClientEdition $Architecture -Version $version -ProductIds $ProductIds -CompanyName $companyName
+    $installXml = New-OdtConfigXml -OfficeClientEdition $Architecture -Version $version -ProductIds $ProductIds -Channel $ChannelName -CompanyName $companyName
     Set-Content -LiteralPath $installXmlPath -Value $installXml -Encoding ASCII -ErrorAction Stop
     Write-Log "Written install.xml          : $installXmlPath"
 
@@ -265,7 +274,7 @@ function Invoke-StageM365Apps {
         -UninstallPs1Content $uninstallPs1
 
     # --- Write stage manifest ---
-    $appName   = "M365 Apps for Enterprise - $version (x64)"
+    $appName   = "M365 Apps for Enterprise - $version (x64) [$($ch.Display)]"
     $publisher = "Microsoft"
 
     Write-Log ""
@@ -276,6 +285,7 @@ function Invoke-StageM365Apps {
     $manifestPath = Join-Path $localContentPath "stage-manifest.json"
     Write-StageManifest -Path $manifestPath -ManifestData @{
         AppName         = $appName
+        DisplayName     = "M365 Apps for Enterprise (x64)"
         Publisher       = $publisher
         SoftwareVersion = $version
         InstallerFile   = "setup.exe"
@@ -420,7 +430,7 @@ try {
     Write-Log "SiteCode                     : $SiteCode"
     Write-Log "FileServerPath               : $FileServerPath"
     Write-Log "BaseDownloadRoot             : $BaseDownloadRoot"
-    Write-Log "Channel                      : $ChannelName (SAEC)"
+    Write-Log "Channel                      : $($ch.Display)"
     Write-Log "Product                      : $ProductId"
     Write-Log "Architecture                 : x$Architecture"
     Write-Log ""

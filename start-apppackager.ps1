@@ -81,6 +81,7 @@ function Read-Preferences {
         EstimatedRuntimeMins = 15
         MaximumRuntimeMins   = 30
         CompanyName          = ""
+        M365Channel          = "MonthlyEnterprise"
         HiddenApplications   = @()
     }
 
@@ -98,6 +99,7 @@ function Read-Preferences {
         if ($null -ne $data.EstimatedRuntimeMins)  { $defaults.EstimatedRuntimeMins = [int]$data.EstimatedRuntimeMins }
         if ($null -ne $data.MaximumRuntimeMins)    { $defaults.MaximumRuntimeMins   = [int]$data.MaximumRuntimeMins }
         if ($null -ne $data.CompanyName)            { $defaults.CompanyName          = [string]$data.CompanyName }
+        if ($null -ne $data.M365Channel)           { $defaults.M365Channel         = [string]$data.M365Channel }
         if ($null -ne $data.HiddenApplications)    { $defaults.HiddenApplications  = @($data.HiddenApplications) }
     }
     catch { }
@@ -466,7 +468,8 @@ function Invoke-PackagerGetLatestVersion {
         [Parameter(Mandatory)][string]$PackagerPath,
         [Parameter(Mandatory)][string]$SiteCode,
         [string]$FileServerPath = $null,
-        [string]$DownloadRoot = $null
+        [string]$DownloadRoot = $null,
+        [string]$M365Channel = $null
     )
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -477,6 +480,9 @@ function Invoke-PackagerGetLatestVersion {
     }
     if ($DownloadRoot) {
         $argsBase = ($argsBase + (' -DownloadRoot "{0}"' -f $DownloadRoot))
+    }
+    if ($M365Channel) {
+        $argsBase = ($argsBase + (' -M365Channel "{0}"' -f $M365Channel))
     }
     $psi.Arguments = $argsBase
     $psi.RedirectStandardOutput = $true
@@ -733,6 +739,7 @@ function Invoke-PackagerStage {
         [Parameter(Mandatory)][string]$PackagerPath,
         [Parameter(Mandatory)][string]$LogFolder,
         [string]$DownloadRoot = $null,
+        [string]$M365Channel = $null,
         [System.Windows.Forms.TextBox]$LogTextBox = $null
     )
 
@@ -752,6 +759,9 @@ function Invoke-PackagerStage {
     if ($DownloadRoot) {
         $argsBase = ($argsBase + (' -DownloadRoot "{0}"' -f $DownloadRoot))
     }
+    if ($M365Channel) {
+        $argsBase = ($argsBase + (' -M365Channel "{0}"' -f $M365Channel))
+    }
     $psi.Arguments = $argsBase
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError  = $true
@@ -769,6 +779,7 @@ function Invoke-PackagerPackage {
         [Parameter(Mandatory)][string]$FileServerPath,
         [Parameter(Mandatory)][string]$LogFolder,
         [string]$DownloadRoot = $null,
+        [string]$M365Channel = $null,
         [int]$EstimatedRuntimeMins = 0,
         [int]$MaximumRuntimeMins = 0,
         [System.Windows.Forms.TextBox]$LogTextBox = $null
@@ -792,6 +803,9 @@ function Invoke-PackagerPackage {
     }
     if ($DownloadRoot) {
         $argsBase = ($argsBase + (' -DownloadRoot "{0}"' -f $DownloadRoot))
+    }
+    if ($M365Channel) {
+        $argsBase = ($argsBase + (' -M365Channel "{0}"' -f $M365Channel))
     }
     if ($EstimatedRuntimeMins -gt 0) {
         $argsBase = ($argsBase + (' -EstimatedRuntimeMins {0}' -f $EstimatedRuntimeMins))
@@ -820,7 +834,7 @@ function Show-PreferencesDialog {
     $dlg.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterParent
     $dlg.MaximizeBox = $false
     $dlg.MinimizeBox = $false
-    $dlg.Size = New-Object System.Drawing.Size(460, 346)
+    $dlg.Size = New-Object System.Drawing.Size(460, 382)
     $dlg.Font = New-Object System.Drawing.Font("Segoe UI", 10)
     $dlg.BackColor = [System.Drawing.Color]::White
 
@@ -958,6 +972,28 @@ function Show-PreferencesDialog {
     $dlg.Controls.Add($txtCN)
     $dlgTip.SetToolTip($txtCN, "Organization name embedded in Office deployment XML and other packager configs")
 
+    $y += $rowH
+
+    # M365 Channel
+    $lblCH = New-Object System.Windows.Forms.Label
+    $lblCH.Text = "M365 Channel:"
+    $lblCH.AutoSize = $true
+    $lblCH.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+    $lblCH.Location = New-Object System.Drawing.Point($pad, ($y + 3))
+    $dlg.Controls.Add($lblCH)
+
+    $cmbCH = New-Object System.Windows.Forms.ComboBox
+    $cmbCH.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
+    $cmbCH.Width = 200
+    $cmbCH.Location = New-Object System.Drawing.Point($fieldX, $y)
+    $cmbCH.Items.AddRange(@('Monthly Enterprise Channel', 'Current Channel'))
+    $channelDisplayMap = @{ 'MonthlyEnterprise' = 'Monthly Enterprise Channel'; 'Current' = 'Current Channel' }
+    $currentDisplay = $channelDisplayMap[$script:Prefs.M365Channel]
+    if (-not $currentDisplay) { $currentDisplay = 'Monthly Enterprise Channel' }
+    $cmbCH.SelectedItem = $currentDisplay
+    $dlg.Controls.Add($cmbCH)
+    $dlgTip.SetToolTip($cmbCH, "Office 365 update channel for M365 Apps, Project, and Visio packagers")
+
     $y += $rowH + 16
 
     # OK / Cancel
@@ -984,12 +1020,17 @@ function Show-PreferencesDialog {
         if (-not [int]::TryParse($txtEst.Text.Trim(), [ref]$estVal)) { $estVal = 15 }
         if (-not [int]::TryParse($txtMax.Text.Trim(), [ref]$maxVal)) { $maxVal = 30 }
 
+        $channelReverseMap = @{ 'Monthly Enterprise Channel' = 'MonthlyEnterprise'; 'Current Channel' = 'Current' }
+        $selectedChannel = $channelReverseMap[$cmbCH.SelectedItem]
+        if (-not $selectedChannel) { $selectedChannel = 'MonthlyEnterprise' }
+
         $script:Prefs.SiteCode             = $txtSC.Text.Trim()
         $script:Prefs.FileShareRoot        = $txtFS.Text.Trim()
         $script:Prefs.DownloadRoot         = $txtDL.Text.Trim()
         $script:Prefs.EstimatedRuntimeMins = $estVal
         $script:Prefs.MaximumRuntimeMins   = $maxVal
         $script:Prefs.CompanyName          = $txtCN.Text.Trim()
+        $script:Prefs.M365Channel          = $selectedChannel
 
         Save-Preferences -Prefs $script:Prefs
         $dlg.Dispose()
@@ -2477,7 +2518,8 @@ $btnLatest.Add_Click({
                     -PackagerPath $path `
                     -SiteCode $siteCodeValue `
                     -FileServerPath $script:Prefs.FileShareRoot `
-                    -DownloadRoot $script:Prefs.DownloadRoot
+                    -DownloadRoot $script:Prefs.DownloadRoot `
+                    -M365Channel $script:Prefs.M365Channel
                 $row["LatestVersion"] = $latest
 
                 $current = [string]$row["CurrentVersion"]
@@ -2497,7 +2539,12 @@ $btnLatest.Add_Click({
                     $row["Status"] = "Latest retrieved"
                 }
 
-                Add-LogLine -TextBox $txtLog -Message ("Latest version: {0}" -f $latest)
+                $channelSuffix = ''
+                if ($script -match 'm365') {
+                    $chMap = @{ 'MonthlyEnterprise' = 'MEC'; 'Current' = 'CC' }
+                    $channelSuffix = ' [{0}]' -f ($chMap[$script:Prefs.M365Channel])
+                }
+                Add-LogLine -TextBox $txtLog -Message ("Latest version: {0}{1}" -f $latest, $channelSuffix)
             }
             catch {
                 $row["Status"] = "Error"
@@ -2677,6 +2724,7 @@ $btnStage.Add_Click({
                     -PackagerPath $path `
                     -LogFolder $logFolder `
                     -DownloadRoot $dlRootValue `
+                    -M365Channel $script:Prefs.M365Channel `
                     -LogTextBox $txtLog
 
                 if ($res.ExitCode -eq 0) {
@@ -2784,6 +2832,7 @@ $btnPackage.Add_Click({
                     -FileServerPath $fsPathValue `
                     -LogFolder $logFolder `
                     -DownloadRoot $dlRootValue `
+                    -M365Channel $script:Prefs.M365Channel `
                     -EstimatedRuntimeMins $estVal `
                     -MaximumRuntimeMins $maxVal `
                     -LogTextBox $txtLog
