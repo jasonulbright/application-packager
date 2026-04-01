@@ -341,15 +341,22 @@ function Invoke-PackagePyCharm {
 # Entry point
 # ---------------------------------------------------------------------------
 
+if ($GetLatestVersionOnly) {
+    try {
+        $ProgressPreference = 'SilentlyContinue'
+        $releaseInfo = Get-LatestPyCharmRelease -Quiet
+        if (-not $releaseInfo -or -not $releaseInfo.Version) { exit 1 }
+        Write-Output $releaseInfo.Version
+        exit 0
+    }
+    catch {
+        exit 1
+    }
+}
+
 $prefs = Get-PackagerPreferences
 if ($prefs.CompanyName) {
     Write-Log "Company name                 : $($prefs.CompanyName)"
-}
-
-if ($GetLatestVersionOnly) {
-    $releaseInfo = Get-LatestPyCharmRelease -Quiet
-    if ($releaseInfo) { Write-Output $releaseInfo.Version }
-    exit 0
 }
 
 if ($PackageOnly) {

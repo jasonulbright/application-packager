@@ -92,7 +92,7 @@ $ReleasesIndexUrl  = "https://builds.dotnet.microsoft.com/dotnet/release-metadat
 $DownloadUrlBase   = "https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime"
 
 $VendorFolder = "Microsoft"
-$AppFolder    = ".NET Core"
+$AppFolder    = "ASP.NET Core Hosting Bundle"
 
 $InstallerFileNamePattern = "dotnet-hosting-{0}-win.exe"
 

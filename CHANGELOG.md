@@ -2,6 +2,14 @@
 
 All notable changes to AppPackager are documented in this file.
 
+## [1.2.3] - 2026-03-31
+
+### Fixed
+- **ASP.NET 8 Hosting Bundle staging path collision** -- `package-aspnethostingbundle8.ps1` was using the same network folder (`.NET Core`) as `package-dotnet8.ps1`, causing content to overwrite. Changed to `ASP.NET Core Hosting Bundle` so each product stages to its own path.
+- **PyCharm Check Latest** -- `Get-PackagerPreferences` log output was polluting stdout before the version string. Moved preferences loading after the `GetLatestVersionOnly` guard. Added proper `try/catch` with `exit 1` on failure, matching the gold standard pattern.
+
+---
+
 ## [1.2.2] - 2026-03-30
 
 ### Changed
