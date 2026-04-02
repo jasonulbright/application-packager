@@ -1,8 +1,8 @@
 {
-  "ProjectType": "mecm-tool",
-  "Description": "MECM application packaging automation with WinForms GUI",
-  "Status": "active",
-  "Category": "MECM",
-  "ValidationSchedule": "daily",
-  "Notes": "TASK: PSADT scaffolding (New-PSADTPackage from stage-manifest.json)\nINFO: 115 packagers, schema v2, 89 Pester tests\nINFO: Browser scripts need daily validation, monthly apps need twice-monthly checks"
+    "Description":  "MECM application packaging automation with WinForms GUI (v1.x)",
+    "ProjectType":  "mecm-tool",
+    "ValidationSchedule":  "daily",
+    "Category":  "MECM",
+    "Status":  "active",
+    "Notes":  "INFO: v1.2.3, 117 packagers, schema v2, 89 Pester tests\nINFO: 1.x is a separate product from SRL Packr (2.x). Never modify 1.x for 2.x.\nTASK: PSADT scaffolding (New-PSADTPackage from stage-manifest.json)"
 }
