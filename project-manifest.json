@@ -1,0 +1,8 @@
+{
+  "ProjectType": "mecm-tool",
+  "Description": "MECM application packaging automation with WinForms GUI",
+  "Status": "active",
+  "Category": "MECM",
+  "ValidationSchedule": "daily",
+  "Notes": "TASK: PSADT scaffolding (New-PSADTPackage from stage-manifest.json)\nINFO: 115 packagers, schema v2, 89 Pester tests\nINFO: Browser scripts need daily validation, monthly apps need twice-monthly checks"
+}
