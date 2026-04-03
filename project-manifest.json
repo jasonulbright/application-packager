@@ -4,5 +4,5 @@
     "ValidationSchedule":  "daily",
     "Category":  "MECM",
     "Status":  "active",
-    "Notes":  "INFO: v1.2.3, 117 packagers, schema v2, 89 Pester tests\nINFO: 1.x is a separate product from SRL Packr (2.x). Never modify 1.x for 2.x.\nTASK: PSADT scaffolding (New-PSADTPackage from stage-manifest.json)"
+    "Notes":  "INFO: v1.2.3, 117 packagers, schema v2, 89 Pester tests\nTASK: PSADT scaffolding (New-PSADTPackage from stage-manifest.json)"
 }
