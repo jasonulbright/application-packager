@@ -331,7 +331,7 @@ function Invoke-StageCitrixCR {
             PropertyType  = "Version"
             Operator      = "GreaterEquals"
             ExpectedValue = $internalVersion
-            Is64Bit       = $true
+            Is64Bit       = $false
         }
     }
 

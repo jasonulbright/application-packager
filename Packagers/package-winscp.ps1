@@ -368,7 +368,7 @@ function Invoke-StageWinSCP {
             ValueName           = "DisplayVersion"
             ExpectedValue       = $version
             Operator            = "IsEquals"
-            Is64Bit             = $true
+            Is64Bit             = $false
         }
     }
 

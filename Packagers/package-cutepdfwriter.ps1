@@ -266,7 +266,7 @@ function Invoke-StageCutePDF {
             RegistryKeyRelative = $arpRegistryKey
             ValueName           = "DisplayVersion"
             ExpectedValue       = $version
-            Is64Bit             = $false
+            Is64Bit             = $true
         }
     }
 

@@ -222,7 +222,7 @@ function Invoke-StageMRemoteNG {
             RegistryKeyRelative = $arpRegistryKey
             ValueName           = "DisplayVersion"
             ExpectedValue       = $productVersionRaw
-            Is64Bit             = $true
+            Is64Bit             = $false
         }
     }
 
