@@ -241,6 +241,7 @@ function Invoke-StageNotepadPlusPlus {
             PropertyType  = "Version"
             Operator      = "GreaterEquals"
             ExpectedValue = $version
+            Is64Bit       = $true
         }
     }
 

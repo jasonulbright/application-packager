@@ -237,6 +237,7 @@ function Invoke-StageGreenshot {
             FilePath     = $detectionPath
             FileName     = "Greenshot.exe"
             PropertyType = "Existence"
+            Is64Bit      = $true
         }
     }
 

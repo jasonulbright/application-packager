@@ -242,6 +242,7 @@ function Invoke-StageVMwareTools {
             PropertyType  = "Version"
             Operator      = "GreaterEquals"
             ExpectedValue = $version
+            Is64Bit       = $true
         }
     }
 

@@ -225,6 +225,7 @@ function Invoke-StageObsidian {
             FilePath     = $detectionPath
             FileName     = "Obsidian.exe"
             PropertyType = "Existence"
+            Is64Bit      = $true
         }
     }
 

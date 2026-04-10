@@ -240,6 +240,7 @@ function Invoke-StageVS2026 {
             PropertyType  = "Version"
             Operator      = "GreaterEquals"
             ExpectedValue = $version
+            Is64Bit       = $true
         }
     }
 

@@ -215,6 +215,7 @@ function Invoke-StageVSCode {
             PropertyType = "Version"
             Operator     = "GreaterEquals"
             ExpectedValue = $version
+            Is64Bit       = $true
         }
     }
 

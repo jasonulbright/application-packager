@@ -215,6 +215,7 @@ function Invoke-StageFirefox {
             PropertyType  = "Version"
             Operator      = "GreaterEquals"
             ExpectedValue = $version
+            Is64Bit       = $true
         }
     }
 

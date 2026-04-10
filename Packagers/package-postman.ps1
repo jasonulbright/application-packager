@@ -225,6 +225,7 @@ function Invoke-StagePostman {
             FilePath     = $detectionPath
             FileName     = "Postman.exe"
             PropertyType = "Existence"
+            Is64Bit      = $true
         }
     }
 

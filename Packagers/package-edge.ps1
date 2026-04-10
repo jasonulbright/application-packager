@@ -223,6 +223,7 @@ function Invoke-StageEdge {
                     PropertyType  = "Version"
                     Operator      = "GreaterEquals"
                     ExpectedValue = $version
+                    Is64Bit       = $false
                 },
                 @{
                     Type          = "File"
@@ -231,6 +232,7 @@ function Invoke-StageEdge {
                     PropertyType  = "Version"
                     Operator      = "GreaterEquals"
                     ExpectedValue = $version
+                    Is64Bit       = $false
                 }
             )
         }
