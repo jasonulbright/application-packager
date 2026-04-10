@@ -244,11 +244,13 @@ function Invoke-StagePython {
         UninstallArgs   = "/uninstall /quiet"
         RunningProcess  = @("python", "pythonw")
         Detection       = @{
-            Type         = "File"
-            FilePath     = $detectionPath
-            FileName     = "python.exe"
-            PropertyType = "Existence"
-            Is64Bit      = $true
+            Type          = "File"
+            FilePath      = $detectionPath
+            FileName      = "python.exe"
+            PropertyType  = "Version"
+            Operator      = "GreaterEquals"
+            ExpectedValue = $version
+            Is64Bit       = $true
         }
     }
 

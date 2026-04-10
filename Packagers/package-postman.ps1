@@ -199,7 +199,7 @@ function Invoke-StagePostman {
         -UninstallPs1Content $uninstallContent
 
     # --- Write stage manifest ---
-    $detectionPath = "%LOCALAPPDATA%\Postman"
+    $detectionPath = "C:\Program Files\Postman"
 
     $appName   = "Postman $version"
     $publisher = "Postman Inc."

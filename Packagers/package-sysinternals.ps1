@@ -220,13 +220,11 @@ function Invoke-StageSysinternals {
         UninstallArgs   = ""
         RunningProcess  = @()
         Detection       = @{
-            Type          = "File"
-            FilePath      = $detectionPath
-            FileName      = "procmon.exe"
-            PropertyType  = "DateModified"
-            Operator      = "GreaterEquals"
-            ExpectedValue = (Get-Date).ToString("yyyy-MM-dd")
-            Is64Bit       = $true
+            Type         = "File"
+            FilePath     = $detectionPath
+            FileName     = "procmon.exe"
+            PropertyType = "Existence"
+            Is64Bit      = $true
         }
     }
 
