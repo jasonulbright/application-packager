@@ -389,11 +389,13 @@ function Invoke-StageWireshark {
         UninstallArgs   = "/S"
         RunningProcess  = @("Wireshark")
         Detection       = @{
-            Type                = "RegistryKeyValue"
-            RegistryKeyRelative = $registryKeyName
-            ValueName           = "DisplayVersion"
-            ExpectedValue       = $version
-            Operator            = "IsEquals"
+            Type          = "File"
+            FilePath      = "C:\Program Files\Wireshark"
+            FileName      = "Wireshark.exe"
+            PropertyType  = "Version"
+            Operator      = "GreaterEquals"
+            ExpectedValue = $version
+            Is64Bit       = $true
         }
     }
 

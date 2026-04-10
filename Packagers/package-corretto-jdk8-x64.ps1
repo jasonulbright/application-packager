@@ -191,10 +191,8 @@ function Invoke-StageCorrettoJDK8X64 {
         ProductCode     = $productCode
         RunningProcess  = @("java", "javaw")
         Detection       = @{
-            Type                = "RegistryKeyValue"
+            Type                = "RegistryKey"
             RegistryKeyRelative = $arpRegistryKey
-            ValueName           = "DisplayVersion"
-            ExpectedValue       = $productVersionRaw
             Is64Bit             = $true
         }
     }

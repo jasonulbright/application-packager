@@ -210,11 +210,13 @@ function Invoke-StageSoapUI {
         UninstallArgs   = "-q"
         RunningProcess  = @("SoapUI")
         Detection       = @{
-            Type         = "File"
-            FilePath     = $detectionPath
-            FileName     = "SoapUI-${version}.exe"
-            PropertyType = "Existence"
-            Is64Bit      = $true
+            Type                = "RegistryKeyValue"
+            RegistryKeyRelative = "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\5517-2803-0637-4585"
+            ValueName           = "DisplayVersion"
+            PropertyType        = "Version"
+            Operator            = "GreaterEquals"
+            ExpectedValue       = $version
+            Is64Bit             = $true
         }
     }
 

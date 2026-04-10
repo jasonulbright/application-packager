@@ -264,12 +264,9 @@ function Invoke-StageTableauReader {
         ProductCode     = $productCode
         RunningProcess  = @("tabreader")
         Detection       = @{
-            Type                = "RegistryKeyValue"
+            Type                = "RegistryKey"
             RegistryKeyRelative = $arpKey
-            ValueName           = "DisplayVersion"
-            ExpectedValue       = $msiVersion
-            Operator            = "IsEquals"
-            Is64Bit             = $false
+            Is64Bit             = $true
         }
     }
 

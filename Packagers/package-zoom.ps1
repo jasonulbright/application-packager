@@ -283,10 +283,13 @@ function Invoke-StageZoom {
         InstallationBehaviorType = "InstallForUser"
         LogonRequirementType     = "OnlyWhenUserLoggedOn"
         Detection                = @{
-            Type         = "File"
-            FilePath     = $detectionPath
-            FileName     = "Zoom.exe"
-            PropertyType = "Existence"
+            Type          = "File"
+            FilePath      = "C:\Program Files\Zoom\bin"
+            FileName      = "Zoom.exe"
+            PropertyType  = "Version"
+            Operator      = "GreaterEquals"
+            ExpectedValue = $version
+            Is64Bit       = $true
         }
     }
 

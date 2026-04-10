@@ -266,12 +266,9 @@ function Invoke-StageTableauDesktop {
         ProductCode     = $productCode
         RunningProcess  = @("tableau")
         Detection       = @{
-            Type                = "RegistryKeyValue"
+            Type                = "RegistryKey"
             RegistryKeyRelative = $arpKey
-            ValueName           = "DisplayVersion"
-            ExpectedValue       = $msiVersion
-            Operator            = "IsEquals"
-            Is64Bit             = $false
+            Is64Bit             = $true
         }
     }
 

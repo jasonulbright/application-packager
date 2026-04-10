@@ -260,9 +260,11 @@ function Invoke-StageTeams {
         UninstallArgs   = "-x"
         RunningProcess  = @("ms-teams")
         Detection       = @{
-            Type           = "Script"
-            ScriptLanguage = "PowerShell"
-            ScriptText     = $detectionScript
+            Type         = "File"
+            FilePath     = "C:\Program Files\WindowsApps"
+            FileName     = "ms-teams.exe"
+            PropertyType = "Existence"
+            Is64Bit      = $true
         }
     }
 

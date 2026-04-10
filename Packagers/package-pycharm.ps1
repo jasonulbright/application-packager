@@ -243,11 +243,9 @@ function Invoke-StagePyCharm {
         UninstallArgs   = "/S"
         RunningProcess  = @("pycharm64")
         Detection       = @{
-            Type          = "File"
-            FilePath      = $detectionPath
-            FileName      = $detectionFile
-            PropertyType  = "Existence"
-            Is64Bit       = $true
+            Type                = "RegistryKey"
+            RegistryKeyRelative = "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PyCharm Community Edition $version"
+            Is64Bit             = $true
         }
     }
 

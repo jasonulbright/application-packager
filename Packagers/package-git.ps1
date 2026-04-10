@@ -265,9 +265,13 @@ function Invoke-StageGit {
         UninstallArgs    = "/VERYSILENT /NORESTART"
         RunningProcess   = @("git", "bash", "mintty")
         Detection        = @{
-            Type           = "Script"
-            ScriptLanguage = "PowerShell"
-            ScriptText     = $detectionScript
+            Type          = "File"
+            FilePath      = "C:\Program Files\Git\bin"
+            FileName      = "git.exe"
+            PropertyType  = "Version"
+            Operator      = "GreaterEquals"
+            ExpectedValue = $version
+            Is64Bit       = $true
         }
     }
 

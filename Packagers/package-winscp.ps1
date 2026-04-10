@@ -363,12 +363,13 @@ function Invoke-StageWinSCP {
         UninstallArgs   = "/VERYSILENT /NORESTART"
         RunningProcess  = @("WinSCP")
         Detection       = @{
-            Type                = "RegistryKeyValue"
-            RegistryKeyRelative = $regRelative
-            ValueName           = "DisplayVersion"
-            ExpectedValue       = $version
-            Operator            = "GreaterEquals"
-            Is64Bit             = $false
+            Type          = "File"
+            FilePath      = "C:\Program Files (x86)\WinSCP"
+            FileName      = "WinSCP.exe"
+            PropertyType  = "Version"
+            Operator      = "GreaterEquals"
+            ExpectedValue = $version
+            Is64Bit       = $false
         }
     }
 

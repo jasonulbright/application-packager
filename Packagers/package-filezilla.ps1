@@ -245,12 +245,13 @@ function Invoke-StageFileZilla {
         UninstallArgs    = "/S"
         RunningProcess   = @("filezilla")
         Detection        = @{
-            Type                = "RegistryKeyValue"
-            RegistryKeyRelative = $arpRegistryKey
-            ValueName           = "DisplayVersion"
-            ExpectedValue       = $version
-            Operator            = "IsEquals"
-            Is64Bit             = $true
+            Type          = "File"
+            FilePath      = "C:\Program Files\FileZilla FTP Client"
+            FileName      = "filezilla.exe"
+            PropertyType  = "Version"
+            Operator      = "GreaterEquals"
+            ExpectedValue = $version
+            Is64Bit       = $true
         }
     }
 

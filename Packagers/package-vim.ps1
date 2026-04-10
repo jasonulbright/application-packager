@@ -234,12 +234,11 @@ function Invoke-StageVim {
         UninstallArgs   = "/S"
         RunningProcess  = @("gvim", "vim")
         Detection       = @{
-            Type                = "RegistryKeyValue"
-            RegistryKeyRelative = $arpRegistryKey
-            ValueName           = "DisplayVersion"
-            ExpectedValue       = $version
-            Operator            = "GreaterEquals"
-            Is64Bit             = $true
+            Type         = "File"
+            FilePath     = "C:\Program Files\Vim\vim$($majorMinor -replace '\.','')"
+            FileName     = "gvim.exe"
+            PropertyType = "Existence"
+            Is64Bit      = $true
         }
     }
 
