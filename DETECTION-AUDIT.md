@@ -35,7 +35,7 @@ Rewrote detection blocks to match Packr-validated methods.
 | package-vim.ps1 | RegistryKeyValue → File (gvim.exe, Existence) |
 | package-winscp.ps1 | RegistryKeyValue → File (WinSCP.exe, Version/GE) |
 | package-wireshark.ps1 | RegistryKeyValue → File (Wireshark.exe, Version/GE) |
-| package-zoom.ps1 | File (%APPDATA%) → File (Program Files, Version/GE) |
+| package-zoom.ps1 | File (%APPDATA%) — kept per-user path, detection type unchanged |
 | package-corretto-jdk8-x64.ps1 | RegistryKeyValue → RegistryKey (key existence) |
 | package-corretto-jdk8-x86.ps1 | RegistryKeyValue → RegistryKey (key existence) |
 | package-tableaudesktop.ps1 | RegistryKeyValue (IsEquals, 32-bit) → RegistryKey (64-bit) |
@@ -83,11 +83,25 @@ Added PropertyType=Version and Operator=GreaterEquals.
 |--------|-----|
 | package-python.ps1 | PropertyType Existence → Version/GreaterEquals |
 | package-sysinternals.ps1 | PropertyType DateModified → Existence |
-| package-obsidian.ps1 | Path %LOCALAPPDATA% → C:\Program Files |
-| package-postman.ps1 | Path %LOCALAPPDATA% → C:\Program Files |
+| package-obsidian.ps1 | Kept %LOCALAPPDATA% (per-user install, path change reverted) |
+| package-postman.ps1 | Kept %LOCALAPPDATA% (per-user install, path change reverted) |
 
 ### Earlier Fixes (5 apps)
 CCleaner, WinMerge, XenCenter, WebView2, R — fixed in prior session.
+
+### Post-Audit Corrections
+
+**Regressions reverted (3 apps):**
+Obsidian, Postman, and Zoom are per-user installs in 1.x. Packr installs
+them system-wide, but 1.x uses different installers/switches that target
+%LOCALAPPDATA%/%APPDATA%. Detection paths reverted to match actual 1.x
+install locations.
+
+**PropertyType=Version added (7 apps):**
+CCleaner, GIMP, KeePass, Malwarebytes, PuTTY, VLC, WebView2 had
+RegistryKeyValue detection with Operator=GreaterEquals but no PropertyType.
+The common module defaults PropertyType to "String", causing lexicographic
+comparison instead of version comparison. Added PropertyType="Version".
 
 ---
 
