@@ -199,7 +199,7 @@ function Invoke-StageObsidian {
         -UninstallPs1Content $uninstallContent
 
     # --- Write stage manifest ---
-    $detectionPath = "C:\Program Files\Obsidian"
+    $detectionPath = "%LOCALAPPDATA%\Obsidian"
 
     $appName   = "Obsidian $version"
     $publisher = "Obsidian"

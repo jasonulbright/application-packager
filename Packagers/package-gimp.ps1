@@ -229,6 +229,7 @@ function Invoke-StageGIMP {
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = $arpRegistryKey
             ValueName           = "DisplayVersion"
+            PropertyType        = "Version"
             ExpectedValue       = $version
             Operator            = "GreaterEquals"
             Is64Bit             = $true

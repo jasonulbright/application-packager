@@ -245,6 +245,7 @@ function Invoke-StagePuTTY {
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = $arpRegistryKey
             ValueName           = "DisplayVersion"
+            PropertyType        = "Version"
             ExpectedValue       = $productVersionRaw
             Operator            = "GreaterEquals"
             Is64Bit             = $true

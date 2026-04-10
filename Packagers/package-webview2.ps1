@@ -226,6 +226,7 @@ function Invoke-StageWebView2 {
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = $arpRegistryKey
             ValueName           = "DisplayVersion"
+            PropertyType        = "Version"
             ExpectedValue       = $version
             Operator            = "GreaterEquals"
             Is64Bit             = $true

@@ -229,6 +229,7 @@ function Invoke-StageVLC {
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = $arpKey
             ValueName           = "DisplayVersion"
+            PropertyType        = "Version"
             ExpectedValue       = $productVersionRaw
             Operator            = "GreaterEquals"
             Is64Bit             = $true
