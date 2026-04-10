@@ -251,6 +251,8 @@ function Invoke-StageLibreOffice {
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = $arpRegistryKey
             ValueName           = "DisplayVersion"
+            PropertyType        = "Version"
+            Operator            = "GreaterEquals"
             ExpectedValue       = $productVersionRaw
             Is64Bit             = $true
         }

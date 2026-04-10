@@ -258,7 +258,7 @@ function Invoke-StageKeePass {
             RegistryKeyRelative = $arpRegistryKey
             ValueName           = "DisplayVersion"
             ExpectedValue       = $productVersionRaw
-            Operator            = "IsEquals"
+            Operator            = "GreaterEquals"
             Is64Bit             = $false
         }
     }

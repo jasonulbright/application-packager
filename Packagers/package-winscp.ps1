@@ -367,7 +367,7 @@ function Invoke-StageWinSCP {
             RegistryKeyRelative = $regRelative
             ValueName           = "DisplayVersion"
             ExpectedValue       = $version
-            Operator            = "IsEquals"
+            Operator            = "GreaterEquals"
             Is64Bit             = $false
         }
     }
