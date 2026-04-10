@@ -212,6 +212,9 @@ function Invoke-StageR {
         -UninstallPs1Content $wrapperContent.Uninstall
 
     # --- Write stage manifest ---
+    # R installs to a version-specific folder (R-4.x.x). Use file detection with
+    # version comparison on the exe rather than folder existence, so GreaterEquals
+    # works across minor upgrades within the same major version folder.
     $detectionPath = '{0}\R\R-{1}\bin' -f $env:ProgramFiles, $version
 
     $appName   = "R for Windows - $version (x64)"
@@ -233,11 +236,13 @@ function Invoke-StageR {
         UninstallArgs   = "/VERYSILENT"
         RunningProcess  = @("Rgui", "Rterm")
         Detection       = @{
-            Type         = "File"
-            FilePath     = $detectionPath
-            FileName     = "R.exe"
-            PropertyType = "Existence"
-            Is64Bit      = $true
+            Type          = "File"
+            FilePath      = $detectionPath
+            FileName      = "R.exe"
+            PropertyType  = "Version"
+            Operator      = "GreaterEquals"
+            ExpectedValue = $version
+            Is64Bit       = $true
         }
     }
 

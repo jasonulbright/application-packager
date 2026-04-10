@@ -182,7 +182,7 @@ function Invoke-StageCCleaner {
         -UninstallPs1Content $wrapperContent.Uninstall
 
     # --- Write stage manifest ---
-    $arpRegistryKey = "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\CCleaner"
+    $arpRegistryKey = "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\CCleaner 7"
 
     $appName   = "CCleaner $version"
     $publisher = "Piriform Software Ltd."

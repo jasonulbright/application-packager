@@ -201,14 +201,15 @@ function Invoke-StageWebView2 {
         -UninstallPs1Content $uninstallContent
 
     # --- Write stage manifest ---
-    $detectionPath = "{0}\Microsoft\EdgeWebView\Application\{1}" -f $env:ProgramFiles, $version
+    # WebView2 ARP key is stable (not version-specific) — use registry detection
+    # instead of file detection in versioned folder path
+    $arpRegistryKey = "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Microsoft EdgeWebView"
 
     $appName   = "Microsoft Edge WebView2 Runtime - $version"
     $publisher = "Microsoft Corporation"
 
     Write-Log ""
-    Write-Log "Detection path               : $detectionPath"
-    Write-Log "Detection file               : msedgewebview2.exe"
+    Write-Log "ARP Registry Key             : $arpRegistryKey"
     Write-Log ""
 
     $manifestPath = Join-Path $localContentPath "stage-manifest.json"
@@ -222,12 +223,12 @@ function Invoke-StageWebView2 {
         UninstallArgs   = "/silent /uninstall"
         RunningProcess  = @()
         Detection       = @{
-            Type          = "File"
-            FilePath      = $detectionPath
-            FileName      = "msedgewebview2.exe"
-            PropertyType  = "Version"
-            Operator      = "GreaterEquals"
-            ExpectedValue = $version
+            Type                = "RegistryKeyValue"
+            RegistryKeyRelative = $arpRegistryKey
+            ValueName           = "DisplayVersion"
+            ExpectedValue       = $version
+            Operator            = "GreaterEquals"
+            Is64Bit             = $true
         }
     }
 

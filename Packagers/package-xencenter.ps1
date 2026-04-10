@@ -185,7 +185,7 @@ function Invoke-StageXenCenter {
         RegistryKeyRelative = $arpRegistryKey
         DisplayName         = $productName
         DisplayVersion      = $productVersionRaw
-        Is64Bit             = $true
+        Is64Bit             = $false  # XenCenter MSI registers in 32-bit registry view
     }
     Write-Log "ARP detection derived from MSI properties (no temp install needed)."
 

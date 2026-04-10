@@ -180,7 +180,7 @@ function Invoke-StageWinMerge {
     $wrapperContent = New-ExeWrapperContent `
         -InstallerFileName $installerFileName `
         -InstallArgs "'/VERYSILENT', '/NORESTART'" `
-        -UninstallCommand 'C:\Program Files\WinMerge\unins000.exe' `
+        -UninstallCommand 'C:\Program Files (x86)\WinMerge\unins000.exe' `
         -UninstallArgs "'/VERYSILENT', '/NORESTART'"
 
     Write-ContentWrappers -OutputPath $localContentPath `
@@ -188,7 +188,7 @@ function Invoke-StageWinMerge {
         -UninstallPs1Content $wrapperContent.Uninstall
 
     # --- Write stage manifest ---
-    $detectionPath = "{0}\WinMerge" -f $env:ProgramFiles
+    $detectionPath = "{0}\WinMerge" -f ${env:ProgramFiles(x86)}
 
     $appName   = "WinMerge $version (x64)"
     $publisher = "WinMerge"
