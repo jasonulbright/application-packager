@@ -149,8 +149,7 @@ $noUninstallList = @(
     'package-dotnet8'               # .NET 8 runtime
     'package-Dotnet9x64'            # .NET 9 runtime
     'package-Dotnet10x64'           # .NET 10 runtime
-    'package-aspnethostingbundle8'  # ASP.NET runtime
-    'package-edge'                  # OS-integrated browser
+    'package-edge'                  # OS-integrated, cannot be uninstalled
     'package-webview2'              # Edge WebView2 runtime - many apps depend on this
 )
 
