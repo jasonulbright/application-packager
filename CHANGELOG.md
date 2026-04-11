@@ -2,6 +2,17 @@
 
 All notable changes to AppPackager are documented in this file.
 
+## [1.2.6] - 2026-04-11
+
+### Fixed
+- **GIMP uninstall path** -- Uninstall wrapper hardcoded `GIMP 3.0` but GIMP installs to `GIMP 3`. Now derives major version dynamically so the path matches. Validated on CLIENT01.
+- **3010 exit code masking** -- Bat wrapper unconditionally returned the override exit code (e.g. 3010), masking real failures. Now only overrides to 3010 when PowerShell returns 0; actual errors propagate.
+
+### Changed
+- **Forced reboot (3010)** -- Six packagers now force ConfigMgr soft reboot via bat exit code 3010: PowerToys, WinMerge, DBeaver, CCleaner, Greenshot, MSVC Runtimes. Their uninstallers return 0 but leave shell extensions/services locked until reboot.
+
+---
+
 ## [1.2.5] - 2026-04-11
 
 ### Fixed
