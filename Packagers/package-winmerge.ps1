@@ -188,7 +188,7 @@ function Invoke-StageWinMerge {
         -UninstallPs1Content $wrapperContent.Uninstall
 
     # --- Write stage manifest ---
-    $detectionPath = "{0}\WinMerge" -f ${env:ProgramFiles(x86)}
+    $detectionPath = "{0}\WinMerge" -f $env:ProgramFiles
 
     $appName   = "WinMerge $version (x64)"
     $publisher = "WinMerge"

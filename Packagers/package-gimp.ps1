@@ -205,8 +205,9 @@ function Invoke-StageGIMP {
         -UninstallPs1Content $wrapperContent.Uninstall
 
     # --- Write stage manifest ---
-    # GIMP uses a stable InnoSetup ARP key: GIMP-{major.minor}_is1
-    $arpRegistryKey = "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\GIMP-3.0_is1"
+    # GIMP uses a stable InnoSetup ARP key: GIMP-{major}_is1
+    $majorVer = $version.Split('.')[0]
+    $arpRegistryKey = "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\GIMP-${majorVer}_is1"
 
     $appName   = "GIMP $version"
     $publisher = "The GIMP Team"
@@ -222,7 +223,7 @@ function Invoke-StageGIMP {
         InstallerFile    = $installerFileName
         InstallerType    = "EXE"
         InstallArgs      = "/VERYSILENT /NORESTART /ALLUSERS /SP-"
-        UninstallCommand = "C:\Program Files\GIMP 3.0\uninst\unins000.exe"
+        UninstallCommand = "C:\Program Files\GIMP $majorVer\uninst\unins000.exe"
         UninstallArgs    = "/VERYSILENT /NORESTART"
         RunningProcess   = @("gimp")
         Detection        = @{

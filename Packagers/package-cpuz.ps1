@@ -195,7 +195,7 @@ function Invoke-StageCpuZ {
     $publisher = "CPUID"
 
     Write-Log "Detection path               : $detectionPath"
-    Write-Log "Detection file               : cpuz_x64.exe"
+    Write-Log "Detection file               : cpuz.exe"
     Write-Log ""
 
     $manifestPath = Join-Path $localContentPath "stage-manifest.json"
@@ -211,7 +211,7 @@ function Invoke-StageCpuZ {
         Detection       = @{
             Type          = "File"
             FilePath      = $detectionPath
-            FileName      = "cpuz_x64.exe"
+            FileName      = "cpuz.exe"
             PropertyType  = "Version"
             Operator      = "GreaterEquals"
             ExpectedValue = $version

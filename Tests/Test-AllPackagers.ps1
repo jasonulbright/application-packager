@@ -191,6 +191,10 @@ if ($Phase -eq 'Install' -or $Phase -eq 'All') {
 if ($Phase -eq 'Detect' -or $Phase -eq 'All') {
     if ($manifest -and $manifest.Detection) {
         $det = $manifest.Detection
+
+        # x86 apps register in WOW6432Node on 64-bit OS
+        $is64Bit = if ($null -ne $det.Is64Bit) { $det.Is64Bit } else { $true }
+
         switch ($det.Type) {
             'File' {
                 $detPath = Join-Path $det.FilePath $det.FileName
@@ -202,7 +206,11 @@ if ($Phase -eq 'Detect' -or $Phase -eq 'All') {
                 }
             }
             'RegistryKeyValue' {
-                $regPath = "HKLM:\$($det.RegistryKeyRelative)"
+                $relKey = $det.RegistryKeyRelative
+                if (-not $is64Bit -and $relKey -match '^SOFTWARE\\' -and $relKey -notmatch 'WOW6432Node') {
+                    $relKey = $relKey -replace '^SOFTWARE\\', 'SOFTWARE\WOW6432Node\'
+                }
+                $regPath = "HKLM:\$relKey"
                 $regVal = Get-ItemProperty $regPath -ErrorAction SilentlyContinue
                 if ($regVal) {
                     $result.DetectionResult = 'PASS'
@@ -212,7 +220,11 @@ if ($Phase -eq 'Detect' -or $Phase -eq 'All') {
                 }
             }
             'RegistryKey' {
-                $regPath = "HKLM:\$($det.RegistryKeyRelative)"
+                $relKey = $det.RegistryKeyRelative
+                if (-not $is64Bit -and $relKey -match '^SOFTWARE\\' -and $relKey -notmatch 'WOW6432Node') {
+                    $relKey = $relKey -replace '^SOFTWARE\\', 'SOFTWARE\WOW6432Node\'
+                }
+                $regPath = "HKLM:\$relKey"
                 if (Test-Path $regPath) {
                     $result.DetectionResult = 'PASS'
                 } else {
@@ -323,6 +335,7 @@ if ($Phase -eq 'Uninstall' -or $Phase -eq 'All') {
 if ($Phase -eq 'VerifyRemoval' -or $Phase -eq 'All') {
     if ($manifest -and $manifest.Detection) {
         Start-Sleep -Seconds 3
+        $remIs64 = if ($null -ne $manifest.Detection.Is64Bit) { $manifest.Detection.Is64Bit } else { $true }
         switch ($manifest.Detection.Type) {
             'File' {
                 $detPath = Join-Path $manifest.Detection.FilePath $manifest.Detection.FileName
@@ -334,7 +347,11 @@ if ($Phase -eq 'VerifyRemoval' -or $Phase -eq 'All') {
                 }
             }
             'RegistryKeyValue' {
-                $regPath = "HKLM:\$($manifest.Detection.RegistryKeyRelative)"
+                $relKey = $manifest.Detection.RegistryKeyRelative
+                if (-not $remIs64 -and $relKey -match '^SOFTWARE\\' -and $relKey -notmatch 'WOW6432Node') {
+                    $relKey = $relKey -replace '^SOFTWARE\\', 'SOFTWARE\WOW6432Node\'
+                }
+                $regPath = "HKLM:\$relKey"
                 if (-not (Test-Path $regPath)) {
                     $result.RemovalVerified = 'PASS'
                 } else {
@@ -342,7 +359,11 @@ if ($Phase -eq 'VerifyRemoval' -or $Phase -eq 'All') {
                 }
             }
             'RegistryKey' {
-                $regPath = "HKLM:\$($manifest.Detection.RegistryKeyRelative)"
+                $relKey = $manifest.Detection.RegistryKeyRelative
+                if (-not $remIs64 -and $relKey -match '^SOFTWARE\\' -and $relKey -notmatch 'WOW6432Node') {
+                    $relKey = $relKey -replace '^SOFTWARE\\', 'SOFTWARE\WOW6432Node\'
+                }
+                $regPath = "HKLM:\$relKey"
                 if (-not (Test-Path $regPath)) {
                     $result.RemovalVerified = 'PASS'
                 } else {

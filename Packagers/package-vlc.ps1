@@ -175,11 +175,14 @@ function Invoke-StageVLC {
 
     $productVersionRaw = $props["ProductVersion"]
     $manufacturer      = $props["Manufacturer"]
+    $productCode       = $props["ProductCode"]
 
     if ([string]::IsNullOrWhiteSpace($productVersionRaw)) { throw "MSI ProductVersion missing." }
+    if ([string]::IsNullOrWhiteSpace($productCode))       { throw "MSI ProductCode missing." }
 
     Write-Log "MSI ProductVersion (raw)     : $productVersionRaw"
     Write-Log "MSI Manufacturer             : $manufacturer"
+    Write-Log "MSI ProductCode              : $productCode"
     Write-Log ""
 
     # --- Versioned local content folder ---
@@ -202,9 +205,7 @@ function Invoke-StageVLC {
         -UninstallPs1Content $wrapperContent.Uninstall
 
     # --- Write stage manifest ---
-    # VLC's MSI ProductCode is auto-generated per build, so we use the fixed
-    # ARP key name instead of the ProductCode-based registry path.
-    $arpKey = "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\VLC media player"
+    $arpKey = "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\$productCode"
 
     $publisher = $manufacturer
     if ([string]::IsNullOrWhiteSpace($publisher)) { $publisher = "VideoLAN" }

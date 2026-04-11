@@ -215,11 +215,22 @@ function Invoke-StageOdbc18 {
     Write-Log "ARP DisplayVersion           : $productVersionRaw"
     Write-Log ""
 
-    # --- Generate content wrappers ---
-    $wrapperContent = New-MsiWrapperContent -MsiFileName $MsiFileName
+    # --- Generate content wrappers (license acceptance required for silent install) ---
+    $installPs1 = (
+        ('$msiPath = Join-Path $PSScriptRoot ''{0}''' -f $MsiFileName),
+        '$proc = Start-Process msiexec.exe -ArgumentList @(''/i'', "`"$msiPath`"", ''/qn'', ''/norestart'', ''IACCEPTMSODBCSQLLICENSETERMS=YES'') -Wait -PassThru -NoNewWindow',
+        'exit $proc.ExitCode'
+    ) -join "`r`n"
+
+    $uninstallPs1 = (
+        ('$msiPath = Join-Path $PSScriptRoot ''{0}''' -f $MsiFileName),
+        '$proc = Start-Process msiexec.exe -ArgumentList @(''/x'', "`"$msiPath`"", ''/qn'', ''/norestart'') -Wait -PassThru -NoNewWindow',
+        'exit $proc.ExitCode'
+    ) -join "`r`n"
+
     Write-ContentWrappers -OutputPath $localContentPath `
-        -InstallPs1Content $wrapperContent.Install `
-        -UninstallPs1Content $wrapperContent.Uninstall
+        -InstallPs1Content $installPs1 `
+        -UninstallPs1Content $uninstallPs1
 
     # --- Write stage manifest ---
     $publisher = $manufacturer
@@ -234,7 +245,7 @@ function Invoke-StageOdbc18 {
         SoftwareVersion = $productVersionRaw
         InstallerFile   = $MsiFileName
         InstallerType   = "MSI"
-        InstallArgs     = "/qn /norestart"
+        InstallArgs     = "/qn /norestart IACCEPTMSODBCSQLLICENSETERMS=YES"
         UninstallArgs   = "/qn /norestart"
         ProductCode     = $productCode
         RunningProcess  = @()

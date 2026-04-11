@@ -197,7 +197,7 @@ function Invoke-StageWizTree {
     $publisher = "Antibody Software"
 
     Write-Log "Detection path               : $detectionPath"
-    Write-Log "Detection file               : WizTree64.exe"
+    Write-Log "Detection file               : WizTree.exe"
     Write-Log ""
 
     $manifestPath = Join-Path $localContentPath "stage-manifest.json"
@@ -209,11 +209,11 @@ function Invoke-StageWizTree {
         InstallerType   = "EXE"
         InstallArgs     = "/VERYSILENT /NORESTART"
         UninstallArgs   = "/VERYSILENT /NORESTART"
-        RunningProcess  = @("WizTree", "WizTree64")
+        RunningProcess  = @("WizTree")
         Detection       = @{
             Type          = "File"
             FilePath      = $detectionPath
-            FileName      = "WizTree64.exe"
+            FileName      = "WizTree.exe"
             PropertyType  = "Version"
             Operator      = "GreaterEquals"
             ExpectedValue = $version

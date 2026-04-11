@@ -109,6 +109,15 @@ $defaultSkipList = @(
     'package-anaconda'             # 1GB+
     'package-pycharm'              # 800MB+
 
+    # --- Per-user detection path (not machine-testable) ---
+    'package-zoom'                 # Detects in %APPDATA%, per-user install
+
+    # --- Requires specific hypervisor ---
+    'package-vmwaretools'          # Can't install VMware Tools on Hyper-V
+
+    # --- MSIX provisioning (requires SYSTEM context) ---
+    'package-teams'                # MSIX detection in WindowsApps, needs SYSTEM
+
     # --- Upstream broken ---
     'package-slack'                # CDN 404 as of 2026-04-10
 )
