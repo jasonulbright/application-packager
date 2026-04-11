@@ -529,13 +529,8 @@ function Write-ContentWrappers {
     )
 
     foreach ($f in $files) {
-        if (-not (Test-Path -LiteralPath $f.Path)) {
-            Set-Content -LiteralPath $f.Path -Value $f.Content -Encoding ASCII -ErrorAction Stop
-            Write-Log "Created wrapper              : $($f.Label)"
-        }
-        else {
-            Write-Log "Wrapper exists, skipped      : $($f.Label)"
-        }
+        Set-Content -LiteralPath $f.Path -Value $f.Content -Encoding ASCII -Force -ErrorAction Stop
+        Write-Log "Wrote wrapper                : $($f.Label)"
     }
 }
 

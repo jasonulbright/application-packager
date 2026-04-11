@@ -181,11 +181,22 @@ function Invoke-StageFirefox {
     }
 
     # --- Generate content wrappers ---
+    # Install uses standard MSI wrapper
     $wrappers = New-MsiWrapperContent -MsiFileName $msiFileName
+
+    # Firefox MSI is a thin wrapper around the EXE installer. msiexec /x
+    # returns 1605 because the product isn't registered as an MSI install.
+    # Use the native uninstaller (helper.exe /S) instead.
+    $customUninstall = (
+        '$helperPath = Join-Path $env:ProgramFiles ''Mozilla Firefox\uninstall\helper.exe''',
+        'if (-not (Test-Path -LiteralPath $helperPath)) { exit 0 }',
+        '$proc = Start-Process -FilePath $helperPath -ArgumentList @(''/S'') -Wait -PassThru -NoNewWindow',
+        'exit $proc.ExitCode'
+    ) -join "`r`n"
 
     Write-ContentWrappers -OutputPath $localContentPath `
         -InstallPs1Content $wrappers.Install `
-        -UninstallPs1Content $wrappers.Uninstall
+        -UninstallPs1Content $customUninstall
 
     # --- Write stage manifest ---
     $detectionPath = "{0}\Mozilla Firefox" -f $env:ProgramFiles

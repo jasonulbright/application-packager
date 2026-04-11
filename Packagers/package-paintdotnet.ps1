@@ -218,16 +218,16 @@ function Invoke-StagePaintDotNet {
     Write-Log ""
 
     # --- Generate content wrappers (custom install args for Paint.NET) ---
-    $installPs1 = @(
-        "`$msiPath = Join-Path `$PSScriptRoot '$MsiFileName'"
-        "`$proc = Start-Process msiexec.exe -ArgumentList @('/i', `"``\`"`$msiPath``\`"`", '/quiet', '/norestart', 'CHECKFORUPDATES=0', 'DESKTOPSHORTCUT=0') -Wait -PassThru -NoNewWindow"
-        "exit `$proc.ExitCode"
+    $installPs1 = (
+        ('$msiPath = Join-Path $PSScriptRoot ''{0}''' -f $MsiFileName),
+        '$proc = Start-Process msiexec.exe -ArgumentList @(''/i'', "`"$msiPath`"", ''/quiet'', ''/norestart'', ''CHECKFORUPDATES=0'', ''DESKTOPSHORTCUT=0'') -Wait -PassThru -NoNewWindow',
+        'exit $proc.ExitCode'
     ) -join "`r`n"
 
-    $uninstallPs1 = @(
-        "`$msiPath = Join-Path `$PSScriptRoot '$MsiFileName'"
-        "`$proc = Start-Process msiexec.exe -ArgumentList @('/x', `"``\`"`$msiPath``\`"`", '/qn', '/norestart') -Wait -PassThru -NoNewWindow"
-        "exit `$proc.ExitCode"
+    $uninstallPs1 = (
+        ('$msiPath = Join-Path $PSScriptRoot ''{0}''' -f $MsiFileName),
+        '$proc = Start-Process msiexec.exe -ArgumentList @(''/x'', "`"$msiPath`"", ''/qn'', ''/norestart'') -Wait -PassThru -NoNewWindow',
+        'exit $proc.ExitCode'
     ) -join "`r`n"
 
     Write-ContentWrappers -OutputPath $localContentPath `

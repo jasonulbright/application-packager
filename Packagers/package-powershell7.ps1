@@ -204,16 +204,16 @@ function Invoke-StagePowerShell7 {
     Write-Log ""
 
     # --- Generate content wrappers (custom install args for PS7) ---
-    $installPs1 = @(
-        "`$msiPath = Join-Path `$PSScriptRoot '$MsiFileName'"
-        "`$proc = Start-Process msiexec.exe -ArgumentList @('/i', `"``\`"`$msiPath``\`"`", '/quiet', '/norestart', 'ADD_EXPLORER_CONTEXT_MENU_OPENPOWERSHELL=1', 'ENABLE_PSREMOTING=1', 'REGISTER_MANIFEST=1', 'ADD_PATH=1', 'USE_MU=0', 'ENABLE_MU=0') -Wait -PassThru -NoNewWindow"
-        "exit `$proc.ExitCode"
+    $installPs1 = (
+        ('$msiPath = Join-Path $PSScriptRoot ''{0}''' -f $MsiFileName),
+        '$proc = Start-Process msiexec.exe -ArgumentList @(''/i'', "`"$msiPath`"", ''/quiet'', ''/norestart'', ''ADD_EXPLORER_CONTEXT_MENU_OPENPOWERSHELL=1'', ''ENABLE_PSREMOTING=1'', ''REGISTER_MANIFEST=1'', ''ADD_PATH=1'', ''USE_MU=0'', ''ENABLE_MU=0'') -Wait -PassThru -NoNewWindow',
+        'exit $proc.ExitCode'
     ) -join "`r`n"
 
-    $uninstallPs1 = @(
-        "`$msiPath = Join-Path `$PSScriptRoot '$MsiFileName'"
-        "`$proc = Start-Process msiexec.exe -ArgumentList @('/x', `"``\`"`$msiPath``\`"`", '/qn', '/norestart') -Wait -PassThru -NoNewWindow"
-        "exit `$proc.ExitCode"
+    $uninstallPs1 = (
+        ('$msiPath = Join-Path $PSScriptRoot ''{0}''' -f $MsiFileName),
+        '$proc = Start-Process msiexec.exe -ArgumentList @(''/x'', "`"$msiPath`"", ''/qn'', ''/norestart'') -Wait -PassThru -NoNewWindow',
+        'exit $proc.ExitCode'
     ) -join "`r`n"
 
     Write-ContentWrappers -OutputPath $localContentPath `

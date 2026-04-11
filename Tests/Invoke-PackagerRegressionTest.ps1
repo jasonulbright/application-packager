@@ -94,6 +94,10 @@ $defaultSkipList = @(
     'package-wiztree'              # InnoSetup needs interactive session
     'package-pgadmin4'             # InnoSetup needs interactive session
 
+    # --- Needs interactive/desktop session (fails under WinRM) ---
+    'package-anydesk'              # Exit 0xAD1505 under WinRM, passes with psexec -s
+    'package-greenshot'            # GitHub CDN download too slow, stage timeout
+
     # --- Conflicts with other packagers in same run ---
     'package-powershell7lts'       # Shares install path with PS7 Current
 

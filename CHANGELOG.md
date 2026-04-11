@@ -2,6 +2,19 @@
 
 All notable changes to AppPackager are documented in this file.
 
+## [1.2.5] - 2026-04-11
+
+### Fixed
+- **Wrapper quoting** -- Four packagers (LibreOffice, Paint.NET, PowerShell 7, Thunderbird) generated `install.ps1` with backslash-escaped quotes (`\"path\"`) that msiexec misparses. Rewrote wrapper generation to use gold standard single-quote pattern matching `package-7zip.ps1` and `package-msoledb.ps1`.
+- **Stale wrapper overwrite** -- `Write-ContentWrappers` skipped existing files, so corrected wrappers were never written. Now always overwrites, ensuring the latest generated content is deployed.
+- **Firefox uninstall** -- `msiexec /x` returns 1605 because Firefox's MSI is a thin wrapper. Uninstall now uses `helper.exe /S` from the native uninstaller, matching Packr's UNINSTALL-REFERENCE.md.
+- **msoledb license acceptance** -- The `IACCEPTMSOLEDBSQLLICENSETERMS=YES` fix committed in v1.2.4 never took effect because `Write-ContentWrappers` preserved the stale `install.ps1`. Fixed by the overwrite change above.
+
+### Changed
+- **Skip list** -- Added `package-anydesk` (exit 0xAD1505 under WinRM, passes with psexec -s desktop session) and `package-greenshot` (GitHub CDN download too slow, stage timeout) to the default skip list.
+
+---
+
 ## [1.2.4] - 2026-04-10
 
 ### Added
