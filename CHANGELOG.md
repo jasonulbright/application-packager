@@ -33,7 +33,7 @@ All notable changes to AppPackager are documented in this file.
 - **ASP.NET Hosting Bundle** -- Removed from noUninstallList, full E2E validation enabled.
 
 ### Validated
-- **Full E2E regression: 83/83 pass, 0 failures** -- Clean baseline from updated CLIENT01 snapshot (KB5079473, Python Launcher removed). 8 reboots handled, 1h33m total runtime.
+- **Full E2E regression: 83/83 pass, 0 failures** -- Clean baseline from updated test VM snapshot. 8 reboots handled, 1h33m total runtime.
 
 ---
 
@@ -48,7 +48,7 @@ All notable changes to AppPackager are documented in this file.
 ## [1.2.6] - 2026-04-11
 
 ### Fixed
-- **GIMP uninstall path** -- Uninstall wrapper hardcoded `GIMP 3.0` but GIMP installs to `GIMP 3`. Now derives major version dynamically so the path matches. Validated on CLIENT01.
+- **GIMP uninstall path** -- Uninstall wrapper hardcoded `GIMP 3.0` but GIMP installs to `GIMP 3`. Now derives major version dynamically so the path matches.
 - **3010 exit code masking** -- Bat wrapper unconditionally returned the override exit code (e.g. 3010), masking real failures. Now only overrides to 3010 when PowerShell returns 0; actual errors propagate.
 
 ### Changed
@@ -65,14 +65,14 @@ All notable changes to AppPackager are documented in this file.
 - **msoledb license acceptance** -- The `IACCEPTMSOLEDBSQLLICENSETERMS=YES` fix committed in v1.2.4 never took effect because `Write-ContentWrappers` preserved the stale `install.ps1`. Fixed by the overwrite change above.
 
 ### Changed
-- **Skip list** -- Added `package-anydesk` (exit 0xAD1505 under WinRM, passes with psexec -s desktop session) and `package-greenshot` (GitHub CDN download too slow, stage timeout) to the default skip list.
+- **Skip list** -- Added `package-anydesk` (exit 0xAD1505 in headless context) and `package-greenshot` (GitHub CDN download too slow, stage timeout) to the default skip list.
 
 ---
 
 ## [1.2.4] - 2026-04-10
 
 ### Added
-- **Regression test harness** -- `Invoke-PackagerRegressionTest.ps1` orchestrates per-app E2E testing on a Hyper-V CLIENT01 VM via WinRM: snapshot restore, script deployment, stage/install/detect/uninstall with per-app timeout, 3010 reboot handling, staged content cleanup, and incremental JSON results.
+- **Regression test harness** -- `Invoke-PackagerRegressionTest.ps1` orchestrates per-app E2E testing on a test VM: snapshot restore, script deployment, stage/install/detect/uninstall with per-app timeout, 3010 reboot handling, staged content cleanup, and incremental JSON results.
 - `Test-AllPackagers.ps1` rewritten as a single-app phase-based tester (Stage, Install, Detect, Uninstall, VerifyRemoval) called per-app by the orchestrator.
 - **No-uninstall list** -- system dependencies (VC++ Runtimes, .NET 8/9/10, ASP.NET, Edge, WebView2) run install+detect only, skip uninstall to prevent cascade breakage.
 - **Skip list** -- per-user installs (Obsidian, Postman, Brave), license/infra-dependent apps, very large installs, and upstream-broken apps excluded from automated testing.

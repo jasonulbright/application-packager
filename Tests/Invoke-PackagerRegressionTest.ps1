@@ -2,21 +2,21 @@
 #Requires -Modules Hyper-V
 <#
 .SYNOPSIS
-    Remote orchestrator for Application Packager regression testing on CLIENT01.
+    Remote orchestrator for Application Packager regression testing on a Hyper-V VM.
 
 .DESCRIPTION
-    Runs from the Hyper-V host. Optionally reverts CLIENT01 to a clean snapshot,
+    Runs from the Hyper-V host. Optionally reverts the test VM to a clean snapshot,
     deploys the current packager scripts via WinRM, and executes Test-AllPackagers.ps1
     per-app on the remote VM.
 
     Handles reboots: if install or uninstall returns 3010, the orchestrator reboots
-    CLIENT01, waits for WinRM, then continues (detect after install-3010, verify
+    the VM, waits for WinRM, then continues (detect after install-3010, verify
     removal after uninstall-3010).
 
     Cleans up staged content on the remote VM after each successful test.
 
 .PARAMETER ResetClient
-    Revert CLIENT01 to the Deployment-Complete snapshot before testing.
+    Revert the test VM to the named checkpoint before testing.
 
 .PARAMETER StageOnly
     Only test staging (download + manifest). No install/uninstall.
@@ -31,7 +31,7 @@
     Local host directory for collected results. Default: C:\temp\regression-results
 
 .PARAMETER VMName
-    Hyper-V VM name. Default: CLIENT01
+    Hyper-V VM name. Set this to your test VM name.
 
 .PARAMETER CheckpointName
     Snapshot name to restore when using -ResetClient. Default: Deployment-Complete
@@ -46,15 +46,15 @@
     Show what would happen without executing.
 
 .EXAMPLE
-    .\Invoke-PackagerRegressionTest.ps1 -ResetClient
+    .\Invoke-PackagerRegressionTest.ps1 -VMName YOURVM -ResetClient
     Full regression: reset, deploy, run all apps with reboot handling.
 
 .EXAMPLE
-    .\Invoke-PackagerRegressionTest.ps1 -ResetClient -StageOnly
+    .\Invoke-PackagerRegressionTest.ps1 -VMName YOURVM -ResetClient -StageOnly
     Fast smoke: reset, stage-only for all apps.
 
 .EXAMPLE
-    .\Invoke-PackagerRegressionTest.ps1 -IncludeOnly @('package-7zip','package-vlc')
+    .\Invoke-PackagerRegressionTest.ps1 -VMName YOURVM -IncludeOnly @('package-7zip','package-vlc')
     Quick test of two specific apps (no reset).
 #>
 [CmdletBinding(SupportsShouldProcess)]
@@ -64,7 +64,8 @@ param(
     [string[]]$IncludeOnly,
     [string[]]$SkipList,
     [string]$ResultsPath = 'C:\temp\regression-results',
-    [string]$VMName = 'CLIENT01',
+    [Parameter(Mandatory)]
+    [string]$VMName,
     [string]$CheckpointName = 'Deployment-Complete',
     [PSCredential]$Credential,
     [int]$AppTimeoutSec = 600
@@ -296,7 +297,7 @@ Write-Status "Apps to test: $($allPackagers.Count) ($($depPackagers.Count) deps 
 Write-Phase 'PREFLIGHT' 'All prerequisites verified'
 Write-Host ''
 
-# ─── PHASE 1: RESET CLIENT01 ────────────────────────────────────────────────
+# ─── PHASE 1: RESET TEST VM ─────────────────────────────────────────────────
 
 if ($ResetClient) {
     Write-Phase 'RESET' "Reverting $VMName to checkpoint: $CheckpointName"
@@ -329,13 +330,13 @@ if ($ResetClient) {
         Write-Status 'Disk verified'
     }
 
-    Write-Phase 'RESET' 'CLIENT01 restored and ready'
+    Write-Phase 'RESET' "$VMName restored and ready"
     Write-Host ''
 }
 
 # ─── PHASE 2: DEPLOY SCRIPTS ────────────────────────────────────────────────
 
-Write-Phase 'DEPLOY' 'Deploying packager scripts to CLIENT01'
+Write-Phase 'DEPLOY' "Deploying packager scripts to $VMName"
 
 if ($PSCmdlet.ShouldProcess($VMName, 'Copy applicationpackager repo')) {
     $session = New-PSSession -ComputerName $VMName -Credential $Credential
@@ -374,7 +375,7 @@ Write-Host ''
 
 # ─── PHASE 3: RUN TESTS (PER-APP LOOP) ──────────────────────────────────────
 
-Write-Phase 'TEST' "Testing $($allPackagers.Count) packagers on CLIENT01"
+Write-Phase 'TEST' "Testing $($allPackagers.Count) packagers on $VMName"
 
 $startTime = Get-Date
 Write-Status "Start time: $($startTime.ToString('HH:mm:ss'))"

@@ -1,7 +1,7 @@
 # Application Packager 1.x — Detection Audit
 
 **Date:** 2026-04-10 (updated 2026-04-11)
-**Source of truth:** Packr JSON definitions (validated via install/detect/uninstall/clean on CLIENT01)
+**Source of truth:** Packr JSON definitions (validated via install/detect/uninstall/clean on test VM)
 **Total mismatches found:** 41 out of ~91 comparable apps (45% discrepancy rate)
 **Fixed:** 41/41 (100%)
 **Note:** 33 packagers archived in v1.2.8. Detection fixes for archived apps (Citrix, CutePDF, FileZilla, Foxit, Greenshot, Obsidian, pgAdmin, Postman, PyCharm, Slack, SSMS, Tableau x3, Teams, TreeSize, VMware Tools, VS 2026 x2, VS Code, WizTree, XenCenter, Zoom) are preserved in the archived scripts.
