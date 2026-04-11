@@ -202,7 +202,7 @@ function Invoke-StageGreenshot {
     # Uninstall: kill Greenshot process first, then run Inno Setup uninstaller
     $uninstallContent = (
         'Stop-Process -Name "Greenshot" -Force -ErrorAction SilentlyContinue',
-        '$proc = Start-Process -FilePath ''C:\Program Files\Greenshot\unins000.exe'' -ArgumentList @(''/SILENT'') -Wait -PassThru -NoNewWindow',
+        '$proc = Start-Process -FilePath ''C:\Program Files\Greenshot\unins000.exe'' -ArgumentList @(''/VERYSILENT'') -Wait -PassThru -NoNewWindow',
         'exit $proc.ExitCode'
     ) -join "`r`n"
 
@@ -230,7 +230,7 @@ function Invoke-StageGreenshot {
         InstallerType    = "EXE"
         InstallArgs      = "/SP- /ALLUSERS /VERYSILENT /SUPPRESSMESSAGEBOXES /NORUN /FORCECLOSEAPPLICATIONS /NORESTART /LOG"
         UninstallCommand = "C:\Program Files\Greenshot\unins000.exe"
-        UninstallArgs    = "/SILENT"
+        UninstallArgs    = "/VERYSILENT"
         RunningProcess   = @("Greenshot")
         Detection        = @{
             Type         = "File"
