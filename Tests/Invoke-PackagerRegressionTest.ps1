@@ -80,55 +80,9 @@ $winrmRetrySec = 15
 # ─── DEFAULT SKIP LIST ───────────────────────────────────────────────────────
 
 $defaultSkipList = @(
-    # --- Per-user installs (won't work headless/SYSTEM) ---
-    'package-obsidian'              # NSIS per-user, InstallContext=User
-    'package-postman'               # Squirrel per-user, InstallContext=User
-    'package-brave'                 # Squirrel, hangs in headless install
-    'package-zoom'                  # Per-user MSI, detects in %APPDATA%
-    'package-vscode'                # Per-user install, runs in user context (not SYSTEM/WinRM)
-    'package-opera'                 # No silent SYSTEM uninstall (vendor removed flag)
-
-    # --- InnoSetup hangs under SYSTEM/WinRM (Packr-validated) ---
-    'package-pycharm'              # NSIS hangs under SYSTEM
-    'package-treesizefree'         # InnoSetup hangs under SYSTEM
-    'package-wiztree'              # InnoSetup needs interactive session
-    'package-pgadmin4'             # InnoSetup needs interactive session
-
-    # --- Needs interactive/desktop session (fails under WinRM) ---
-    'package-anydesk'              # Exit 0xAD1505 under WinRM, passes with psexec -s
-    'package-greenshot'            # GitHub CDN download too slow, stage timeout
-
-    # --- Conflicts with other packagers in same run ---
-    'package-powershell7lts'       # Shares install path with PS7 Current
-
-    # --- Authenticated downloads (CDN requires login) ---
-    'package-tableaudesktop'       # Tableau CDN (tssoftwareregistered) returns 403
-    'package-tableauprep'
-    'package-tableaureader'
-
-    # --- Problematic installers (Packr-excluded) ---
-    'package-cpuz'                 # CAPTCHA download gate, no automation-friendly URL
-    'package-cutepdfwriter'        # Non-standard printer driver uninstall
-    'package-filezilla'            # PUP/adware in installer
-    'package-foxitreader'          # CDN throttling, unreliable downloads
-
-    # --- MSIX / non-standard deployment ---
-    'package-teams'                # MSIX provisioning, needs SYSTEM context
-    'package-slack'                # MSIX deployment type needed
-
-    # --- Requires external infrastructure or licenses ---
-    'package-vmwareworkstation'    # Requires VMware license
-    'package-vmwaretools'          # Can't install on Hyper-V
-    'package-citrixworkspacecr'   # Requires Citrix infra
-    'package-citrixworkspaceltsr'
-    'package-xencenter'            # Requires XenServer
-    'package-xenservervmtools'
-    # --- Very large installs (multi-GB, hours) ---
-    'package-vs2026'               # Multi-GB
-    'package-vs2026community'
-    'package-ssms'                 # 1GB+
-    'package-powerbidesktop'       # 500MB+
-    'package-anaconda'             # 1GB+
+    # All 33 previously-skipped packagers removed from product in v1.2.8.
+    # Scripts archived in Archive/removed-v1.2.8/ for future reintroduction.
+    # Skip list is now empty -- all 83 active packagers are fully E2E tested.
 )
 
 if (-not $PSBoundParameters.ContainsKey('SkipList')) {

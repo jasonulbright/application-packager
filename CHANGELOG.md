@@ -2,6 +2,41 @@
 
 All notable changes to AppPackager are documented in this file.
 
+## [1.2.8] - 2026-04-11
+
+### Removed
+- **33 untested packagers archived** -- Moved to `Archive/removed-v1.2.8/` for future reintroduction after individual E2E validation and MECM deployment testing. The product now ships only tested, validated definitions.
+  - **Per-user installs (6):** Obsidian, Postman, Brave, Zoom, VS Code, Opera
+  - **InnoSetup/NSIS hangs under SYSTEM (4):** PyCharm, TreeSize Free, WizTree, pgAdmin 4
+  - **Interactive session required (2):** AnyDesk, Greenshot
+  - **Conflicts with existing packager (1):** PowerShell 7 LTS
+  - **Authenticated downloads (3):** Tableau Desktop, Tableau Prep, Tableau Reader
+  - **Problematic installers (4):** CPU-Z (CAPTCHA), CutePDF Writer (printer driver), FileZilla (PUP/adware), Foxit Reader (CDN throttle)
+  - **MSIX format (2):** Teams, Slack
+  - **External infrastructure required (6):** VMware Workstation, VMware Tools, Citrix Workspace CR, Citrix Workspace LTSR, XenCenter, XenServer VM Tools
+  - **Very large installs (5):** VS 2026 Enterprise, VS 2026 Community, SSMS, Power BI Desktop, Anaconda
+
+### Changed
+- **Regression skip list emptied** -- All 83 active packagers are now fully E2E tested with zero exceptions. The skip list in `Invoke-PackagerRegressionTest.ps1` is empty.
+- **M365 SAEC channel removed** -- All 6 M365 packagers updated to Monthly Enterprise Channel and Current Channel only (SAEC removed from Office Deployment Service UI April 2026).
+- **Webex switched to system MSI** -- `package-webex.ps1` now uses `Webex_en.msi` with `ALLUSERS=1 ACCEPT_EULA=TRUE` for system-wide install to Program Files (was per-user AppData install).
+- **VS Code rebuilt as per-user** -- Corrected paths and InstallForUser context, then archived (per-user, untestable under SYSTEM).
+
+### Fixed
+- **Process name corrections** -- Adobe Reader (Acrobat only), Malwarebytes (MBAMService only), SoapUI and draw.io (cleared -- versioned/unfindable exe paths).
+- **Python uninstall** -- Now removes Python Launcher MSI component (py.exe) during uninstall.
+- **DBeaver install** -- Added `/allusers` flag for NSIS system-wide install.
+- **WinMerge detection** -- Corrected to x64 path.
+- **Thunderbird process** -- Fixed to helper.exe.
+- **PowerToys uninstall** -- Uses ARP QuietUninstallString.
+- **WebView2 detection** -- Corrected Is64Bit flag.
+- **ASP.NET Hosting Bundle** -- Removed from noUninstallList, full E2E validation enabled.
+
+### Validated
+- **Full E2E regression: 83/83 pass, 0 failures** -- Clean baseline from updated CLIENT01 snapshot (KB5079473, Python Launcher removed). 8 reboots handled, 1h33m total runtime.
+
+---
+
 ## [1.2.7] - 2026-04-11
 
 ### Changed
