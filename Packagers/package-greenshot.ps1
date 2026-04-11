@@ -208,7 +208,9 @@ function Invoke-StageGreenshot {
 
     Write-ContentWrappers -OutputPath $localContentPath `
         -InstallPs1Content $installContent `
-        -UninstallPs1Content $uninstallContent
+        -UninstallPs1Content $uninstallContent `
+        -InstallBatExitCode '3010' `
+        -UninstallBatExitCode '3010'
 
     # --- Write stage manifest ---
     $detectionPath = "{0}\Greenshot" -f $env:ProgramFiles

@@ -236,7 +236,9 @@ function Invoke-StageMsvcRedist {
 
     Write-ContentWrappers -OutputPath $localContentPath `
         -InstallPs1Content $installContent `
-        -UninstallPs1Content $uninstallContent
+        -UninstallPs1Content $uninstallContent `
+        -InstallBatExitCode '3010' `
+        -UninstallBatExitCode '3010'
 
     # --- Write stage manifest ---
     $appName   = "Microsoft Visual C++ 2015-2022 Redistributable (x86+x64) - $shortVersion"

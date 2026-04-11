@@ -183,7 +183,9 @@ function Invoke-StagePowerToys {
 
     Write-ContentWrappers -OutputPath $localContentPath `
         -InstallPs1Content $wrapperContent.Install `
-        -UninstallPs1Content $wrapperContent.Uninstall
+        -UninstallPs1Content $wrapperContent.Uninstall `
+        -InstallBatExitCode '3010' `
+        -UninstallBatExitCode '3010'
 
     # --- Write stage manifest ---
     $detectionPath = "{0}\PowerToys" -f $env:ProgramFiles
