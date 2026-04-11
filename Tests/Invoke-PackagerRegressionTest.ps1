@@ -124,10 +124,6 @@ $defaultSkipList = @(
     'package-citrixworkspaceltsr'
     'package-xencenter'            # Requires XenServer
     'package-xenservervmtools'
-    'package-tableaudesktop'       # Requires license
-    'package-tableauprep'
-    'package-tableaureader'
-
     # --- Very large installs (multi-GB, hours) ---
     'package-vs2026'               # Multi-GB
     'package-vs2026community'

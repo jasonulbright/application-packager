@@ -1,65 +1,62 @@
-﻿<#
-Vendor: Salesforce (Tableau)
+<#
+Vendor: Tableau
 App: Tableau Prep Builder (x64)
 CMName: Tableau Prep Builder
-VendorUrl: https://www.tableau.com/products/prep
-CPE: cpe:2.3:a:tableau:prep_builder:*:*:*:*:*:*:*:*
-ReleaseNotesUrl: https://www.tableau.com/support/releases
-DownloadPageUrl: https://www.tableau.com/support/releases
 
 .SYNOPSIS
     Packages Tableau Prep Builder (x64) for MECM.
 
 .DESCRIPTION
-    Downloads the latest Tableau Prep Builder x64 installer from the Tableau CDN,
-    stages content to a versioned local folder with file-based version detection
-    metadata, and creates an MECM Application.
+    Downloads the latest Tableau Prep Builder x64 installer from the official
+    Tableau download server, stages content to a versioned local folder,
+    temporarily installs the product to extract registry metadata and file
+    versions, and creates a stage manifest with file-based version detection.
+    Detection uses tableau-prep-builder.exe version from the registry-discovered
+    install location.
 
     Supports two-phase operation:
-      -StageOnly    Download installer, generate content wrappers, write manifest
+      -StageOnly    Download, temp install for metadata extraction, generate
+                    content wrappers and stage manifest, then uninstall
       -PackageOnly  Read manifest, copy to network, create MECM application
-
-    The latest version is resolved by scraping the Tableau release notes page.
-    Tableau Prep Builder requires a Tableau Creator license. The installer is the
-    same for trial and licensed deployments; licensing is handled via online
-    sign-in after installation.
-
-    Detection uses the DisplayVersion registry value under the standard Uninstall node
-    uninstall key (ProductCode extracted dynamically from the Burn manifest).
 
 .PARAMETER SiteCode
     ConfigMgr site code PSDrive name (e.g., "MCM").
+    The PSDrive is assumed to already exist in the session.
 
 .PARAMETER Comment
     Free-form change/WO text stored on the CM Application Description field.
 
 .PARAMETER FileServerPath
     UNC root that contains your Applications folder (example: \\fileserver\sccm$).
-    Content is staged under: <FileServerPath>\Applications\Tableau\Tableau Prep Builder (x64)\<Version>
+    Content is staged under: <FileServerPath>\Applications\Tableau\Prep\<Version>
 
 .PARAMETER DownloadRoot
     Local root folder for staging downloaded installers.
+    Each packager creates a subfolder under this path (e.g., <DownloadRoot>\TableauPrep).
     Default: C:\temp\ap
 
 .PARAMETER EstimatedRuntimeMins
-    Estimated runtime in minutes. Default: 30
+    Estimated runtime in minutes for the MECM deployment type.
+    Default: 15
 
 .PARAMETER MaximumRuntimeMins
-    Maximum allowed runtime in minutes. Default: 60
+    Maximum allowed runtime in minutes for the MECM deployment type.
+    Default: 30
 
 .PARAMETER StageOnly
-    Runs only the Stage phase.
+    Runs only the Stage phase: download, temp install for metadata extraction,
+    generate content wrappers and stage manifest, then uninstall.
 
 .PARAMETER PackageOnly
-    Runs only the Package phase.
+    Runs only the Package phase: read stage manifest, copy content to network,
+    create MECM application with file-based detection.
 
 .PARAMETER GetLatestVersionOnly
-    Scrapes the Tableau release notes page for the latest version, outputs the
-    version string, and exits. No MECM changes are made.
+    Outputs only the latest available Tableau Prep Builder version string and exits.
 
 .REQUIREMENTS
     - PowerShell 5.1
-    - ConfigMgr Admin Console installed
+    - ConfigMgr Admin Console installed (ConfigurationManager PowerShell module available)
     - RBAC permissions to create Applications and Deployment Types
     - Local administrator
     - Write access to FileServerPath
@@ -70,8 +67,8 @@ param(
     [string]$Comment = "WO#00000001234567",
     [string]$FileServerPath = "\\fileserver\sccm$",
     [string]$DownloadRoot = "C:\temp\ap",
-    [int]$EstimatedRuntimeMins = 30,
-    [int]$MaximumRuntimeMins = 60,
+    [int]$EstimatedRuntimeMins = 15,
+    [int]$MaximumRuntimeMins = 30,
     [string]$LogPath,
     [switch]$GetLatestVersionOnly,
     [switch]$StageOnly,
@@ -88,11 +85,19 @@ if ($StageOnly -and $PackageOnly) {
 }
 
 # --- Configuration ---
-$BaseDownloadUrl = "https://downloads.tableau.com/tssoftware/"
+$BaseDownloadUrl = "https://downloads.tableau.com/tssoftwareregistered/"
 $ReleaseNotesUrl = "https://www.tableau.com/support/releases"
 
 $VendorFolder = "Tableau"
-$AppFolder    = "Tableau Prep Builder (x64)"
+$AppFolder    = "Prep"
+
+$InstallerPrefix        = "TableauPrep-64bit"
+$DetectionFileName      = "tableau-prep-builder.exe"
+$RegistryPrefix         = "Tableau 20"
+$DisplayNameMustContain = "Prep"
+
+$InstallArgs   = "/install /quiet /norestart ACCEPTEULA=1 SENDTELEMETRY=0"
+$UninstallArgs = "/uninstall /quiet /norestart"
 
 $BaseDownloadRoot = Join-Path $DownloadRoot "TableauPrep"
 
@@ -105,11 +110,11 @@ function Get-LatestTableauVersion {
     Write-Log "Tableau release notes URL     : $ReleaseNotesUrl" -Quiet:$Quiet
 
     try {
-        $htmlContent = (curl.exe -L --fail --silent --show-error $ReleaseNotesUrl) -join "`n"
+        $HtmlContent = (curl.exe -L --fail --silent --show-error $ReleaseNotesUrl) -join "`n"
         if ($LASTEXITCODE -ne 0) { throw "Failed to fetch release notes: $ReleaseNotesUrl" }
 
         $versionPattern = '\b(20\d{2})[.-](\d+)(?:[.-](\d+))?\b'
-        $regexMatches = [regex]::Matches($htmlContent, $versionPattern)
+        $regexMatches = [regex]::Matches($HtmlContent, $versionPattern)
 
         if ($regexMatches.Count -eq 0) {
             throw "No version matches found in release notes."
@@ -146,6 +151,46 @@ function Get-LatestTableauVersion {
     }
 }
 
+function Get-InstalledAppRegistryInfo {
+    param(
+        [Parameter(Mandatory)][string]$DisplayNamePrefix,
+        [Parameter(Mandatory)][string]$DisplayNameMustContain
+    )
+
+    $uninstallPaths = @(
+        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
+    )
+
+    foreach ($path in $uninstallPaths) {
+        $apps = Get-ItemProperty -Path $path -ErrorAction SilentlyContinue |
+            Where-Object {
+                $_.DisplayName -and
+                $_.DisplayName -like "$DisplayNamePrefix*" -and
+                $_.DisplayName -like "*$DisplayNameMustContain*"
+            } |
+            Sort-Object -Property DisplayVersion -Descending
+
+        if ($apps -and $apps.Count -gt 0) {
+            return $apps | Select-Object -First 1
+        }
+    }
+
+    return $null
+}
+
+function Get-FileVersion {
+    param([Parameter(Mandatory)][string]$FilePath)
+
+    if (-not (Test-Path -LiteralPath $FilePath)) { return $null }
+    try {
+        return (Get-Item -LiteralPath $FilePath).VersionInfo.FileVersion
+    }
+    catch {
+        return $null
+    }
+}
+
 
 # ---------------------------------------------------------------------------
 # Stage phase
@@ -165,17 +210,15 @@ function Invoke-StageTableauPrep {
 
     Initialize-Folder -Path $BaseDownloadRoot
 
-    # --- Get latest version ---
+    # --- Get version ---
     $version = Get-LatestTableauVersion
-    if (-not $version) { throw "Could not determine latest Tableau version." }
+    if (-not $version) { throw "Could not resolve Tableau Prep Builder version." }
 
-    # URL uses hyphens, no "64bit": TableauPrep-2025-3-3.exe
-    $versionHyphenated = $version -replace '\.', '-'
-    $installerFileName = "TableauPrep-${versionHyphenated}.exe"
+    $installerFileName = "${InstallerPrefix}-${version}.exe"
     $downloadUrl       = "${BaseDownloadUrl}${installerFileName}"
 
-    Write-Log "Download URL                 : $downloadUrl"
     Write-Log "Version                      : $version"
+    Write-Log "Installer filename           : $installerFileName"
     Write-Log ""
 
     # --- Download ---
@@ -183,7 +226,9 @@ function Invoke-StageTableauPrep {
     Write-Log "Local installer path         : $localExe"
 
     if (-not (Test-Path -LiteralPath $localExe)) {
-        Write-Log "Downloading Tableau Prep Builder..."
+        Write-Log "Download URL                 : $downloadUrl"
+        Write-Log ""
+        Write-Log "Downloading installer..."
         Invoke-DownloadWithRetry -Url $downloadUrl -OutFile $localExe
     }
     else {
@@ -204,13 +249,13 @@ function Invoke-StageTableauPrep {
     }
 
     # --- Generate content wrappers ---
-    $installContent = @(
+    $installContent = (
         ('$exePath = Join-Path $PSScriptRoot ''{0}''' -f $installerFileName),
-        '$proc = Start-Process -FilePath $exePath -ArgumentList @(''/install'', ''/quiet'', ''/norestart'', ''ACCEPTEULA=1'', ''SENDTELEMETRY=0'') -Wait -PassThru -NoNewWindow',
+        ('$proc = Start-Process -FilePath $exePath -ArgumentList @(''/install'', ''/quiet'', ''/norestart'', ''ACCEPTEULA=1'', ''SENDTELEMETRY=0'') -Wait -PassThru -NoNewWindow'),
         'exit $proc.ExitCode'
     ) -join "`r`n"
 
-    $uninstallContent = @(
+    $uninstallContent = (
         ('$exePath = Join-Path $PSScriptRoot ''{0}''' -f $installerFileName),
         '$proc = Start-Process -FilePath $exePath -ArgumentList @(''/uninstall'', ''/quiet'', ''/norestart'') -Wait -PassThru -NoNewWindow',
         'exit $proc.ExitCode'
@@ -220,58 +265,68 @@ function Invoke-StageTableauPrep {
         -InstallPs1Content $installContent `
         -UninstallPs1Content $uninstallContent
 
-    # --- Extract ProductCode and MSI version from Burn manifest ---
-    $extractPath = Join-Path $BaseDownloadRoot "_extract"
-    if (Test-Path -LiteralPath $extractPath) { Remove-Item -LiteralPath $extractPath -Recurse -Force }
-    $sevenZip = "C:\Program Files\7-Zip\7z.exe"
-    Write-Log "Extracting Burn manifest from installer..."
-    $proc = Start-Process -FilePath $sevenZip -ArgumentList @('x', "`"$localExe`"", "-o`"$extractPath`"", '-y') -Wait -PassThru -NoNewWindow
-    if ($proc.ExitCode -gt 1) { throw "7z extraction failed with exit code $($proc.ExitCode)" }
+    # --- Temporary install for metadata extraction ---
+    Write-Log ""
+    Write-Log "Installing temporarily for metadata extraction..."
+    Start-Process -FilePath $localExe -ArgumentList $InstallArgs -Wait -NoNewWindow
 
-    $manifestXml = Join-Path $extractPath "u23"
-    if (-not (Test-Path -LiteralPath $manifestXml)) { throw "Burn manifest (u23) not found in extracted payload" }
-    $xmlContent = [System.IO.File]::ReadAllText($manifestXml)
-    $xml = [xml]$xmlContent
+    $regInfo = Get-InstalledAppRegistryInfo -DisplayNamePrefix $RegistryPrefix -DisplayNameMustContain $DisplayNameMustContain
+    if (-not $regInfo) {
+        Write-Log "Could not find installed application in registry: $RegistryPrefix (*$DisplayNameMustContain*)" -Level ERROR
+        Write-Log "Uninstalling after failed metadata extraction..."
+        Start-Process -FilePath $localExe -ArgumentList $UninstallArgs -Wait -NoNewWindow
+        exit 1
+    }
 
-    $ns = New-Object System.Xml.XmlNamespaceManager($xml.NameTable)
-    $ns.AddNamespace('ba', 'http://schemas.microsoft.com/wix/2010/BootstrapperApplicationData')
-    $pkgNode = $xml.SelectSingleNode("//ba:WixPackageProperties[@Package='Tableau']", $ns)
-    if (-not $pkgNode) { throw "Could not find Tableau package node in Burn manifest" }
+    $displayName     = $regInfo.DisplayName
+    $displayVersion  = $regInfo.DisplayVersion
+    $publisher       = $regInfo.Publisher
+    $installLocation = $regInfo.InstallLocation
 
-    $productCode = $pkgNode.GetAttribute('ProductCode')
-    $msiVersion  = $pkgNode.GetAttribute('Version')
-    Write-Log "ProductCode (from manifest)  : $productCode"
-    Write-Log "MSI Version (from manifest)  : $msiVersion"
+    if (-not $installLocation) {
+        $installLocation = "C:\Program Files\Tableau"
+    }
 
-    Remove-Item -LiteralPath $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+    $detectionExe        = Join-Path $installLocation $DetectionFileName
+    $detectionExeVersion = Get-FileVersion -FilePath $detectionExe
+
+    if (-not $detectionExeVersion) {
+        Write-Log "Could not determine file version for: $detectionExe" -Level WARN
+        $detectionExeVersion = $displayVersion
+    }
+
+    Write-Log "Uninstalling after metadata extraction..."
+    Start-Process -FilePath $localExe -ArgumentList $UninstallArgs -Wait -NoNewWindow
+
+    if (-not $publisher) { $publisher = "Tableau" }
 
     # --- Write stage manifest ---
-    $appName   = "Tableau Prep Builder $version (x64)"
-    $publisher = "Salesforce (Tableau)"
-    $arpKey = "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\$productCode"
+    $detectionPath = Split-Path -Path $detectionExe -Parent
+    $detectionFile = Split-Path -Path $detectionExe -Leaf
 
-    Write-Log "Detection registry key       : $arpKey"
-    Write-Log "Detection DisplayVersion     : $msiVersion"
+    Write-Log ""
+    Write-Log "Detection path               : $detectionPath"
+    Write-Log "Detection file               : $detectionFile"
+    Write-Log "Detection version            : $detectionExeVersion"
     Write-Log ""
 
     $manifestPath = Join-Path $localContentPath "stage-manifest.json"
     Write-StageManifest -Path $manifestPath -ManifestData @{
-        AppName         = $appName
+        AppName         = $displayName
         Publisher       = $publisher
-        SoftwareVersion = $version
+        SoftwareVersion = $displayVersion
         InstallerFile   = $installerFileName
-        InstallerType   = "EXE"
-        InstallArgs     = "/install /quiet /norestart ACCEPTEULA=1 SENDTELEMETRY=0"
-        UninstallArgs   = "/uninstall /quiet /norestart"
-        ProductCode     = $productCode
-        RunningProcess  = @("tabprep")
         Detection       = @{
-            Type                = "RegistryKey"
-            RegistryKeyRelative = $arpKey
-            Is64Bit             = $true
+            Type          = "File"
+            FilePath      = $detectionPath
+            FileName      = $detectionFile
+            PropertyType  = "Version"
+            Operator      = "GreaterEquals"
+            ExpectedValue = $detectionExeVersion
         }
     }
 
+    # Save version marker for Package phase
     Set-Content -LiteralPath (Join-Path $BaseDownloadRoot "staged-version.txt") -Value $version -Encoding ASCII -ErrorAction Stop
 
     Write-Log ""
@@ -297,6 +352,7 @@ function Invoke-PackageTableauPrep {
         exit 1
     }
 
+    # --- Resolve version from local staging ---
     Initialize-Folder -Path $BaseDownloadRoot
 
     $versionFile = Join-Path $BaseDownloadRoot "staged-version.txt"
@@ -308,13 +364,18 @@ function Invoke-PackageTableauPrep {
     $localContentPath = Join-Path $BaseDownloadRoot $version
     $manifestPath     = Join-Path $localContentPath "stage-manifest.json"
 
+    # --- Read manifest ---
     $manifest = Read-StageManifest -Path $manifestPath
 
     Write-Log "AppName                      : $($manifest.AppName)"
     Write-Log "Publisher                    : $($manifest.Publisher)"
     Write-Log "SoftwareVersion              : $($manifest.SoftwareVersion)"
+    Write-Log "Detection Path               : $($manifest.Detection.FilePath)"
+    Write-Log "Detection File               : $($manifest.Detection.FileName)"
+    Write-Log "Detection Version            : $($manifest.Detection.ExpectedValue)"
     Write-Log ""
 
+    # --- Network share ---
     if (-not (Test-NetworkShareAccess -Path $FileServerPath)) {
         throw "Network root path not accessible: $FileServerPath"
     }
@@ -326,6 +387,7 @@ function Invoke-PackageTableauPrep {
     Write-Log "Network content path         : $networkContentPath"
     Write-Log ""
 
+    # --- Copy staged content to network ---
     $localFiles = Get-ChildItem -Path $localContentPath -File -ErrorAction Stop
     foreach ($f in $localFiles) {
         if ($f.Name -eq "stage-manifest.json") { continue }
@@ -339,6 +401,7 @@ function Invoke-PackageTableauPrep {
         }
     }
 
+    # --- MECM application ---
     New-MECMApplicationFromManifest `
         -Manifest $manifest `
         -SiteCode $SiteCode `

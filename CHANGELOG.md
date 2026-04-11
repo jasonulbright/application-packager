@@ -2,6 +2,14 @@
 
 All notable changes to AppPackager are documented in this file.
 
+## [1.2.7] - 2026-04-11
+
+### Changed
+- **CCleaner deprecated** -- Moved `package-ccleaner.ps1` to `Archive/deprecated/`. CCleaner is a destructive registry/system cleaner inappropriate for enterprise deployment.
+- **Tableau restored** -- Un-deprecated Tableau Desktop, Prep Builder, and Reader. Download URL updated from `tssoftware/` (404) to `tssoftwareregistered/` (public trial, same binaries). Removed from harness skip list.
+
+---
+
 ## [1.2.6] - 2026-04-11
 
 ### Fixed
