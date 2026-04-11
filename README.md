@@ -119,7 +119,7 @@ All packager scripts accept the same core parameters:
 | `-GetLatestVersionOnly` | Output the latest version string and exit |
 | `-LogPath` | Path to a structured log file (timestamps + severity levels) |
 
-## Supported Applications (115)
+## Supported Applications (117)
 
 | Script | Vendor | Application | Detection Type |
 |---|---|---|---|
@@ -237,6 +237,8 @@ All packager scripts accept the same core parameters:
 | package-winrar.ps1 | win.rar GmbH | WinRAR (x64) | RegistryKeyValue |
 | package-wireshark.ps1 | Wireshark Foundation | Wireshark (x64) | RegistryKeyValue |
 | package-wiztree.ps1 | Antibody Software | WizTree | File version |
+| package-xencenter.ps1 | Cloud Software Group | XenCenter | RegistryKeyValue |
+| package-xenservervmtools.ps1 | Cloud Software Group | XenServer VM Tools (x64) | RegistryKeyValue |
 | package-zoom.ps1 | Zoom Video Communications | Zoom Workplace (x64) | File existence (per-user) |
 
 ## Vendor Version Monitor

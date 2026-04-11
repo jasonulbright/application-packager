@@ -1,55 +1,53 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Automated test harness: stages, installs, verifies detection + process names,
-    uninstalls, and verifies removal for all Application Packager scripts.
+    Single-app test harness for Application Packager regression testing.
+    Designed to be called per-app by the orchestrator (Invoke-PackagerRegressionTest.ps1).
 
-.PARAMETER IncludeOnly
-    Array of packager base names to test (e.g., "package-notepadplusplus").
-    If omitted, tests all packagers.
+.DESCRIPTION
+    Runs one packager script through stage/install/detect/process/uninstall/verify-removal.
+    Returns a structured result object. Does NOT handle reboots -- the orchestrator does that.
 
-.PARAMETER SkipList
-    Array of packager base names to skip.
+    Exit codes from install/uninstall (0, 3010, other) are captured in the result so the
+    orchestrator can decide whether to reboot before continuing.
 
-.PARAMETER StageOnly
-    Only stage (download) -- do not install or uninstall.
+.PARAMETER PackagerName
+    Base name of the packager (e.g., "package-7zip").
+
+.PARAMETER Phase
+    Which phase(s) to run. Default: All.
+    - Stage        : Download and create manifest only
+    - Install      : Run install.bat (requires prior Stage)
+    - Detect       : Run detection check (requires prior Install)
+    - Uninstall    : Run uninstall.bat (requires prior Install)
+    - VerifyRemoval: Check detection is gone (requires prior Uninstall)
+    - All          : Run full cycle
 
 .PARAMETER DownloadRoot
     Local staging root. Default: C:\temp\ap
+
+.PARAMETER Cleanup
+    Delete staged content folder after test completes.
+
+.PARAMETER TimeoutSec
+    Per-phase timeout in seconds. Default: 600 (10 min).
 #>
 param(
-    [string[]]$IncludeOnly,
-    [string[]]$SkipList = @(
-        'package-vmwareworkstation',   # User excluded
-        'package-m365apps-x64',       # Requires O365 license
-        'package-m365apps-x86',
-        'package-m365project-x64',
-        'package-m365project-x86',
-        'package-m365visio-x64',
-        'package-m365visio-x86',
-        'package-vs2026',             # Multi-GB, hours to install
-        'package-vs2026community',
-        'package-citrixworkspacecr',  # Requires Citrix infra
-        'package-citrixworkspaceltsr',
-        'package-xencenter',          # Requires XenServer
-        'package-xenservervmtools',
-        'package-tableaudesktop',     # Requires license
-        'package-tableauprep',
-        'package-tableaureader',
-        'package-ssms',               # 1GB+, long install
-        'package-powerbidesktop',     # 500MB+, long install
-        'package-anaconda',           # 1GB+
-        'package-pycharm'             # 800MB+
-    ),
-    [switch]$StageOnly,
-    [string]$DownloadRoot = 'C:\temp\ap'
+    [Parameter(Mandatory)]
+    [string]$PackagerName,
+
+    [ValidateSet('Stage','Install','Detect','Uninstall','VerifyRemoval','All')]
+    [string]$Phase = 'All',
+
+    [string]$DownloadRoot = 'C:\temp\ap',
+
+    [switch]$Cleanup,
+
+    [int]$TimeoutSec = 600
 )
 
 $ErrorActionPreference = 'Continue'
 $packagerDir = 'c:\projects\applicationpackager\Packagers'
-
-# Results tracking
-$results = [System.Collections.ArrayList]::new()
 
 function Write-TestLog {
     param([string]$Message, [string]$Level = 'INFO')
@@ -64,52 +62,71 @@ function Write-TestLog {
     Write-Host "[$ts] [$Level] $Message" -ForegroundColor $color
 }
 
-# Get packager list
-$allPackagers = Get-ChildItem "$packagerDir\package-*.ps1" | Where-Object {
-    $_.BaseName -notin @('package-7zip') # 7zip already validated
-} | Sort-Object Name
-
-if ($IncludeOnly) {
-    $allPackagers = $allPackagers | Where-Object { $_.BaseName -in $IncludeOnly }
+# --- Initialize result object ---
+$result = [PSCustomObject]@{
+    Name              = $PackagerName
+    StageResult       = 'SKIP'
+    Version           = ''
+    ContentPath       = ''
+    InstallResult     = 'SKIP'
+    InstallExitCode   = -1
+    DetectionResult   = 'SKIP'
+    ProcessVerified   = 'SKIP'
+    ActualProcess     = ''
+    ManifestProcess   = ''
+    UninstallResult   = 'SKIP'
+    UninstallExitCode = -1
+    RemovalVerified   = 'SKIP'
+    Error             = ''
+    NeedsReboot       = $false
+    RebootPhase       = ''
 }
-$allPackagers = $allPackagers | Where-Object { $_.BaseName -notin $SkipList }
 
-Write-TestLog "Testing $($allPackagers.Count) packagers" -Level INFO
-Write-TestLog "DownloadRoot: $DownloadRoot" -Level INFO
-Write-TestLog ""
+$manifest = $null
+$contentPath = ''
 
-foreach ($packager in $allPackagers) {
-    $name = $packager.BaseName
-    Write-TestLog "=== $name ===" -Level INFO
-
-    $result = [PSCustomObject]@{
-        Name              = $name
-        StageResult       = 'SKIP'
-        Version           = ''
-        InstallResult     = 'SKIP'
-        DetectionResult   = 'SKIP'
-        ProcessVerified   = 'SKIP'
-        ActualProcess     = ''
-        ManifestProcess   = ''
-        UninstallResult   = 'SKIP'
-        RemovalVerified   = 'SKIP'
-        Error             = ''
+# --- Resolve content path from prior stage if not running Stage phase ---
+if ($Phase -ne 'Stage' -and $Phase -ne 'All') {
+    # Find content path from packager's subfolder
+    $scriptPath = Join-Path $packagerDir "$PackagerName.ps1"
+    if (Test-Path $scriptPath) {
+        # Read the script to find the app subfolder name (BaseDownloadRoot pattern)
+        $scriptContent = Get-Content $scriptPath -Raw
+        if ($scriptContent -match '\$BaseDownloadRoot\s*=\s*Join-Path\s+\$DownloadRoot\s+"([^"]+)"') {
+            $appFolder = $Matches[1]
+            $appRoot = Join-Path $DownloadRoot $appFolder
+            if (Test-Path $appRoot) {
+                $versionDirs = Get-ChildItem $appRoot -Directory -ErrorAction SilentlyContinue |
+                    Where-Object { Test-Path (Join-Path $_.FullName 'stage-manifest.json') } |
+                    Sort-Object LastWriteTime -Descending
+                if ($versionDirs) {
+                    $contentPath = $versionDirs[0].FullName
+                    $manifestFile = Join-Path $contentPath 'stage-manifest.json'
+                    $manifest = Get-Content $manifestFile -Raw | ConvertFrom-Json
+                    $result.ContentPath = $contentPath
+                    $result.Version = $manifest.SoftwareVersion
+                }
+            }
+        }
     }
+}
 
-    # --- STAGE ---
+# ─── STAGE ───────────────────────────────────────────────────────────────────
+
+if ($Phase -eq 'Stage' -or $Phase -eq 'All') {
+    Write-TestLog "  Staging $PackagerName..." -Level INFO
     try {
         $stageOutput = powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "
             cd '$packagerDir'
-            . '.\$name.ps1' -StageOnly -DownloadRoot '$DownloadRoot' 2>&1
+            . '.\$PackagerName.ps1' -StageOnly -DownloadRoot '$DownloadRoot' 2>&1
         " 2>&1
 
-        # Find the staged content path (last line of output that's a path)
         $contentPath = ($stageOutput | Where-Object { $_ -match '^C:\\' } | Select-Object -Last 1)
 
         if ($contentPath -and (Test-Path $contentPath)) {
             $result.StageResult = 'PASS'
+            $result.ContentPath = "$contentPath"
 
-            # Read manifest
             $manifestFile = Join-Path $contentPath 'stage-manifest.json'
             if (Test-Path $manifestFile) {
                 $manifest = Get-Content $manifestFile -Raw | ConvertFrom-Json
@@ -125,20 +142,32 @@ foreach ($packager in $allPackagers) {
         $result.Error = $_.Exception.Message
     }
 
-    if ($StageOnly -or $result.StageResult -ne 'PASS') {
-        $null = $results.Add($result)
-        Write-TestLog "  Stage: $($result.StageResult) $(if ($result.Version) { "v$($result.Version)" })" -Level $result.StageResult
-        continue
-    }
+    Write-TestLog "  Stage: $($result.StageResult) $(if ($result.Version) { "v$($result.Version)" })" -Level $result.StageResult
 
-    # --- INSTALL ---
+    if ($Phase -eq 'Stage' -or $result.StageResult -ne 'PASS') {
+        return $result
+    }
+}
+
+# ─── INSTALL ─────────────────────────────────────────────────────────────────
+
+if ($Phase -eq 'Install' -or $Phase -eq 'All') {
     $installBat = Join-Path $contentPath 'install.bat'
     if (Test-Path $installBat) {
         try {
             Write-TestLog "  Installing..." -Level INFO
-            $proc = Start-Process cmd.exe -ArgumentList @('/c', $installBat) -Wait -PassThru -NoNewWindow -WorkingDirectory $contentPath
-            if ($proc.ExitCode -eq 0 -or $proc.ExitCode -eq 3010) {
+            $proc = Start-Process cmd.exe -ArgumentList @('/c', $installBat) `
+                -Wait -PassThru -NoNewWindow -WorkingDirectory $contentPath
+            $result.InstallExitCode = $proc.ExitCode
+
+            if ($proc.ExitCode -eq 0) {
                 $result.InstallResult = 'PASS'
+            } elseif ($proc.ExitCode -eq 3010) {
+                $result.InstallResult = 'PASS'
+                $result.NeedsReboot = $true
+                $result.RebootPhase = 'Install'
+                Write-TestLog "  Install returned 3010 (reboot required)" -Level WARN
+                return $result
             } else {
                 $result.InstallResult = 'FAIL'
                 $result.Error = "Install exit code: $($proc.ExitCode)"
@@ -147,11 +176,20 @@ foreach ($packager in $allPackagers) {
             $result.InstallResult = 'FAIL'
             $result.Error = $_.Exception.Message
         }
+    } else {
+        $result.InstallResult = 'FAIL'
+        $result.Error = 'install.bat not found'
     }
 
-    # --- DETECTION ---
-    if ($result.InstallResult -eq 'PASS' -and $manifest.Detection) {
-        Start-Sleep -Seconds 2
+    if ($result.InstallResult -ne 'PASS') {
+        return $result
+    }
+}
+
+# ─── DETECT ──────────────────────────────────────────────────────────────────
+
+if ($Phase -eq 'Detect' -or $Phase -eq 'All') {
+    if ($manifest -and $manifest.Detection) {
         $det = $manifest.Detection
         switch ($det.Type) {
             'File' {
@@ -195,13 +233,16 @@ foreach ($packager in $allPackagers) {
                 $result.DetectionResult = 'SKIP'
             }
         }
+        Write-TestLog "  Detect: $($result.DetectionResult)" -Level $result.DetectionResult
+    } else {
+        $result.DetectionResult = 'SKIP'
+        Write-TestLog "  Detect: SKIP (no detection in manifest)" -Level SKIP
     }
 
     # --- PROCESS NAME VERIFICATION ---
-    if ($result.InstallResult -eq 'PASS' -and $manifest.RunningProcess) {
+    if ($manifest -and $manifest.RunningProcess) {
         $procs = @($manifest.RunningProcess)
         if ($procs.Count -gt 0 -and $procs[0] -ne '') {
-            # Check if the EXE actually exists on disk matching the process name
             $verified = @()
             foreach ($p in $procs) {
                 $found = Get-ChildItem "C:\Program Files\*\$p.exe" -Recurse -ErrorAction SilentlyContinue |
@@ -231,91 +272,100 @@ foreach ($packager in $allPackagers) {
         }
     }
 
-    Write-TestLog "  Stage: $($result.StageResult) | Install: $($result.InstallResult) | Detect: $($result.DetectionResult) | Process: $($result.ProcessVerified)" -Level $(if ($result.InstallResult -eq 'PASS' -and $result.DetectionResult -eq 'PASS') { 'PASS' } else { 'WARN' })
+    Write-TestLog "  Install: $($result.InstallResult) | Detect: $($result.DetectionResult) | Process: $($result.ProcessVerified)" -Level $(
+        if ($result.InstallResult -eq 'PASS' -and $result.DetectionResult -eq 'PASS') { 'PASS' } else { 'WARN' }
+    )
 
-    # --- UNINSTALL ---
-    if ($result.InstallResult -eq 'PASS') {
-        $uninstallBat = Join-Path $contentPath 'uninstall.bat'
-        if (Test-Path $uninstallBat) {
-            try {
-                Write-TestLog "  Uninstalling..." -Level INFO
-                $proc = Start-Process cmd.exe -ArgumentList @('/c', $uninstallBat) -Wait -PassThru -NoNewWindow -WorkingDirectory $contentPath
-                if ($proc.ExitCode -eq 0 -or $proc.ExitCode -eq 3010) {
-                    $result.UninstallResult = 'PASS'
-                } else {
-                    $result.UninstallResult = 'FAIL'
-                    $result.Error += " | Uninstall exit code: $($proc.ExitCode)"
-                }
-            } catch {
+    if ($Phase -eq 'Detect') {
+        return $result
+    }
+}
+
+# ─── UNINSTALL ───────────────────────────────────────────────────────────────
+
+if ($Phase -eq 'Uninstall' -or $Phase -eq 'All') {
+    $uninstallBat = Join-Path $contentPath 'uninstall.bat'
+    if (Test-Path $uninstallBat) {
+        try {
+            Write-TestLog "  Uninstalling..." -Level INFO
+            $proc = Start-Process cmd.exe -ArgumentList @('/c', $uninstallBat) `
+                -Wait -PassThru -NoNewWindow -WorkingDirectory $contentPath
+            $result.UninstallExitCode = $proc.ExitCode
+
+            if ($proc.ExitCode -eq 0) {
+                $result.UninstallResult = 'PASS'
+            } elseif ($proc.ExitCode -eq 3010) {
+                $result.UninstallResult = 'PASS'
+                $result.NeedsReboot = $true
+                $result.RebootPhase = 'Uninstall'
+                Write-TestLog "  Uninstall returned 3010 (reboot required)" -Level WARN
+                return $result
+            } else {
                 $result.UninstallResult = 'FAIL'
-                $result.Error += " | $($_.Exception.Message)"
+                $result.Error += " | Uninstall exit code: $($proc.ExitCode)"
             }
+        } catch {
+            $result.UninstallResult = 'FAIL'
+            $result.Error += " | $($_.Exception.Message)"
         }
-
-        # --- VERIFY REMOVAL ---
-        if ($result.UninstallResult -eq 'PASS') {
-            Start-Sleep -Seconds 3
-            switch ($manifest.Detection.Type) {
-                'File' {
-                    $detPath = Join-Path $manifest.Detection.FilePath $manifest.Detection.FileName
-                    if (-not (Test-Path $detPath)) {
-                        $result.RemovalVerified = 'PASS'
-                    } else {
-                        $result.RemovalVerified = 'FAIL'
-                        $result.Error += ' | Detection file still exists after uninstall'
-                    }
-                }
-                'RegistryKeyValue' {
-                    $regPath = "HKLM:\$($manifest.Detection.RegistryKeyRelative)"
-                    if (-not (Test-Path $regPath)) {
-                        $result.RemovalVerified = 'PASS'
-                    } else {
-                        $result.RemovalVerified = 'WARN'
-                    }
-                }
-                'Script' {
-                    $scriptResult = powershell.exe -NoProfile -ExecutionPolicy Bypass -Command $manifest.Detection.ScriptText 2>&1
-                    if (-not ($scriptResult -match 'Installed')) {
-                        $result.RemovalVerified = 'PASS'
-                    } else {
-                        $result.RemovalVerified = 'FAIL'
-                    }
-                }
-            }
-        }
-
-        Write-TestLog "  Uninstall: $($result.UninstallResult) | Removal: $($result.RemovalVerified)" -Level $(if ($result.UninstallResult -eq 'PASS') { 'PASS' } else { 'WARN' })
+    } else {
+        $result.UninstallResult = 'SKIP'
+        Write-TestLog "  Uninstall: SKIP (no uninstall.bat)" -Level SKIP
     }
 
-    $null = $results.Add($result)
-}
-
-# --- SUMMARY ---
-Write-Host ""
-Write-Host "=" * 80
-Write-Host "TEST SUMMARY"
-Write-Host "=" * 80
-
-$results | Format-Table Name, StageResult, Version, InstallResult, DetectionResult, ProcessVerified, UninstallResult, RemovalVerified -AutoSize
-
-# Export detailed results
-$results | ConvertTo-Json -Depth 4 | Set-Content 'c:\temp\packager-test-results.json' -Encoding UTF8
-
-$passed = ($results | Where-Object { $_.InstallResult -eq 'PASS' -and $_.DetectionResult -eq 'PASS' -and $_.UninstallResult -eq 'PASS' }).Count
-$failed = ($results | Where-Object { $_.InstallResult -eq 'FAIL' -or $_.DetectionResult -eq 'FAIL' }).Count
-$skipped = ($results | Where-Object { $_.StageResult -eq 'SKIP' -or $_.StageResult -eq 'FAIL' }).Count
-$processIssues = ($results | Where-Object { $_.ProcessVerified -eq 'FAIL' })
-
-Write-Host ""
-Write-Host "Passed: $passed | Failed: $failed | Skipped: $skipped | Process issues: $($processIssues.Count)"
-
-if ($processIssues.Count -gt 0) {
-    Write-Host ""
-    Write-Host "Process name mismatches:"
-    $processIssues | ForEach-Object {
-        Write-Host "  $($_.Name): $($_.ActualProcess)" -ForegroundColor Yellow
+    if ($result.UninstallResult -ne 'PASS') {
+        return $result
     }
 }
 
-Write-Host ""
-Write-Host "Detailed results: c:\temp\packager-test-results.json"
+# ─── VERIFY REMOVAL ──────────────────────────────────────────────────────────
+
+if ($Phase -eq 'VerifyRemoval' -or $Phase -eq 'All') {
+    if ($manifest -and $manifest.Detection) {
+        Start-Sleep -Seconds 3
+        switch ($manifest.Detection.Type) {
+            'File' {
+                $detPath = Join-Path $manifest.Detection.FilePath $manifest.Detection.FileName
+                if (-not (Test-Path $detPath)) {
+                    $result.RemovalVerified = 'PASS'
+                } else {
+                    $result.RemovalVerified = 'FAIL'
+                    $result.Error += ' | Detection file still exists after uninstall'
+                }
+            }
+            'RegistryKeyValue' {
+                $regPath = "HKLM:\$($manifest.Detection.RegistryKeyRelative)"
+                if (-not (Test-Path $regPath)) {
+                    $result.RemovalVerified = 'PASS'
+                } else {
+                    $result.RemovalVerified = 'WARN'
+                }
+            }
+            'RegistryKey' {
+                $regPath = "HKLM:\$($manifest.Detection.RegistryKeyRelative)"
+                if (-not (Test-Path $regPath)) {
+                    $result.RemovalVerified = 'PASS'
+                } else {
+                    $result.RemovalVerified = 'WARN'
+                }
+            }
+            'Script' {
+                $scriptResult = powershell.exe -NoProfile -ExecutionPolicy Bypass -Command $manifest.Detection.ScriptText 2>&1
+                if (-not ($scriptResult -match 'Installed')) {
+                    $result.RemovalVerified = 'PASS'
+                } else {
+                    $result.RemovalVerified = 'FAIL'
+                }
+            }
+        }
+    } else {
+        $result.RemovalVerified = 'SKIP'
+    }
+
+    Write-TestLog "  Uninstall: $($result.UninstallResult) | Removal: $($result.RemovalVerified)" -Level $(
+        if ($result.UninstallResult -eq 'PASS' -and $result.RemovalVerified -ne 'FAIL') { 'PASS' } else { 'WARN' }
+    )
+}
+
+# --- Return result ---
+return $result

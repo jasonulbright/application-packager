@@ -2,6 +2,19 @@
 
 All notable changes to AppPackager are documented in this file.
 
+## [1.2.4] - 2026-04-10
+
+### Added
+- **Regression test harness** -- `Invoke-PackagerRegressionTest.ps1` orchestrates per-app E2E testing on a Hyper-V CLIENT01 VM via WinRM: snapshot restore, script deployment, stage/install/detect/uninstall with per-app timeout, 3010 reboot handling, staged content cleanup, and incremental JSON results.
+- `Test-AllPackagers.ps1` rewritten as a single-app phase-based tester (Stage, Install, Detect, Uninstall, VerifyRemoval) called per-app by the orchestrator.
+- **No-uninstall list** -- system dependencies (VC++ Runtimes, .NET 8/9/10, ASP.NET, Edge, WebView2) run install+detect only, skip uninstall to prevent cascade breakage.
+- **Skip list** -- per-user installs (Obsidian, Postman, Brave), license/infra-dependent apps, very large installs, and upstream-broken apps excluded from automated testing.
+
+### Fixed
+- Removed hardcoded 7-Zip exclusion from inner test harness that caused `IncludeOnly @('package-7zip')` to silently test zero apps.
+
+---
+
 ## [1.2.3] - 2026-03-31
 
 ### Fixed

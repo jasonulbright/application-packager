@@ -4,5 +4,5 @@
     "ValidationSchedule":  "daily",
     "Category":  "MECM",
     "Status":  "active",
-    "Notes":  "INFO: v1.2.3, 117 packagers, schema v2, 89 Pester tests\nTASK: PSADT scaffolding (New-PSADTPackage from stage-manifest.json)"
+    "Notes":  "INFO: v1.2.4, 117 packagers, schema v2, 89 Pester tests\nTASK: MSI inspection engine for dynamic detection (replace static ProductCode GUIDs)\nTASK: PSADT scaffolding (New-PSADTPackage from stage-manifest.json)\nTASK: Triage E2E install failures (9 apps) and detection mismatches (17 apps)"
 }
