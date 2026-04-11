@@ -181,7 +181,7 @@ function Invoke-StageVSCode {
         -InstallerFileName $installerFileName `
         -InstallArgs "'/VERYSILENT', '/NORESTART', '/FORCECLOSEAPPLICATIONS', '/MERGETASKS=!runcode'" `
         -UninstallCommand 'C:\Program Files\Microsoft VS Code\unins000.exe' `
-        -UninstallArgs "'/SILENT'"
+        -UninstallArgs "'/VERYSILENT', '/NORESTART'"
 
     Write-ContentWrappers -OutputPath $localContentPath `
         -InstallPs1Content $wrapperContent.Install `
@@ -206,7 +206,7 @@ function Invoke-StageVSCode {
         InstallerFile   = $installerFileName
         InstallerType   = "EXE"
         InstallArgs     = "/VERYSILENT /NORESTART /FORCECLOSEAPPLICATIONS /MERGETASKS=!runcode"
-        UninstallArgs   = "/SILENT"
+        UninstallArgs   = "/VERYSILENT /NORESTART"
         RunningProcess  = @("Code")
         Detection       = @{
             Type         = "File"
