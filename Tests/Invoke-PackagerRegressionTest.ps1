@@ -119,12 +119,6 @@ $defaultSkipList = @(
     # --- Requires external infrastructure or licenses ---
     'package-vmwareworkstation'    # Requires VMware license
     'package-vmwaretools'          # Can't install on Hyper-V
-    'package-m365apps-x64'        # Requires O365 license
-    'package-m365apps-x86'
-    'package-m365project-x64'
-    'package-m365project-x86'
-    'package-m365visio-x64'
-    'package-m365visio-x86'
     'package-citrixworkspacecr'   # Requires Citrix infra
     'package-citrixworkspaceltsr'
     'package-xencenter'            # Requires XenServer
