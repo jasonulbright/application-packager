@@ -509,17 +509,37 @@ function Write-ContentWrappers {
     $uninstallPs1Path = Join-Path $OutputPath "uninstall.ps1"
 
     # .bat wrapper template: @echo off, call PowerShell, propagate exit code
-    $installBat = (
-        '@echo off',
-        'PowerShell.exe -NonInteractive -ExecutionPolicy Bypass -File "%~dp0install.ps1"',
-        ('exit /b {0}' -f $InstallBatExitCode)
-    ) -join "`r`n"
+    # When exit code override is set (e.g. 3010), only apply on success --
+    # real failures must propagate so ConfigMgr/harness can detect them.
+    $installBat = if ($InstallBatExitCode -eq '%ERRORLEVEL%') {
+        (@(
+            '@echo off',
+            'PowerShell.exe -NonInteractive -ExecutionPolicy Bypass -File "%~dp0install.ps1"',
+            'exit /b %ERRORLEVEL%'
+        ) -join "`r`n")
+    } else {
+        (@(
+            '@echo off',
+            'PowerShell.exe -NonInteractive -ExecutionPolicy Bypass -File "%~dp0install.ps1"',
+            ('if %ERRORLEVEL% EQU 0 exit /b {0}' -f $InstallBatExitCode),
+            'exit /b %ERRORLEVEL%'
+        ) -join "`r`n")
+    }
 
-    $uninstallBat = (
-        '@echo off',
-        'PowerShell.exe -NonInteractive -ExecutionPolicy Bypass -File "%~dp0uninstall.ps1"',
-        ('exit /b {0}' -f $UninstallBatExitCode)
-    ) -join "`r`n"
+    $uninstallBat = if ($UninstallBatExitCode -eq '%ERRORLEVEL%') {
+        (@(
+            '@echo off',
+            'PowerShell.exe -NonInteractive -ExecutionPolicy Bypass -File "%~dp0uninstall.ps1"',
+            'exit /b %ERRORLEVEL%'
+        ) -join "`r`n")
+    } else {
+        (@(
+            '@echo off',
+            'PowerShell.exe -NonInteractive -ExecutionPolicy Bypass -File "%~dp0uninstall.ps1"',
+            ('if %ERRORLEVEL% EQU 0 exit /b {0}' -f $UninstallBatExitCode),
+            'exit /b %ERRORLEVEL%'
+        ) -join "`r`n")
+    }
 
     $files = @(
         @{ Path = $installBatPath;   Content = $installBat;          Label = 'install.bat' },
