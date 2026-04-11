@@ -194,10 +194,12 @@ function Invoke-StageGIMP {
     }
 
     # --- Generate content wrappers ---
+    $majorVer = $version.Split('.')[0]
+
     $wrapperContent = New-ExeWrapperContent `
         -InstallerFileName $installerFileName `
         -InstallArgs "'/VERYSILENT', '/NORESTART', '/ALLUSERS', '/SP-'" `
-        -UninstallCommand "C:\Program Files\GIMP 3.0\uninst\unins000.exe" `
+        -UninstallCommand "C:\Program Files\GIMP $majorVer\uninst\unins000.exe" `
         -UninstallArgs "'/VERYSILENT', '/NORESTART'"
 
     Write-ContentWrappers -OutputPath $localContentPath `
@@ -206,7 +208,6 @@ function Invoke-StageGIMP {
 
     # --- Write stage manifest ---
     # GIMP uses a stable InnoSetup ARP key: GIMP-{major}_is1
-    $majorVer = $version.Split('.')[0]
     $arpRegistryKey = "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\GIMP-${majorVer}_is1"
 
     $appName   = "GIMP $version"
