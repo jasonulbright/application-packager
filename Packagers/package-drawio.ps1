@@ -211,7 +211,7 @@ function Invoke-StageDrawio {
         InstallArgs     = "/qn /norestart"
         UninstallArgs   = "/qn /norestart"
         ProductCode     = $productCode
-        RunningProcess  = @("draw.io")
+        RunningProcess  = @()
         Detection       = @{
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = $arpRegistryKey

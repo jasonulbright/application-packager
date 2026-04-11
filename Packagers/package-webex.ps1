@@ -223,7 +223,7 @@ function Invoke-StageWebex {
         InstallArgs     = "/qn /norestart"
         UninstallArgs   = "/qn /norestart"
         ProductCode     = $productCode
-        RunningProcess  = @("CiscoCollabHost", "webex")
+        RunningProcess  = @()
         Detection       = @{
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = $arpRegistryKey

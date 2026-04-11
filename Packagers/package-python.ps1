@@ -209,10 +209,19 @@ function Invoke-StagePython {
         'exit $proc.ExitCode'
     ) -join "`r`n"
 
+    # Python Launcher (py.exe) is a separate MSI component that persists
+    # after the main Python uninstall. Remove it via ARP ProductCode lookup.
     $uninstallContent = (
         ('$exePath = Join-Path $PSScriptRoot ''{0}''' -f $installerFileName),
         '$proc = Start-Process -FilePath $exePath -ArgumentList @(''/uninstall'', ''/quiet'') -Wait -PassThru -NoNewWindow',
-        'exit $proc.ExitCode'
+        '$exitCode = $proc.ExitCode',
+        '$launcher = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*" -ErrorAction SilentlyContinue |',
+        '    Where-Object { $_.DisplayName -match ''Python Launcher'' } | Select-Object -First 1',
+        'if ($launcher) {',
+        '    $code = $launcher.PSChildName',
+        '    Start-Process msiexec.exe -ArgumentList @(''/x'', $code, ''/qn'', ''/norestart'') -Wait -NoNewWindow',
+        '}',
+        'exit $exitCode'
     ) -join "`r`n"
 
     Write-ContentWrappers -OutputPath $localContentPath `

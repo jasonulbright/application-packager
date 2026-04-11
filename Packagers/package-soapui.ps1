@@ -208,7 +208,7 @@ function Invoke-StageSoapUI {
         InstallerType   = "EXE"
         InstallArgs     = "-q"
         UninstallArgs   = "-q"
-        RunningProcess  = @("SoapUI")
+        RunningProcess  = @()
         Detection       = @{
             Type                = "RegistryKeyValue"
             RegistryKeyRelative = "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\5517-2803-0637-4585"

@@ -256,7 +256,7 @@ function Invoke-StageAdobeReader {
         InstallerType   = "EXE"
         InstallArgs     = "/sAll /rs /rps /msi /qn /norestart"
         UninstallArgs   = "/x /qn /norestart"
-        RunningProcess  = @("AcroRd32", "Acrobat")
+        RunningProcess  = @("Acrobat")
         Detection       = @{
             Type          = "File"
             FilePath      = $detectionPath
