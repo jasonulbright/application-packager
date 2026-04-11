@@ -8,12 +8,21 @@ ReleaseNotesUrl: https://code.visualstudio.com/updates
 DownloadPageUrl: https://code.visualstudio.com/download
 
 .SYNOPSIS
-    Packages Visual Studio Code (x64) for MECM.
+    Packages Visual Studio Code (x64) as a per-user install for MECM.
 
 .DESCRIPTION
-    Downloads the latest VS Code x64 installer from the official update API,
-    stages content to a versioned local folder with file-based version detection
-    metadata, and creates an MECM Application with file-based detection.
+    Downloads the latest VS Code x64 User Setup installer from the official
+    update API, stages content to a versioned local folder with file-based
+    detection in the user profile, and creates an MECM Application deployed
+    in user context.
+
+    Per-user install rationale: extensions (the real attack surface) are managed
+    via policy regardless of install type. User install lets devs self-update
+    between packaging cycles. System install blocks updates but adds no value
+    since extension management works either way.
+
+    Detection targets %LOCALAPPDATA%\Programs\Microsoft VS Code\Code.exe.
+    MECM deployment type uses InstallForUser / OnlyWhenUserLoggedOn.
 
     Supports two-phase operation:
       -StageOnly    Download, generate content wrappers, write manifest
@@ -177,18 +186,27 @@ function Invoke-StageVSCode {
     }
 
     # --- Generate content wrappers ---
-    $wrapperContent = New-ExeWrapperContent `
-        -InstallerFileName $installerFileName `
-        -InstallArgs "'/VERYSILENT', '/NORESTART', '/FORCECLOSEAPPLICATIONS', '/MERGETASKS=!runcode'" `
-        -UninstallCommand 'C:\Program Files\Microsoft VS Code\unins000.exe' `
-        -UninstallArgs "'/VERYSILENT', '/NORESTART'"
+    # User setup installs to %LOCALAPPDATA%\Programs\Microsoft VS Code
+    $installPs1 = (
+        ('$exePath = Join-Path $PSScriptRoot ''{0}''' -f $installerFileName),
+        '$proc = Start-Process -FilePath $exePath -ArgumentList @(''/VERYSILENT'', ''/NORESTART'', ''/FORCECLOSEAPPLICATIONS'', ''/MERGETASKS=!runcode'') -Wait -PassThru -NoNewWindow',
+        'exit $proc.ExitCode'
+    ) -join "`r`n"
+
+    $uninstallPs1 = (
+        '$uninstaller = Join-Path $env:LOCALAPPDATA ''Programs\Microsoft VS Code\unins000.exe''',
+        'if (-not (Test-Path -LiteralPath $uninstaller)) { exit 0 }',
+        '$proc = Start-Process -FilePath $uninstaller -ArgumentList @(''/VERYSILENT'', ''/NORESTART'') -Wait -PassThru -NoNewWindow',
+        'exit $proc.ExitCode'
+    ) -join "`r`n"
 
     Write-ContentWrappers -OutputPath $localContentPath `
-        -InstallPs1Content $wrapperContent.Install `
-        -UninstallPs1Content $wrapperContent.Uninstall
+        -InstallPs1Content $installPs1 `
+        -UninstallPs1Content $uninstallPs1
 
     # --- Write stage manifest ---
-    $detectionPath = "{0}\Microsoft VS Code" -f $env:ProgramFiles
+    # User install: detection in user profile, not Program Files
+    $detectionPath = '%LOCALAPPDATA%\Programs\Microsoft VS Code'
 
     $appName   = "VS Code $version"
     $publisher = "Microsoft Corporation"
@@ -196,6 +214,7 @@ function Invoke-StageVSCode {
     Write-Log ""
     Write-Log "Detection path               : $detectionPath"
     Write-Log "Detection file               : Code.exe"
+    Write-Log "Install context              : User"
     Write-Log ""
 
     $manifestPath = Join-Path $localContentPath "stage-manifest.json"
@@ -208,6 +227,8 @@ function Invoke-StageVSCode {
         InstallArgs     = "/VERYSILENT /NORESTART /FORCECLOSEAPPLICATIONS /MERGETASKS=!runcode"
         UninstallArgs   = "/VERYSILENT /NORESTART"
         RunningProcess  = @("Code")
+        InstallationBehaviorType = "InstallForUser"
+        LogonRequirementType     = "OnlyWhenUserLoggedOn"
         Detection       = @{
             Type         = "File"
             FilePath     = $detectionPath

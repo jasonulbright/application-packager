@@ -85,7 +85,7 @@ $defaultSkipList = @(
     'package-postman'               # Squirrel per-user, InstallContext=User
     'package-brave'                 # Squirrel, hangs in headless install
     'package-zoom'                  # Per-user MSI, detects in %APPDATA%
-    'package-vscode'                # Per-user InnoSetup
+    'package-vscode'                # Per-user install, runs in user context (not SYSTEM/WinRM)
     'package-opera'                 # No silent SYSTEM uninstall (vendor removed flag)
 
     # --- InnoSetup hangs under SYSTEM/WinRM (Packr-validated) ---
