@@ -71,8 +71,9 @@ DownloadPageUrl: https://www.webex.com/downloads.html
     The release notes page (help.webex.com/en-us/article/mqkve8) reports the highest version
     across all channels. The Gold MSI may trail by a build if Cisco hasn't promoted yet --
     the version packaged in MECM is always the authoritative ProductVersion from the MSI itself.
-    The download URL is sourced from help.webex.com/en-us/article/nw5p67g. If downloads fail,
-    verify the URL against that page. An English-only variant (Webex_en.msi) is at the same path.
+    The download URL is sourced from help.webex.com/en-us/article/nw5p67g. Uses Webex_en.msi
+    (non-localized English) per Cisco recommendation for enterprise bulk deployments to avoid
+    uninstall complications. ALLUSERS=1 for per-machine install to Program Files.
 #>
 
 param(
@@ -98,13 +99,13 @@ if ($StageOnly -and $PackageOnly) {
 }
 
 # --- Configuration ---
-$WebexDownloadUrl = "https://binaries.webex.com/WebexOfclDesktop-Win-64-Gold/Webex.msi"
+$WebexDownloadUrl = "https://binaries.webex.com/WebexOfclDesktop-Win-64-Gold/Webex_en.msi"
 $ReleaseNotesUrl  = "https://help.webex.com/en-us/article/mqkve8/Webex-App-%7C-Release-notes"
 
 $VendorFolder = "Cisco"
 $AppFolder    = "Webex"
 
-$MsiFileName = "Webex.msi"
+$MsiFileName = "Webex_en.msi"
 
 $BaseDownloadRoot = Join-Path $DownloadRoot "Webex"
 
@@ -204,10 +205,24 @@ function Invoke-StageWebex {
     Write-Log ""
 
     # --- Generate content wrappers ---
-    $wrapperContent = New-MsiWrapperContent -MsiFileName $MsiFileName
+    # ALLUSERS=1 for per-machine install (Program Files).
+    # ACCEPT_EULA=TRUE bypasses license prompt.
+    # Non-localized _en.msi recommended for enterprise (avoid uninstall complications).
+    $installPs1 = (
+        ('$msiPath = Join-Path $PSScriptRoot ''{0}''' -f $MsiFileName),
+        '$proc = Start-Process msiexec.exe -ArgumentList @(''/i'', "`"$msiPath`"", ''/qn'', ''/norestart'', ''ALLUSERS=1'', ''ACCEPT_EULA=TRUE'') -Wait -PassThru -NoNewWindow',
+        'exit $proc.ExitCode'
+    ) -join "`r`n"
+
+    $uninstallPs1 = (
+        ('$msiPath = Join-Path $PSScriptRoot ''{0}''' -f $MsiFileName),
+        '$proc = Start-Process msiexec.exe -ArgumentList @(''/x'', "`"$msiPath`"", ''/qn'', ''/norestart'') -Wait -PassThru -NoNewWindow',
+        'exit $proc.ExitCode'
+    ) -join "`r`n"
+
     Write-ContentWrappers -OutputPath $localContentPath `
-        -InstallPs1Content $wrapperContent.Install `
-        -UninstallPs1Content $wrapperContent.Uninstall
+        -InstallPs1Content $installPs1 `
+        -UninstallPs1Content $uninstallPs1
 
     # --- Write stage manifest ---
     $publisher = "Cisco Systems, Inc."
@@ -220,7 +235,7 @@ function Invoke-StageWebex {
         SoftwareVersion = $productVersionRaw
         InstallerFile   = $MsiFileName
         InstallerType   = "MSI"
-        InstallArgs     = "/qn /norestart"
+        InstallArgs     = "/qn /norestart ALLUSERS=1 ACCEPT_EULA=TRUE"
         UninstallArgs   = "/qn /norestart"
         ProductCode     = $productCode
         RunningProcess  = @()
