@@ -914,7 +914,7 @@ function New-OdtConfigXml {
         folder path. For install: ".".
 
     .PARAMETER Channel
-        ODT channel name. Valid values: MonthlyEnterprise, Current, SemiAnnual.
+        ODT channel name. Valid values: MonthlyEnterprise, Current.
         Default: MonthlyEnterprise.
 
     .PARAMETER CompanyName
@@ -926,7 +926,7 @@ function New-OdtConfigXml {
         [Parameter(Mandatory)][string]$Version,
         [Parameter(Mandatory)][string[]]$ProductIds,
         [string]$SourcePath,
-        [ValidateSet('MonthlyEnterprise','Current','SemiAnnual')]
+        [ValidateSet('MonthlyEnterprise','Current')]
         [string]$Channel = 'MonthlyEnterprise',
         [string]$CompanyName
     )
