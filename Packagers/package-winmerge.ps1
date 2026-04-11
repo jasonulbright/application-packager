@@ -180,7 +180,7 @@ function Invoke-StageWinMerge {
     $wrapperContent = New-ExeWrapperContent `
         -InstallerFileName $installerFileName `
         -InstallArgs "'/VERYSILENT', '/NORESTART'" `
-        -UninstallCommand 'C:\Program Files (x86)\WinMerge\unins000.exe' `
+        -UninstallCommand 'C:\Program Files\WinMerge\unins000.exe' `
         -UninstallArgs "'/VERYSILENT', '/NORESTART'"
 
     Write-ContentWrappers -OutputPath $localContentPath `

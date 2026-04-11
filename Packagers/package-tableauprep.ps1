@@ -445,7 +445,8 @@ try {
     Write-Log ""
 
     if ($StageOnly) {
-        Invoke-StageTableauPrep
+        $contentPath = Invoke-StageTableauPrep
+        Write-Output $contentPath
     }
     elseif ($PackageOnly) {
         Invoke-PackageTableauPrep

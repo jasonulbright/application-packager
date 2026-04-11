@@ -178,15 +178,27 @@ function Invoke-StageDBeaver {
 
     # --- Generate content wrappers ---
     # NSIS installer; /allusers required for machine-wide install
-    $wrapperContent = New-ExeWrapperContent `
-        -InstallerFileName $installerFileName `
-        -InstallArgs "'/allusers', '/S'" `
-        -UninstallCommand 'C:\Program Files\DBeaver\uninstall.exe' `
-        -UninstallArgs "'/S'"
+    $installPs1 = (
+        ('$exePath = Join-Path $PSScriptRoot ''{0}''' -f $installerFileName),
+        '$proc = Start-Process -FilePath $exePath -ArgumentList @(''/allusers'', ''/S'') -Wait -PassThru -NoNewWindow',
+        'exit $proc.ExitCode'
+    ) -join "`r`n"
+
+    # NSIS uninstaller copies itself to temp and exits immediately.
+    # Poll for dbeaver.exe removal to confirm uninstall completed.
+    $uninstallPs1 = (
+        '$null = Start-Process -FilePath ''C:\Program Files\DBeaver\uninstall.exe'' -ArgumentList @(''/allusers'', ''/S'') -PassThru -NoNewWindow',
+        '$timeout = 120; $elapsed = 0',
+        'while ((Test-Path ''C:\Program Files\DBeaver\dbeaver.exe'') -and $elapsed -lt $timeout) {',
+        '    Start-Sleep -Seconds 2; $elapsed += 2',
+        '}',
+        'if (Test-Path ''C:\Program Files\DBeaver\dbeaver.exe'') { exit 1 }',
+        'exit 0'
+    ) -join "`r`n"
 
     Write-ContentWrappers -OutputPath $localContentPath `
-        -InstallPs1Content $wrapperContent.Install `
-        -UninstallPs1Content $wrapperContent.Uninstall `
+        -InstallPs1Content $installPs1 `
+        -UninstallPs1Content $uninstallPs1 `
         -InstallBatExitCode '3010' `
         -UninstallBatExitCode '3010'
 

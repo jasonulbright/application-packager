@@ -101,6 +101,11 @@ $defaultSkipList = @(
     # --- Conflicts with other packagers in same run ---
     'package-powershell7lts'       # Shares install path with PS7 Current
 
+    # --- Authenticated downloads (CDN requires login) ---
+    'package-tableaudesktop'       # Tableau CDN (tssoftwareregistered) returns 403
+    'package-tableauprep'
+    'package-tableaureader'
+
     # --- Problematic installers (Packr-excluded) ---
     'package-cpuz'                 # CAPTCHA download gate, no automation-friendly URL
     'package-cutepdfwriter'        # Non-standard printer driver uninstall
@@ -226,7 +231,7 @@ function Invoke-RemoteTest {
     } -ArgumentList $remoteScript, $PackagerName, $phaseToRun
 
     $completed = $job | Wait-Job -Timeout $TimeoutSec
-    if (-not $completed -or $job.State -eq 'Running') {
+    if (-not $completed -or $job.State -eq 'Running' -or $job.State -eq 'Disconnected') {
         $job | Stop-Job
         $job | Remove-Job -Force
         return [PSCustomObject]@{
@@ -249,8 +254,37 @@ function Invoke-RemoteTest {
         }
     }
 
-    $output = $job | Receive-Job
+    # Handle WinRM session drops (e.g., PS7 restarts WinRM service during install)
+    $output = $null
+    $sessionDropped = $false
+    try {
+        $output = $job | Receive-Job -ErrorAction Stop
+    }
+    catch [System.Management.Automation.Remoting.PSRemotingTransportException] {
+        $sessionDropped = $true
+    }
     $job | Remove-Job -Force
+
+    if ($sessionDropped) {
+        return [PSCustomObject]@{
+            Name            = $PackagerName
+            StageResult     = 'PASS'
+            Version         = ''
+            ContentPath     = ''
+            InstallResult   = 'SKIP'
+            InstallExitCode = -1
+            DetectionResult = 'SKIP'
+            ProcessVerified = 'SKIP'
+            ActualProcess   = ''
+            ManifestProcess = ''
+            UninstallResult = 'SKIP'
+            UninstallExitCode = -1
+            RemovalVerified = 'SKIP'
+            Error           = 'WinRM session dropped (service restart)'
+            NeedsReboot     = $true
+            RebootPhase     = 'Install'
+        }
+    }
 
     # Receive-Job may return multiple objects (Write-Host output + return value)
     # The result object is the last PSCustomObject
@@ -296,14 +330,22 @@ if (-not (Test-Path $ResultsPath)) {
     New-Item -Path $ResultsPath -ItemType Directory -Force | Out-Null
 }
 
-# Build packager list from local repo
-$allPackagers = Get-ChildItem "$localRepoRoot\Packagers\package-*.ps1" | Sort-Object Name
+# Build packager list from local repo, dependencies first
+$rawPackagers = Get-ChildItem "$localRepoRoot\Packagers\package-*.ps1" | Sort-Object Name
 if ($IncludeOnly) {
-    $allPackagers = $allPackagers | Where-Object { $_.BaseName -in $IncludeOnly }
+    # For targeted runs, auto-include dependencies that are in the noUninstallList
+    # if any included app might need them (e.g., MSOLEDB needs VC++ runtimes)
+    $depsToAdd = @($noUninstallList | Where-Object { $_ -notin $IncludeOnly })
+    $rawPackagers = $rawPackagers | Where-Object { $_.BaseName -in $IncludeOnly -or $_.BaseName -in $depsToAdd }
 }
-$allPackagers = @($allPackagers | Where-Object { $_.BaseName -notin $SkipList })
+$rawPackagers = @($rawPackagers | Where-Object { $_.BaseName -notin $SkipList })
 
-Write-Status "Apps to test: $($allPackagers.Count) (skipping $($SkipList.Count))"
+# Run noUninstallList (system dependencies) first, then everything else alphabetically
+$depPackagers  = @($rawPackagers | Where-Object { $_.BaseName -in $noUninstallList })
+$appPackagers  = @($rawPackagers | Where-Object { $_.BaseName -notin $noUninstallList })
+$allPackagers  = @($depPackagers) + @($appPackagers)
+
+Write-Status "Apps to test: $($allPackagers.Count) ($($depPackagers.Count) deps first, skipping $($SkipList.Count))"
 Write-Phase 'PREFLIGHT' 'All prerequisites verified'
 Write-Host ''
 

@@ -189,9 +189,12 @@ function Invoke-StageThunderbird {
         'exit $proc.ExitCode'
     ) -join "`r`n"
 
+    # Thunderbird MSI is a thin wrapper; msiexec /x returns 1605.
+    # Use the native uninstaller (helper.exe /S) instead.
     $uninstallPs1 = (
-        ('$msiPath = Join-Path $PSScriptRoot ''{0}''' -f $MsiFileName),
-        '$proc = Start-Process msiexec.exe -ArgumentList @(''/x'', "`"$msiPath`"", ''/quiet'', ''/norestart'') -Wait -PassThru -NoNewWindow',
+        '$helperPath = Join-Path $env:ProgramFiles ''Mozilla Thunderbird\uninstall\helper.exe''',
+        'if (-not (Test-Path -LiteralPath $helperPath)) { exit 0 }',
+        '$proc = Start-Process -FilePath $helperPath -ArgumentList @(''/S'') -Wait -PassThru -NoNewWindow',
         'exit $proc.ExitCode'
     ) -join "`r`n"
 

@@ -436,7 +436,8 @@ try {
     Write-Log ""
 
     if ($StageOnly) {
-        Invoke-StageTableauDesktop
+        $contentPath = Invoke-StageTableauDesktop
+        Write-Output $contentPath
     }
     elseif ($PackageOnly) {
         Invoke-PackageTableauDesktop

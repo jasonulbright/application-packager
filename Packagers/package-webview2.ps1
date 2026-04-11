@@ -229,7 +229,7 @@ function Invoke-StageWebView2 {
             PropertyType        = "Version"
             ExpectedValue       = $version
             Operator            = "GreaterEquals"
-            Is64Bit             = $true
+            Is64Bit             = $false
         }
     }
 

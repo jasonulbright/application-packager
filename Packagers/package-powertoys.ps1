@@ -174,16 +174,27 @@ function Invoke-StagePowerToys {
     }
 
     # --- Generate content wrappers ---
-    # PowerToys uses a custom bootstrapper; uninstall uses the same EXE
-    $wrapperContent = New-ExeWrapperContent `
-        -InstallerFileName $installerFileName `
-        -InstallArgs "'/install', '/quiet', '/norestart'" `
-        -UninstallCommand "`$env:ProgramFiles\PowerToys\PowerToys.exe" `
-        -UninstallArgs "'/uninstall', '/quiet', '/norestart'"
+    $installPs1 = (
+        ('$exePath = Join-Path $PSScriptRoot ''{0}''' -f $installerFileName),
+        '$proc = Start-Process -FilePath $exePath -ArgumentList @(''/install'', ''/quiet'', ''/norestart'') -Wait -PassThru -NoNewWindow',
+        'exit $proc.ExitCode'
+    ) -join "`r`n"
+
+    # PowerToys uses WiX Burn bootstrapper. The installed PowerToys.exe is NOT
+    # the uninstaller. Use ARP QuietUninstallString to find the cached bootstrapper.
+    # Multiple ARP entries may exist (bundle + MSI); prefer the one with QuietUninstallString.
+    $uninstallPs1 = (
+        '$entries = @(Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*" -ErrorAction SilentlyContinue |',
+        '    Where-Object { $_.DisplayName -match ''PowerToys'' -and $_.QuietUninstallString })',
+        'if ($entries.Count -eq 0) { exit 0 }',
+        '$cmd = $entries[0].QuietUninstallString.Trim()',
+        '$proc = Start-Process cmd.exe -ArgumentList @(''/c'', $cmd) -Wait -PassThru -NoNewWindow',
+        'exit $proc.ExitCode'
+    ) -join "`r`n"
 
     Write-ContentWrappers -OutputPath $localContentPath `
-        -InstallPs1Content $wrapperContent.Install `
-        -UninstallPs1Content $wrapperContent.Uninstall `
+        -InstallPs1Content $installPs1 `
+        -UninstallPs1Content $uninstallPs1 `
         -InstallBatExitCode '3010' `
         -UninstallBatExitCode '3010'
 

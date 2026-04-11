@@ -445,7 +445,8 @@ try {
     Write-Log ""
 
     if ($StageOnly) {
-        Invoke-StageTableauReader
+        $contentPath = Invoke-StageTableauReader
+        Write-Output $contentPath
     }
     elseif ($PackageOnly) {
         Invoke-PackageTableauReader
