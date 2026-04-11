@@ -84,16 +84,39 @@ $defaultSkipList = @(
     'package-obsidian'              # NSIS per-user, InstallContext=User
     'package-postman'               # Squirrel per-user, InstallContext=User
     'package-brave'                 # Squirrel, hangs in headless install
+    'package-zoom'                  # Per-user MSI, detects in %APPDATA%
+    'package-vscode'                # Per-user InnoSetup
+    'package-opera'                 # No silent SYSTEM uninstall (vendor removed flag)
+
+    # --- InnoSetup hangs under SYSTEM/WinRM (Packr-validated) ---
+    'package-pycharm'              # NSIS hangs under SYSTEM
+    'package-treesizefree'         # InnoSetup hangs under SYSTEM
+    'package-wiztree'              # InnoSetup needs interactive session
+    'package-pgadmin4'             # InnoSetup needs interactive session
+
+    # --- Conflicts with other packagers in same run ---
+    'package-powershell7lts'       # Shares install path with PS7 Current
+
+    # --- Problematic installers (Packr-excluded) ---
+    'package-cpuz'                 # CAPTCHA download gate, no automation-friendly URL
+    'package-cutepdfwriter'        # Non-standard printer driver uninstall
+    'package-filezilla'            # PUP/adware in installer
+    'package-foxitreader'          # CDN throttling, unreliable downloads
+
+    # --- MSIX / non-standard deployment ---
+    'package-teams'                # MSIX provisioning, needs SYSTEM context
+    'package-slack'                # MSIX deployment type needed
 
     # --- Requires external infrastructure or licenses ---
-    'package-vmwareworkstation'     # Requires VMware license
-    'package-m365apps-x64'         # Requires O365 license
+    'package-vmwareworkstation'    # Requires VMware license
+    'package-vmwaretools'          # Can't install on Hyper-V
+    'package-m365apps-x64'        # Requires O365 license
     'package-m365apps-x86'
     'package-m365project-x64'
     'package-m365project-x86'
     'package-m365visio-x64'
     'package-m365visio-x86'
-    'package-citrixworkspacecr'    # Requires Citrix infra
+    'package-citrixworkspacecr'   # Requires Citrix infra
     'package-citrixworkspaceltsr'
     'package-xencenter'            # Requires XenServer
     'package-xenservervmtools'
@@ -107,19 +130,6 @@ $defaultSkipList = @(
     'package-ssms'                 # 1GB+
     'package-powerbidesktop'       # 500MB+
     'package-anaconda'             # 1GB+
-    'package-pycharm'              # 800MB+
-
-    # --- Per-user detection path (not machine-testable) ---
-    'package-zoom'                 # Detects in %APPDATA%, per-user install
-
-    # --- Requires specific hypervisor ---
-    'package-vmwaretools'          # Can't install VMware Tools on Hyper-V
-
-    # --- MSIX provisioning (requires SYSTEM context) ---
-    'package-teams'                # MSIX detection in WindowsApps, needs SYSTEM
-
-    # --- Upstream broken ---
-    'package-slack'                # CDN 404 as of 2026-04-10
 )
 
 if (-not $PSBoundParameters.ContainsKey('SkipList')) {
